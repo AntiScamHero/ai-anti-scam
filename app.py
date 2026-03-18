@@ -385,18 +385,23 @@ def clear_alerts():
         if not family_id or family_id == 'none': 
             return jsonify({"status": "fail", "message": "無效的家庭 ID"})
         
-        # 取得所有紀錄並比對 familyID，符合的就刪除
+        # 取得所有紀錄並比對 familyID
         ref = db.reference('scan_history')
         all_records = ref.get()
         if all_records:
+            updates = {}
             for key, val in all_records.items():
                 if isinstance(val, dict) and val.get('familyID') == family_id:
-                    ref.child(key).delete()
+                    # 將要刪除的節點設為 None，這是 Firebase 批次刪除的標準做法
+                    updates[key] = None 
+            
+            # ⚡ 一次性打包發送刪除指令，瞬間清空，避免非同步時間差！
+            if updates:
+                ref.update(updates)
                     
         return jsonify({"status": "success"})
     except Exception as e: 
         return jsonify({"status": "error", "message": str(e)})
-
 # ==========================================
 # 🚀 啟動伺服器
 # ==========================================
