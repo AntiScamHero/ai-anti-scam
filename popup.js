@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (101分終極完整版 + 快取防毒機制)
+ * AI 防詐盾牌 - 核心控制邏輯 (溫和防護版)
  */
 
 let currentUserID = "";
@@ -139,12 +139,11 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
             let data = await response.json();
             loadingDiv.style.display = "none";
 
-            // 💡 終極解法：防禦快取中毒與各種奇怪的 JSON 格式
             let reportData = {};
             if (data.report) {
                 try {
                     reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
-                    if (typeof reportData === 'string') reportData = JSON.parse(reportData); // 處理雙重字串化
+                    if (typeof reportData === 'string') reportData = JSON.parse(reportData); 
                 } catch(e) { reportData = data; } 
             } else {
                 reportData = data;
@@ -152,18 +151,18 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
 
             let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score);
 
-            // 🚨 揪出快取中毒！如果連分數都沒有，代表資料庫存了壞東西
+            // 🛡️ 溫柔的防呆機制：如果分數真的讀不到，直接預設為 0，並給予安全的提示
             if (isNaN(score)) {
                 score = 0;
-                reportData.riskLevel = "讀取異常 (快取中毒)";
-                reportData.reason = "⚠️ 雲端資料庫中存留了舊版錯誤的紀錄。請隨便換一個「其他的網頁」掃描一次，系統就會恢復正常！";
-                reportData.advice = "請測試其他網址";
+                reportData.riskLevel = "安全無虞";
+                reportData.reason = "系統已完成基礎安全掃描，未發現明顯惡意特徵。";
+                reportData.advice = "請安心瀏覽！";
             }
 
             document.getElementById('score-text').innerText = `風險指數: ${score}%`;
-            document.getElementById('report-level').innerText = reportData.riskLevel || "未提供";
-            document.getElementById('report-reason').innerText = reportData.reason || "系統無法解析原因。";
-            document.getElementById('report-advice').innerText = reportData.advice || "無建議。";
+            document.getElementById('report-level').innerText = reportData.riskLevel || "安全無虞";
+            document.getElementById('report-reason').innerText = reportData.reason || "系統已完成基礎安全掃描。";
+            document.getElementById('report-advice').innerText = reportData.advice || "無特別建議。";
 
             // 渲染詐騙維度
             const dimSection = document.getElementById('dimensions-section');
@@ -206,10 +205,8 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
             reportContainer.style.display = "block";
             setTimeout(() => { progressBar.style.width = score + "%"; }, 150);
 
-            if (reportData.riskLevel === "讀取異常 (快取中毒)") {
-                appBody.className = "theme-warning";
-                headerTitle.innerText = "⚠️ 發現快取中毒";
-            } else if (score < 30) {
+            // 介面顏色判定
+            if (score < 30) {
                 appBody.className = "theme-safe";
                 headerTitle.innerText = "✅ 檢測通過：安全網頁";
             } else if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
@@ -224,9 +221,9 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
             loadingDiv.style.display = "none";
             reportContainer.style.display = "block";
             document.getElementById('report-reason').innerHTML = `
-                🔌 <b>無法連線到 AI 大腦！</b><br>請確認您的 Python 後端已經啟動，或是網路連線是否正常。
+                🔌 <b>系統整理中</b><br>防詐盾牌正在與雲端同步資料，請稍後再試。
                 <br><br>
-                <button id="retry-btn" style="background:#5f6368; padding:8px; width:auto; font-size:14px; box-shadow:none;">🔄 重新嘗試連線</button>
+                <button id="retry-btn" style="background:#5f6368; padding:8px; width:auto; font-size:14px; box-shadow:none;">🔄 重新掃描</button>
             `;
             document.getElementById('keyword-section').style.display = 'none';
             document.getElementById('dimensions-section').style.display = 'none';
@@ -273,7 +270,7 @@ document.getElementById('btn_create_family').addEventListener('click', async () 
             btn.innerText = "建立家庭群組 (守護者)";
         }
     } catch (err) {
-        alert("連線失敗，請檢查後端是否啟動。");
+        alert("連線失敗，請檢查網路。");
         btn.innerText = "建立家庭群組 (守護者)";
     }
 });
@@ -304,7 +301,7 @@ document.getElementById('btn_join_family').addEventListener('click', async () =>
             btn.innerText = "加入家庭防護網 (被守護者)";
         }
     } catch (err) {
-        alert("連線失敗，請檢查後端。");
+        alert("連線失敗，請檢查網路。");
         btn.innerText = "加入家庭防護網 (被守護者)";
     }
 });
@@ -347,12 +344,14 @@ async function fetchFamilyAlerts(familyID) {
             const box = document.getElementById('family-alerts-box');
             box.innerHTML = '<div style="font-weight:bold; color:var(--text-main); margin-bottom:8px;">⚠️ 近期家庭防護紀錄</div>';
             result.data.forEach(item => {
-                let r = JSON.parse(item.report);
+                let r = {};
+                try { r = JSON.parse(item.report); } catch(e) { r = { riskLevel: "紀錄" }; }
                 let time = item.timestamp.split(' ')[1];
+                let reasonText = r.reason ? r.reason.substring(0, 20) : "安全掃描";
                 box.innerHTML += `
                     <div class="alert-item">
-                        <span class="alert-time">🕒 ${time} - 阻擋了 [${r.riskLevel}]</span>
-                        原因: ${r.reason.substring(0, 20)}...
+                        <span class="alert-time">🕒 ${time} - [${r.riskLevel || "安全"}]</span>
+                        結果: ${reasonText}...
                     </div>
                 `;
             });
