@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 防詐戰情室 - 終極穩定版</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; }
+        .header h1 { margin: 0; color: #58a6ff; font-size: 24px; letter-spacing: 2px; }
+        
+        .control-panel { background: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+        input { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 10px 15px; border-radius: 5px; font-size: 16px; font-weight: bold; letter-spacing: 2px; outline: none; text-align: center; width: 150px; }
+        input:focus { border-color: #58a6ff; }
+        
+        button { border: none; padding: 10px 20px; border-radius: 5px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-start { background: #238636; color: white; }
+        .btn-start:hover { background: #2ea043; }
+        .btn-stop { background: #da3633; color: white; display: none; }
+        .btn-stop:hover { background: #f85149; }
+        .btn-manual { background: #1f6feb; color: white; }
+        .btn-manual:hover { background: #388bfd; }
+
+        .status-badge { padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; background: #30363d; color: #8b949e; }
+        .status-connected { background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid #238636; }
+
+        #emergency-banner { display: none; background: #da3633; color: white; padding: 15px 20px; border-radius: 10px; margin-bottom: 20px; font-weight: bold; font-size: 18px; text-align: center; box-shadow: 0 0 20px rgba(218, 54, 51, 0.5); animation: flash 1s infinite alternate; }
+        @keyframes flash { from { opacity: 1; } to { opacity: 0.7; } }
+
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-bottom: 20px; }
+        .chart-container { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; }
+        .chart-title { font-size: 16px; font-weight: bold; color: #8b949e; margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        
+        .stats-boxes { display: flex; gap: 15px; margin-bottom: 20px; }
+        .stat-box { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; text-align: center; }
+        .stat-value { font-size: 36px; font-weight: bold; margin: 10px 0; }
+        .val-safe { color: #3fb950; }
+        .val-danger { color: #ff7b72; }
+
+        table { width: 100%; border-collapse: collapse; background: #161b22; border-radius: 10px; overflow: hidden; border: 1px solid #30363d; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #30363d; }
+        th { background: #21262d; color: #8b949e; font-weight: 600; text-transform: uppercase; font-size: 13px; }
+        tr:hover { background: #1c2128; }
+        .risk-high { color: #ff7b72; font-weight: bold; }
+        .risk-safe { color: #3fb950; }
+        .risk-warn { color: #d29922; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🛡️ AI 遠端家庭防護網 - 戰情儀表板</h1>
+        <div id="clock" style="font-family: monospace; color: #8b949e;">--:--:--</div>
+    </div>
+
+    <div class="control-panel">
+        <label>輸入家庭邀請碼：</label>
+        <input type="text" id="family-id-input" placeholder="例如: 6SHVJ0" value="6SHVJ0">
+        <button id="btn-manual" class="btn-manual">🔄 手動更新</button>
+        <button id="btn-start" class="btn-start">▶️ 開啟自動監控</button>
+        <button id="btn-stop" class="btn-stop">⏹️ 停止監控</button>
+        <div id="connection-status" class="status-badge">🔴 尚未連線 / 閒置中</div>
+    </div>
+
+    <div id="emergency-banner">
+        ⚠️ [緊急警報] 您的家人剛剛瀏覽了高風險網頁，系統已強制攔截！
+    </div>
+
+    <div class="stats-boxes">
+        <div class="stat-box">
+            <div style="color:#8b949e">總掃描次數</div>
+            <div class="stat-value" id="stat-total">0</div>
+        </div>
+        <div class="stat-box">
+            <div style="color:#8b949e">安全放行</div>
+            <div class="stat-value val-safe" id="stat-safe">0</div>
+        </div>
+        <div class="stat-box">
+            <div style="color:#8b949e">危險攔截</div>
+            <div class="stat-value val-danger" id="stat-danger">0</div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="chart-container">
+            <div class="chart-title">🛡️ 防護狀態比例</div>
+            <canvas id="ratioChart"></canvas>
+        </div>
+        <div class="chart-container">
+            <div class="chart-title">📈 近期風險趨勢 (分數)</div>
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+
+    <div class="chart-title" style="margin-top:20px;">📜 詳細掃描紀錄 (最新 10 筆)</div>
+    <table>
+        <thead>
+            <tr>
+                <th>偵測時間</th>
+                <th>目標網址</th>
+                <th>風險指數</th>
+                <th>AI 分析原因</th>
+                <th>狀態</th>
+            </tr>
+        </thead>
+        <tbody id="log-table-body">
+            <tr><td colspan="5" style="text-align:center; color:#8b949e;">請輸入家庭邀請碼並點擊「手動更新」...</td></tr>
+        </tbody>
+    </table>
+
+    <script>
+        setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-TW'); }, 1000);
+
+        let monitoringInterval = null;
+        let lastAlertTime = "";
+        let ratioChartInstance = null;
+        let trendChartInstance = null;
+        
+        document.getElementById('btn-manual').addEventListener('click', () => {
+            const familyID = document.getElementById('family-id-input').value.trim().toUpperCase();
+            if(!familyID) return alert("請輸入邀請碼");
+            fetchLogs(familyID);
+        });
+
+        document.getElementById('btn-start').addEventListener('click', () => {
+            const familyID = document.getElementById('family-id-input').value.trim().toUpperCase();
+            if(!familyID) return alert("請輸入邀請碼");
+
+            if (monitoringInterval) clearInterval(monitoringInterval);
+
+            document.getElementById('connection-status').className = "status-badge status-connected";
+            document.getElementById('connection-status').innerText = `🟢 監控中 (代碼: ${familyID})`;
+            document.getElementById('family-id-input').disabled = true;
+            document.getElementById('btn-start').style.display = "none";
+            document.getElementById('btn-stop').style.display = "inline-block";
+
+            fetchLogs(familyID); 
+            monitoringInterval = setInterval(() => fetchLogs(familyID), 5000); 
+        });
+
+        document.getElementById('btn-stop').addEventListener('click', () => {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+            }
+            document.getElementById('connection-status').className = "status-badge";
+            document.getElementById('connection-status').innerText = `🔴 暫停監控`;
+            document.getElementById('family-id-input').disabled = false;
+            document.getElementById('btn-start').style.display = "inline-block";
+            document.getElementById('btn-stop').style.display = "none";
+        });
+
+        async function fetchLogs(familyID) {
+            try {
+                const res = await fetch('http://127.0.0.1:5000/api/get_alerts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ familyID: familyID })
+                });
+                const data = await res.json();
+                
+                if (data.data && data.data.length > 0) {
+                    updateDashboard(data.data);
+                } else {
+                    document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#e3b341; font-weight:bold;">⚠️ 目前雲端沒有此家庭的紀錄，請讓長輩端執行一次「網頁掃描」即可顯示！</td></tr>';
+                }
+            } catch (err) {
+                console.error("連線後端失敗", err);
+                document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#da3633;">❌ 連線失敗，請確認 Python 伺服器正在執行中</td></tr>';
+            }
+        }
+
+        function updateDashboard(records) {
+            const tbody = document.getElementById('log-table-body');
+            tbody.innerHTML = "";
+            
+            let safeCount = 0;
+            let dangerCount = 0;
+            let labels = [];
+            let scores = [];
+
+            let chartRecords = [...records].reverse();
+
+            chartRecords.forEach(record => {
+                let report = {};
+                try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } catch(e) {}
+                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
+                if (isNaN(score)) score = 0;
+                
+                if (score >= 70) dangerCount++; else safeCount++;
+                labels.push(record.timestamp.split(' ')[1]);
+                scores.push(score);
+            });
+
+            document.getElementById('stat-total').innerText = records.length;
+            document.getElementById('stat-safe').innerText = safeCount;
+            document.getElementById('stat-danger').innerText = dangerCount;
+
+            drawRatioChart(safeCount, dangerCount);
+            drawTrendChart(labels, scores);
+
+            records.forEach(record => {
+                let report = {};
+                try {
+                    report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report;
+                } catch(e) {
+                    report = { riskScore: 0, reason: "資料解析失敗" };
+                }
+                
+                let rawScore = report.riskScore || report.RiskScore || report.risk_score;
+                let score = parseInt(rawScore);
+                if (isNaN(score)) score = 0; 
+                
+                let reason = report.reason || report.Reason || report.description || "系統已自動記錄此特徵";
+
+                let riskClass = score >= 70 ? 'risk-high' : (score >= 30 ? 'risk-warn' : 'risk-safe');
+                let statusBadge = score >= 70 ? '🛑 已攔截' : '✅ 允許通行';
+
+                let tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-family:monospace; color:#8b949e;">${record.timestamp.split(' ')[1]}</td>
+                    <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${record.url}">${record.url}</td>
+                    <td class="${riskClass}"><span style="font-size:18px; font-weight:bold;">${score}</span> / 100</td>
+                    <td style="max-width:400px; font-size:13px; color:#c9d1d9;">${reason}</td>
+                    <td class="${riskClass}">${statusBadge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            checkEmergency(records[0], dangerCount); 
+        }
+
+        function drawRatioChart(safe, danger) {
+            const ctx = document.getElementById('ratioChart').getContext('2d');
+            if(ratioChartInstance) ratioChartInstance.destroy();
+            
+            ratioChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['安全放行', '危險攔截'],
+                    datasets: [{
+                        data: [safe, danger],
+                        backgroundColor: ['#238636', '#da3633'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#c9d1d9' } } } }
+            });
+        }
+
+        function drawTrendChart(labels, data) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            if(trendChartInstance) trendChartInstance.destroy();
+
+            trendChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '網頁風險指數',
+                        data: data,
+                        borderColor: '#58a6ff',
+                        backgroundColor: 'rgba(88, 166, 255, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    scales: { 
+                        y: { beginAtZero: true, max: 100, grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
+                        x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function checkEmergency(latestRecord) {
+            let report = {};
+            try {
+                report = typeof latestRecord.report === 'string' ? JSON.parse(latestRecord.report) : latestRecord.report;
+            } catch(e) {}
+            
+            let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
+            if (isNaN(score)) score = 0;
+
+            const banner = document.getElementById('emergency-banner');
+            if (score >= 70 && latestRecord.timestamp !== lastAlertTime) {
+                banner.style.display = "block";
+                lastAlertTime = latestRecord.timestamp; 
+                setTimeout(() => { banner.style.display = "none"; }, 8000);
+            }
+        }
+    </script>
+</body>
+</html>
