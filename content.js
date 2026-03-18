@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 網頁雙效守護者 (效能優化 + 圖片分析 + 個資脫敏)
+ * AI 防詐盾牌 - 網頁雙效守護者 (效能優化 + 圖片分析 + 個資脫敏 + 免死金牌機制)
  */
 
 class BehaviorAnalyzer {
@@ -41,18 +41,15 @@ const linkObserver = new IntersectionObserver((entries, observer) => {
     });
 });
 
-// 👁️ 新增：圖片視覺掃描觀察器 (只掃描使用者看到的圖片，節省 API)
 const imageObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
             const img = entry.target;
-            // 過濾掉太小的 icon 或是 base64 編碼圖片
             if (img.src && !img.src.startsWith('data:') && img.width > 50 && img.height > 50) {
-                // 🛡️ 加上 try-catch 保護罩，防止 Extension context invalidated 錯誤
                 try {
                     chrome.runtime.sendMessage({ action: "scanImageInBackground", imageUrl: img.src, pageUrl: window.location.href });
                 } catch (error) {
-                    console.warn("⚠️ 擴充功能已更新，請重新整理此網頁以恢復圖片掃描功能。");
+                    console.warn("⚠️ 擴充功能已更新，請重新整理此網頁。");
                 }
             }
             observer.unobserve(img);
@@ -72,7 +69,6 @@ function observeElements() {
 const scamKeywords = ["保證獲利", "加賴領取", "穩賺不賠", "飆股", "破解程式", "名額有限", "內部消息", "無風險投資"];
 let hasTriggeredBlock = false; 
 
-// 🛡️ 新增：隱私安全脫敏函數
 function maskSensitiveData(text) {
     if (!text) return "";
     return text
@@ -96,14 +92,19 @@ function triggerSafeBlock(reason) {
     try {
         chrome.runtime.sendMessage({ action: "triggerBlock", reason: reason });
     } catch (error) {
-        window.location.replace(chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reason) + "&original_url=" + encodeURIComponent(window.location.href));
+        // 如果無法取得 blocked.html (例如在本地端)，則至少給一個警告彈窗
+        try {
+            window.location.replace(chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reason) + "&original_url=" + encodeURIComponent(window.location.href));
+        } catch (e) {
+            alert("🚨 【AI 防詐盾牌】已攔截此危險頁面！");
+        }
     }
 }
 
 function scanScamWords() {
     if (hasTriggeredBlock) return;
     const textContent = document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
-    const safeText = maskSensitiveData(textContent); // 脫敏
+    const safeText = maskSensitiveData(textContent); 
 
     for (let keyword of scamKeywords) {
         if (safeText.includes(keyword)) {
@@ -114,20 +115,16 @@ function scanScamWords() {
     observeElements(); 
 }
 
-// 🛡️ 記憶體防護：靜止偵測機制
 let scanCount = 0;
 let lastActivityTime = Date.now();
 document.addEventListener('mousemove', () => { lastActivityTime = Date.now(); });
 document.addEventListener('keydown', () => { lastActivityTime = Date.now(); });
 
 function scheduleIdleScan() {
-    // 若無操作超過設定時間 (CONFIG.INACTIVITY_TIMEOUT_MS)，休眠不掃描
     if (Date.now() - lastActivityTime > (window.CONFIG?.INACTIVITY_TIMEOUT_MS || 300000)) {
-        setTimeout(scheduleIdleScan, 5000); // 慢速甦醒檢查
+        setTimeout(scheduleIdleScan, 5000); 
         return;
     }
-    
-    // 限制每分鐘頻率
     if (scanCount >= (window.CONFIG?.MAX_SCANS_PER_MINUTE || 10)) {
         setTimeout(() => { scanCount = 0; scheduleIdleScan(); }, 60000);
         return;
@@ -141,7 +138,23 @@ function scheduleIdleScan() {
     }
 }
 
+// ==========================================
+// 🛡️ 啟動邏輯：加入友軍免死金牌機制
+// ==========================================
 if (window.self === window.top) {
-    new BehaviorAnalyzer(); 
-    scheduleIdleScan();
+    // 判斷是否為系統自家的安全頁面 (包含 dashboard, 本地檔案, 擴充功能設定頁)
+    const isSystemPage = window.location.protocol === 'chrome-extension:' ||
+                         window.location.protocol === 'file:' ||
+                         window.location.href.includes('dashboard.html') ||
+                         window.location.href.includes('blocked.html') ||
+                         window.location.hostname === 'localhost' ||
+                         window.location.hostname === '127.0.0.1';
+
+    // 只有在「不是」系統頁面的時候，才啟動自動掃描機制
+    if (!isSystemPage) {
+        new BehaviorAnalyzer(); 
+        scheduleIdleScan();
+    } else {
+        console.log("🛡️ AI 防詐盾牌：已偵測到友軍系統頁面 (戰情室)，已關閉自動掃描以防誤傷！");
+    }
 }
