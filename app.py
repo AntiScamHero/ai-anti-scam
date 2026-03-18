@@ -9,6 +9,9 @@ import string
 import threading
 from dotenv import load_dotenv
 
+# ==========================================
+# ⚙️ 系統與環境設定
+# ==========================================
 # 強制設定系統輸出為 UTF-8，避免中文亂碼
 os.environ["PYTHONUTF8"] = "1"
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -39,15 +42,12 @@ load_dotenv()
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
-# ---------------------------------------------------------
-# 🛡️ CORS 安全設定 (已修正：全面開放跨網域)
-# ---------------------------------------------------------
-# 這裡允許所有來源 ("*")，確保不論是擴充功能還是你電腦上的 dashboard.html 都能順利連線
+# 🛡️ 關鍵修正：CORS 全面開放，確保戰情室與擴充功能都能順利連線
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# ---------------------------------------------------------
+# ==========================================
 # 🔑 金鑰與第三方服務初始化
-# ---------------------------------------------------------
+# ==========================================
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 LINE_USER_ID = os.getenv("LINE_USER_ID")
@@ -55,10 +55,10 @@ LINE_USER_ID = os.getenv("LINE_USER_ID")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# 支援 Render 的 Secret Files 預設路徑 (/etc/secrets/...)，如果本地測試則讀取預設的 json 檔
+# 支援 Render 的 Secret Files 預設路徑，如果本地測試則讀取預設的 json 檔
 KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "/etc/secrets/serviceAccountKey.json")
 
-# 🛡️ Firebase 狀態備援標記 (Fallback)
+# Firebase 狀態備援標記 (Fallback)
 firebase_initialized = False
 
 try:
@@ -81,21 +81,21 @@ client = AzureOpenAI(
     api_key=os.getenv("AZURE_API_KEY"),
 )
 
-# ---------------------------------------------------------
+# ==========================================
 # 🛠️ 輔助函式
-# ---------------------------------------------------------
+# ==========================================
 def clean_json_text(text):
     """清理 GPT 回傳的 Markdown JSON 格式標籤"""
     text = text.strip()
     text = re.sub(r'^```json\s*|```$', '', text, flags=re.MULTILINE)
     return text.strip()
 
-# ---------------------------------------------------------
+# ==========================================
 # 🟢 LINE Bot 路由與邏輯
-# ---------------------------------------------------------
+# ==========================================
 @app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers.get('X-Line-Signature', '')
     body = request.get_data(as_text=True)
     try:
         handler.handle(body, signature)
@@ -140,9 +140,13 @@ def handle_message(event):
             
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
-# ---------------------------------------------------------
+# ==========================================
 # 🛡️ 核心 API：AI 掃描端點
-# ---------------------------------------------------------
+# ==========================================
+@app.route('/')
+def home():
+    return "🛡️ AI 防詐系統運作中"
+
 @app.route('/scan', methods=['POST'])
 def scan_url():
     data = request.json
@@ -156,17 +160,7 @@ def scan_url():
     if not target_url and not image_url and not web_text:
         return jsonify({"error": "系統未接收到可供分析的內容"}), 400
 
-    # 1. 快取檢查 (僅在資料庫正常時執行)
-    if firebase_initialized and target_url and not image_url and not is_urgent:
-        safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150] 
-        try:
-            cached_result = db.reference(f'url_cache/{safe_url_key}').get()
-            if cached_result:
-                return jsonify({"report": cached_result})
-        except Exception:
-            pass
-
-    # 2. 緊急推播處理 (強制跳轉攔截時觸發)
+    # 1. 緊急推播處理 (強制跳轉攔截時觸發)
     if is_urgent:
         def send_emergency_alert():
             try:
@@ -184,7 +178,7 @@ def scan_url():
         threading.Thread(target=send_emergency_alert).start()
         return jsonify({"status": "success", "message": "緊急推播已在背景秒發"})
 
-    # 3. 呼叫 Azure OpenAI 進行分析
+    # 2. 呼叫 Azure OpenAI 進行分析
     try:
         system_prompt = """你是一位專門防護台灣使用者的資安專家。
         請用最白話的台灣繁體中文回答。回傳標準 JSON 格式（絕對不可包含 Markdown 標記），包含：
@@ -201,7 +195,6 @@ def scan_url():
 
         messages = [{"role": "system", "content": system_prompt}]
         
-        # 允許透過環境變數動態修改模型名稱，若無設定則預設為原先的名稱
         if image_url:
             messages.append({
                 "role": "user", 
@@ -216,7 +209,7 @@ def scan_url():
                 "role": "user", 
                 "content": [{"type": "text", "text": f"請分析以下內容：\n{web_text[:3500]}"}]
             })
-            model_to_use = os.getenv("AZURE_MODEL_TEXT", "model-router") 
+            model_to_use = os.getenv("AZURE_MODEL_TEXT", "gpt-4o") # 預設使用 gpt-4o
 
         response = client.chat.completions.create(
             model=model_to_use, 
@@ -224,39 +217,43 @@ def scan_url():
             response_format={ "type": "json_object" }
         )
         
+        # 💡 關鍵修正：將 AI 的文字回覆轉化為真正的 JSON 物件，解決擴充功能 NaN% 的問題
         report_dict = json.loads(clean_json_text(response.choices[0].message.content))
-        report_str = json.dumps(report_dict, ensure_ascii=False)
         
-        # 4. 資料庫寫入與 LINE 推播 (僅在資料庫正常時執行)
+        # 3. 資料庫寫入與 LINE 推播
         if firebase_initialized:
-            if target_url and not image_url:
-                safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150]
-                try:
-                    db.reference(f'url_cache/{safe_url_key}').set(report_str)
-                except Exception: pass
-
             if report_dict.get('riskLevel') in ['高度危險', '極度危險']:
                 alert_msg = f"🚨 家庭資安警報！\n家人可能遇到詐騙訊息\n風險等級：{report_dict.get('riskLevel')}\n原因：{report_dict.get('reason')}"
                 threading.Thread(target=lambda: line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert_msg))).start()
 
             db.reference('scan_history').push({
                 'url': target_url, 
-                'report': report_str, 
+                'report': json.dumps(report_dict, ensure_ascii=False), # 資料庫存字串
                 'userID': user_id, 
                 'familyID': family_id, 
                 'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
         
-        return jsonify({"report": report_str})
+        return jsonify(report_dict) # 擴充功能直接接收 JSON 物件
     except Exception as e:
-        return jsonify({"error": f"分析失敗：{repr(e)}"}), 500
+        print(f"❌ 分析失敗：{str(e)}")
+        # 發生錯誤時給予安全的回退格式，防止擴充功能崩潰
+        fallback_data = {
+            "riskScore": 0, 
+            "riskLevel": "分析中斷", 
+            "dimensions": {"financial_誘騙":0, "personal_個資":0, "urgency_時間壓力":0, "authority_冒充權威":0},
+            "reason": f"系統連線異常: {str(e)}", 
+            "advice": "請稍後再試", 
+            "highlight_keywords": []
+        }
+        return jsonify(fallback_data), 500
 
-# ---------------------------------------------------------
+# ==========================================
 # 👨‍👩‍👧 家庭防護與其他 API 端點
-# ---------------------------------------------------------
+# ==========================================
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_false_positive():
-    if not firebase_initialized: return jsonify({"status": "success"}) # 備援模式直接回報成功不報錯
+    if not firebase_initialized: return jsonify({"status": "success"}) 
     try:
         data = request.json
         db.reference('false_positives').push({
@@ -315,15 +312,13 @@ def get_alerts():
         result.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
         return jsonify({"status": "success", "data": result[:10]})
     except Exception as e: 
-        return jsonify({"status": "error"})
+        return jsonify({"status": "error", "message": str(e)})
 
-# ---------------------------------------------------------
-# 🚀 啟動伺服器 (相容 Render 動態 Port 機制)
-# ---------------------------------------------------------
+# ==========================================
+# 🚀 啟動伺服器
+# ==========================================
 if __name__ == "__main__":
     # Render 會強制指定環境變數 PORT，本地測試則預設為 5000
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 啟動伺服器 (Port: {port})...")
-    
-    # 雲端正式環境會由 Render 設定的 gunicorn 接手，這裡的 app.run 是保留給本地端備用的
     app.run(host='0.0.0.0', port=port)
