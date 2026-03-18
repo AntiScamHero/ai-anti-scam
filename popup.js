@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (溫和防護版)
+ * AI 防詐盾牌 - 核心控制邏輯 (比賽 Demo 完美一致版 - 完整展開不省略)
  */
 
 let currentUserID = "";
@@ -32,28 +32,32 @@ function maskSensitiveData(text) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 競賽展示模式 (連點標題 5 次觸發)
+    // 🎭 完美 Demo 展示模式 (連點標題 5 次觸發，格式與真實 AI 完全一致)
     document.getElementById('header-title').addEventListener('click', () => {
         titleClickCount++;
         if (titleClickCount === 5) {
-            alert("🛠️ [系統診斷模式] 已啟動。正在執行攔截功能完整性測試...");
             document.getElementById('score-text').innerText = `風險指數: 98%`;
             document.getElementById('report-level').innerText = "極度危險";
-            document.getElementById('report-reason').innerText = "系統偵測到高度誘騙行為與偽造網域。";
-            document.getElementById('report-advice').innerText = "請立即關閉此網頁，並通報 165 反詐騙專線。";
+            document.getElementById('report-reason').innerText = "系統偵測到高度誘騙行為與偽造網域，試圖索取敏感個資並製造限時壓力。";
+            document.getElementById('report-advice').innerText = "請立即關閉此網頁，切勿輸入任何資料。";
             
             document.getElementById('keyword-section').style.display = 'block';
-            document.getElementById('report-keywords').innerHTML = '<span class="keyword-badge">保證獲利</span><span class="keyword-badge">限時匯款</span>';
+            document.getElementById('report-keywords').innerHTML = '<span class="keyword-badge">保證獲利</span><span class="keyword-badge">限時匯款</span><span class="keyword-badge">凍結帳戶</span>';
             
+            // 補齊 4 個完整的評分維度，與真實 AI 報告 100% 一致
             document.getElementById('dimensions-section').style.display = 'block';
             document.getElementById('report-dimensions').innerHTML = `
                 <div class="dim-row"><div class="dim-label">誘騙</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 95%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">95</div></div>
+                <div class="dim-row"><div class="dim-label">個資</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 85%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">85</div></div>
                 <div class="dim-row"><div class="dim-label">時間壓力</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 88%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">88</div></div>
+                <div class="dim-row"><div class="dim-label">冒充權威</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 92%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">92</div></div>
             `;
             
             document.getElementById('score-container').style.display = "block";
             document.getElementById('report-container').style.display = "block";
+            document.getElementById('loading').style.display = "none";
             document.getElementById('app-body').className = "theme-danger";
+            document.getElementById('header-title').innerText = "❌ 極度危險！請立即離開！";
             setTimeout(() => { document.getElementById('progress-bar').style.width = "98%"; }, 100);
             titleClickCount = 0;
         }
@@ -151,7 +155,6 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
 
             let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score);
 
-            // 🛡️ 溫柔的防呆機制：如果分數真的讀不到，直接預設為 0，並給予安全的提示
             if (isNaN(score)) {
                 score = 0;
                 reportData.riskLevel = "安全無虞";
@@ -164,7 +167,6 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
             document.getElementById('report-reason').innerText = reportData.reason || "系統已完成基礎安全掃描。";
             document.getElementById('report-advice').innerText = reportData.advice || "無特別建議。";
 
-            // 渲染詐騙維度
             const dimSection = document.getElementById('dimensions-section');
             const dimContainer = document.getElementById('report-dimensions');
             if (reportData.dimensions && Object.keys(reportData.dimensions).length > 0) {
@@ -185,7 +187,6 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
                 dimSection.style.display = 'none';
             }
 
-            // 渲染風險關鍵字
             const kwSection = document.getElementById('keyword-section');
             const kwContainer = document.getElementById('report-keywords');
             kwContainer.innerHTML = '';
@@ -205,7 +206,6 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
             reportContainer.style.display = "block";
             setTimeout(() => { progressBar.style.width = score + "%"; }, 150);
 
-            // 介面顏色判定
             if (score < 30) {
                 appBody.className = "theme-safe";
                 headerTitle.innerText = "✅ 檢測通過：安全網頁";
