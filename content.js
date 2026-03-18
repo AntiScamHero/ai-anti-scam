@@ -48,7 +48,12 @@ const imageObserver = new IntersectionObserver((entries, observer) => {
             const img = entry.target;
             // 過濾掉太小的 icon 或是 base64 編碼圖片
             if (img.src && !img.src.startsWith('data:') && img.width > 50 && img.height > 50) {
-                chrome.runtime.sendMessage({ action: "scanImageInBackground", imageUrl: img.src, pageUrl: window.location.href });
+                // 🛡️ 加上 try-catch 保護罩，防止 Extension context invalidated 錯誤
+                try {
+                    chrome.runtime.sendMessage({ action: "scanImageInBackground", imageUrl: img.src, pageUrl: window.location.href });
+                } catch (error) {
+                    console.warn("⚠️ 擴充功能已更新，請重新整理此網頁以恢復圖片掃描功能。");
+                }
             }
             observer.unobserve(img);
         }
