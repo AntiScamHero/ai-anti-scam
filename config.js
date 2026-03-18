@@ -16,3 +16,8 @@ const CONFIG = {
     MAX_RETRIES: 3,                  // API 失敗最高重試次數
     POLLING_INTERVAL_MS: 5000        // 家庭戰情室即時更新頻率
 };
+
+// 💡 必須加上這段，background.js 與 content.js 才能讀到設定
+if (typeof window !== 'undefined') {
+    window.CONFIG = CONFIG;
+}
