@@ -344,8 +344,6 @@ def join_family():
         return jsonify({"status": "error", "message": "資料庫備援中，暫時無法加入"})
     try:
         data = request.json
-        
-        # 💡 關鍵修正：分開取得變數，避免拆解錯誤
         uid = data.get('uid')
         code = data.get('inviteCode', '').upper()
         
@@ -378,11 +376,31 @@ def get_alerts():
     except Exception as e: 
         return jsonify({"status": "error", "message": str(e)})
 
+@app.route('/api/clear_alerts', methods=['POST'])
+def clear_alerts():
+    if not firebase_initialized: 
+        return jsonify({"status": "error", "message": "資料庫備援中，暫時無法清除"})
+    try:
+        family_id = request.json.get('familyID')
+        if not family_id or family_id == 'none': 
+            return jsonify({"status": "fail", "message": "無效的家庭 ID"})
+        
+        # 取得所有紀錄並比對 familyID，符合的就刪除
+        ref = db.reference('scan_history')
+        all_records = ref.get()
+        if all_records:
+            for key, val in all_records.items():
+                if isinstance(val, dict) and val.get('familyID') == family_id:
+                    ref.child(key).delete()
+                    
+        return jsonify({"status": "success"})
+    except Exception as e: 
+        return jsonify({"status": "error", "message": str(e)})
+
 # ==========================================
 # 🚀 啟動伺服器
 # ==========================================
 if __name__ == "__main__":
-    # Render 會強制指定環境變數 PORT，本地測試則預設為 5000
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 啟動伺服器 (Port: {port})...")
     app.run(host='0.0.0.0', port=port)

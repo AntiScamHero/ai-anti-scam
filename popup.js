@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (已拔除隱藏觸發機制版)
+ * AI 防詐盾牌 - 核心控制邏輯 (已加入清除警報功能版)
  */
 
 let currentUserID = "";
@@ -297,6 +297,7 @@ function startFamilyAlertsPolling(familyID) {
     pollingInterval = setInterval(() => { fetchFamilyAlerts(familyID); }, CONFIG.POLLING_INTERVAL_MS);
 }
 
+// 修改後的 fetchFamilyAlerts，加入「清除按鈕」與「無資料自動隱藏」邏輯
 async function fetchFamilyAlerts(familyID) {
     if (familyID === 'none') return;
     try {
@@ -306,24 +307,68 @@ async function fetchFamilyAlerts(familyID) {
             body: JSON.stringify({ familyID: familyID })
         });
         let result = await res.json();
+        const box = document.getElementById('family-alerts-box');
+        
         if (result.status === 'success' && result.data.length > 0) {
-            const box = document.getElementById('family-alerts-box');
-            box.innerHTML = '<div style="font-weight:bold; color:var(--text-main); margin-bottom:8px;">⚠️ 近期家庭防護紀錄</div>';
+            let html = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="font-weight:bold; color:var(--text-main);">⚠️ 近期家庭防護紀錄</div>
+                    <button id="clear-alerts-btn" style="width: auto; padding: 4px 10px; margin: 0; font-size: 12px; background: #dc3545; color: white; border-radius: 4px; cursor: pointer; border: none;">🗑️ 清除</button>
+                </div>
+            `;
+            
             result.data.forEach(item => {
                 let r = {};
                 try { r = JSON.parse(item.report); } catch(e) { r = { riskLevel: "紀錄" }; }
-                let time = item.timestamp.split(' ')[1];
+                let time = item.timestamp.split(' ')[1]; // 只取時間部分
                 let reasonText = r.reason ? r.reason.substring(0, 20) : "安全掃描";
-                box.innerHTML += `
+                html += `
                     <div class="alert-item">
                         <span class="alert-time">🕒 ${time} - [${r.riskLevel || "安全"}]</span>
                         結果: ${reasonText}...
                     </div>
                 `;
             });
+            box.innerHTML = html;
             box.style.display = 'block';
+        } else {
+            // 無資料時隱藏
+            box.style.display = 'none';
+            box.innerHTML = '';
         }
     } catch (e) {
         console.log("戰情室更新失敗", e);
     }
 }
+
+// 🗑️ 綁定「清除紀錄」按鈕的點擊事件 (使用事件代理)
+document.getElementById('family-alerts-box').addEventListener('click', async (e) => {
+    if (e.target.id === 'clear-alerts-btn') {
+        const btn = e.target;
+        const originalText = btn.innerText;
+        btn.innerText = "清除中...";
+        btn.disabled = true;
+        
+        try {
+            let res = await fetchWithRetry(`${CONFIG.API_BASE_URL}/api/clear_alerts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ familyID: currentFamilyID })
+            });
+            let result = await res.json();
+            
+            if (result.status === 'success') {
+                const box = document.getElementById('family-alerts-box');
+                box.innerHTML = '';
+                box.style.display = 'none';
+            } else {
+                btn.innerText = "清除失敗";
+                setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2000);
+            }
+        } catch (err) {
+            console.error("清除失敗", err);
+            btn.innerText = "連線失敗";
+            setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2000);
+        }
+    }
+});
