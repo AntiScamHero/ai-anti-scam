@@ -36,8 +36,8 @@ app.config['JSON_AS_ASCII'] = False
 # ---------------------------------------------------------
 # 🛡️ CORS 安全設定
 # ---------------------------------------------------------
-# 請將這裡更換為您的真實擴充功能 ID (Chrome 右上角拼圖 -> 管理擴充功能 -> 開啟開發人員模式 -> 複製 ID)
-ALLOWED_EXTENSION_ID = "chrome-extension://YOUR_EXTENSION_ID_HERE"
+# 改為從環境變數讀取擴充功能 ID，預設值為提示文字
+ALLOWED_EXTENSION_ID = os.getenv("CHROME_EXTENSION_ID", "chrome-extension://YOUR_EXTENSION_ID_HERE")
 
 CORS(app, resources={
     r"/*": {
@@ -59,7 +59,8 @@ LINE_USER_ID = os.getenv("LINE_USER_ID")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-KEY_PATH = os.getenv("FIREBASE_KEY_PATH")
+# 支援 Render 的 Secret Files 預設路徑 (/etc/secrets/...)，如果本地測試則讀取預設的 json 檔
+KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "/etc/secrets/serviceAccountKey.json")
 
 # 🛡️ Firebase 狀態備援標記 (Fallback)
 firebase_initialized = False
@@ -204,6 +205,7 @@ def scan_url():
 
         messages = [{"role": "system", "content": system_prompt}]
         
+        # 允許透過環境變數動態修改模型名稱，若無設定則預設為原先的名稱
         if image_url:
             messages.append({
                 "role": "user", 
@@ -212,13 +214,13 @@ def scan_url():
                     {"type": "image_url", "image_url": {"url": image_url}}
                 ]
             })
-            model_to_use = "gpt-4o" 
+            model_to_use = os.getenv("AZURE_MODEL_IMAGE", "gpt-4o") 
         else:
             messages.append({
                 "role": "user", 
                 "content": [{"type": "text", "text": f"請分析以下內容：\n{web_text[:3500]}"}]
             })
-            model_to_use = "model-router" 
+            model_to_use = os.getenv("AZURE_MODEL_TEXT", "model-router") 
 
         response = client.chat.completions.create(
             model=model_to_use, 
@@ -294,7 +296,7 @@ def join_family():
         return jsonify({"status": "error", "message": "資料庫備援中，暫時無法加入"})
     try:
         data = request.json
-        uid, code = data.get('uid'), data.get('inviteCode', '').upper()
+        uid, code = data.get('inviteCode', '').upper()
         if db.reference(f'families/{code}').get():
             db.reference(f'families/{code}/memberUIDs/{uid}').set(True)
             db.reference(f'users/{uid}').update({'role': 'member', 'familyID': code})
@@ -320,10 +322,12 @@ def get_alerts():
         return jsonify({"status": "error"})
 
 # ---------------------------------------------------------
-# 🚀 啟動伺服器 (使用 Gevent 以提高效能)
+# 🚀 啟動伺服器 (相容 Render 動態 Port 機制)
 # ---------------------------------------------------------
 if __name__ == "__main__":
-    from gevent.pywsgi import WSGIServer
-    print("🚀 啟動高效能 Gevent 伺服器 (Port: 5000)...")
-    http_server = WSGIServer(('0.0.0.0', 5000), app)
-    http_server.serve_forever()
+    # Render 會強制指定環境變數 PORT，本地測試則預設為 5000
+    port = int(os.environ.get("PORT", 5000))
+    print(f"🚀 啟動伺服器 (Port: {port})...")
+    
+    # 雲端正式環境會由 Render 設定的 gunicorn 接手，這裡的 app.run 是保留給本地端備用的
+    app.run(host='0.0.0.0', port=port)
