@@ -1,10 +1,9 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (比賽 Demo 完美一致版 - 完整展開不省略)
+ * AI 防詐盾牌 - 核心控制邏輯 (已拔除隱藏觸發機制版)
  */
 
 let currentUserID = "";
 let currentFamilyID = "none";
-let titleClickCount = 0;
 let pollingInterval = null;
 
 // 🛡️ API 自動重試機制
@@ -30,39 +29,6 @@ function maskSensitiveData(text) {
         .replace(/09\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, "[手機號碼已隱藏]")
         .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    // 🎭 完美 Demo 展示模式 (連點標題 5 次觸發，格式與真實 AI 完全一致)
-    document.getElementById('header-title').addEventListener('click', () => {
-        titleClickCount++;
-        if (titleClickCount === 5) {
-            document.getElementById('score-text').innerText = `風險指數: 98%`;
-            document.getElementById('report-level').innerText = "極度危險";
-            document.getElementById('report-reason').innerText = "系統偵測到高度誘騙行為與偽造網域，試圖索取敏感個資並製造限時壓力。";
-            document.getElementById('report-advice').innerText = "請立即關閉此網頁，切勿輸入任何資料。";
-            
-            document.getElementById('keyword-section').style.display = 'block';
-            document.getElementById('report-keywords').innerHTML = '<span class="keyword-badge">保證獲利</span><span class="keyword-badge">限時匯款</span><span class="keyword-badge">凍結帳戶</span>';
-            
-            // 補齊 4 個完整的評分維度，與真實 AI 報告 100% 一致
-            document.getElementById('dimensions-section').style.display = 'block';
-            document.getElementById('report-dimensions').innerHTML = `
-                <div class="dim-row"><div class="dim-label">誘騙</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 95%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">95</div></div>
-                <div class="dim-row"><div class="dim-label">個資</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 85%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">85</div></div>
-                <div class="dim-row"><div class="dim-label">時間壓力</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 88%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">88</div></div>
-                <div class="dim-row"><div class="dim-label">冒充權威</div><div class="dim-bar-bg"><div class="dim-bar-fill" style="width: 92%; background-color: #d93025;"></div></div><div class="dim-score" style="color:#d93025">92</div></div>
-            `;
-            
-            document.getElementById('score-container').style.display = "block";
-            document.getElementById('report-container').style.display = "block";
-            document.getElementById('loading').style.display = "none";
-            document.getElementById('app-body').className = "theme-danger";
-            document.getElementById('header-title').innerText = "❌ 極度危險！請立即離開！";
-            setTimeout(() => { document.getElementById('progress-bar').style.width = "98%"; }, 100);
-            titleClickCount = 0;
-        }
-    });
-});
 
 // 初始化使用者資料與家庭群組
 chrome.storage.local.get(['userID', 'familyID'], (result) => {

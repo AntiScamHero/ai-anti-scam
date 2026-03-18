@@ -13,7 +13,7 @@
 
     body { width: 380px; padding: 15px; font-family: 'Segoe UI', Roboto, sans-serif; background-color: var(--bg-color); transition: all 0.3s ease; margin: 0; color: var(--text-main); }
     .app-card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); transition: 0.5s; border: 1px solid var(--border); }
-    h2 { margin-top: 0; margin-bottom: 15px; padding: 12px; color: white; background-color: #1a73e8; font-size: 18px; text-align: center; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.5s; letter-spacing: 1px; cursor: pointer; }
+    h2 { margin-top: 0; margin-bottom: 15px; padding: 12px; color: white; background-color: #1a73e8; font-size: 18px; text-align: center; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.5s; letter-spacing: 1px; cursor: default; }
     button { width: 100%; padding: 12px; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.3s; margin-bottom: 12px; }
     #scan-btn { background: linear-gradient(135deg, #333333 0%, #000000 100%); }
     @media (prefers-color-scheme: dark) { #scan-btn { background: linear-gradient(135deg, #555 0%, #222 100%); border: 1px solid #444; } }
@@ -58,7 +58,7 @@
 </head>
 <body id="app-body">
   <div class="app-card">
-    <h2 id="header-title" title="連續點擊 5 次啟動展示模式">🛡️ AI 防詐盾牌</h2>
+    <h2 id="header-title">🛡️ AI 防詐盾牌</h2>
     <button id="scan-btn">即時掃描當前網頁</button>
     <div id="loading"><div class="spinner"></div>深度網頁文本萃取中... AI 大腦分析中</div>
     <div id="score-container">
