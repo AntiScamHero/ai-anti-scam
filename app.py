@@ -18,6 +18,12 @@ if sys.stdout.encoding != 'utf-8':
 if sys.stderr.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
+# 🛡️ 關鍵修正：清除環境中的代理設定，防止 OpenAI 套件啟動時崩潰
+os.environ.pop('HTTP_PROXY', None)
+os.environ.pop('HTTPS_PROXY', None)
+os.environ.pop('http_proxy', None)
+os.environ.pop('https_proxy', None)
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import firebase_admin
@@ -36,7 +42,7 @@ app.config['JSON_AS_ASCII'] = False
 # ---------------------------------------------------------
 # 🛡️ CORS 安全設定 (已修正：全面開放跨網域)
 # ---------------------------------------------------------
-# 這裡改為允許所有來源 ("*")，確保不論是擴充功能還是你電腦上的 dashboard.html 都能順利連線
+# 這裡允許所有來源 ("*")，確保不論是擴充功能還是你電腦上的 dashboard.html 都能順利連線
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # ---------------------------------------------------------
