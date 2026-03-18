@@ -141,7 +141,7 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
 # ==========================================
-# 🛡️ 核心 API：AI 掃描端點 (完整展開版)
+# 🛡️ 核心 API：AI 掃描端點 (包含快取防毒機制)
 # ==========================================
 @app.route('/')
 def home():
@@ -160,18 +160,29 @@ def scan_url():
     if not target_url and not image_url and not web_text:
         return jsonify({"error": "系統未接收到可供分析的內容"}), 400
 
-    # 1. 🚀 快取檢查 (完整保留)
+    # 1. 🚀 快取檢查與「排毒」機制 (完整展開)
     if firebase_initialized and target_url and not image_url and not is_urgent:
         safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150] 
         try:
             cached_result = db.reference(f'url_cache/{safe_url_key}').get()
             if cached_result:
-                # 💡 無敵回傳：同時給予 json 字串與展開的物件，保證擴充功能一定讀得到！
-                cached_dict = json.loads(cached_result)
-                response_data = cached_dict.copy()
-                response_data["report"] = cached_result
-                return jsonify(response_data)
-        except Exception:
+                try:
+                    cached_dict = json.loads(cached_result)
+                except Exception:
+                    cached_dict = {}
+
+                # 🛡️ 判斷記憶是否壞掉：如果裡面有分數，代表是正常的紀錄
+                if 'riskScore' in cached_dict or 'RiskScore' in cached_dict or 'risk_score' in cached_dict:
+                    # 💡 無敵回傳：同時給予 json 字串與展開的物件，保證擴充功能一定讀得到！
+                    response_data = cached_dict.copy()
+                    response_data["report"] = cached_result
+                    return jsonify(response_data)
+                else:
+                    # 發現壞掉的記憶，強制刪除！讓系統等一下去問 AI
+                    print(f"🧹 清除 {target_url} 的損壞快取紀錄")
+                    db.reference(f'url_cache/{safe_url_key}').delete()
+        except Exception as e:
+            print(f"⚠️ 讀取快取發生異常: {str(e)}")
             pass
 
     # 2. 緊急推播處理 (完整保留)

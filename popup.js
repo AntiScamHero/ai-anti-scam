@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (101分終極完整版)
+ * AI 防詐盾牌 - 核心控制邏輯 (101分終極完整版 + 快取防毒機制)
  */
 
 let currentUserID = "";
@@ -131,7 +131,6 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
         let safePageText = maskSensitiveData(pageText);
 
         try {
-            // 使用重試機制與 CONFIG 變數
             let response = await fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, {
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
@@ -140,68 +139,86 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
             let data = await response.json();
             loadingDiv.style.display = "none";
 
+            // 💡 終極解法：防禦快取中毒與各種奇怪的 JSON 格式
+            let reportData = {};
             if (data.report) {
-                let reportData = JSON.parse(data.report);
-                let score = parseInt(reportData.riskScore);
+                try {
+                    reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
+                    if (typeof reportData === 'string') reportData = JSON.parse(reportData); // 處理雙重字串化
+                } catch(e) { reportData = data; } 
+            } else {
+                reportData = data;
+            }
 
-                document.getElementById('score-text').innerText = `風險指數: ${score}%`;
-                document.getElementById('report-level').innerText = reportData.riskLevel;
-                document.getElementById('report-reason').innerText = reportData.reason;
-                document.getElementById('report-advice').innerText = reportData.advice;
+            let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score);
 
-                // 渲染詐騙維度
-                const dimSection = document.getElementById('dimensions-section');
-                const dimContainer = document.getElementById('report-dimensions');
-                if (reportData.dimensions && Object.keys(reportData.dimensions).length > 0) {
-                    dimContainer.innerHTML = '';
-                    for (let [key, val] of Object.entries(reportData.dimensions)) {
-                        let labelName = key.split('_')[1] || key;
-                        let color = val > CONFIG.RISK_THRESHOLD_HIGH ? '#d93025' : (val > CONFIG.RISK_THRESHOLD_MEDIUM ? '#f29900' : '#1e8e3e');
-                        dimContainer.innerHTML += `
-                            <div class="dim-row">
-                                <div class="dim-label">${labelName}</div>
-                                <div class="dim-bar-bg"><div class="dim-bar-fill" style="width: ${val}%; background-color: ${color};"></div></div>
-                                <div class="dim-score" style="color:${color}">${val}</div>
-                            </div>
-                        `;
-                    }
-                    dimSection.style.display = 'block';
-                } else {
-                    dimSection.style.display = 'none';
+            // 🚨 揪出快取中毒！如果連分數都沒有，代表資料庫存了壞東西
+            if (isNaN(score)) {
+                score = 0;
+                reportData.riskLevel = "讀取異常 (快取中毒)";
+                reportData.reason = "⚠️ 雲端資料庫中存留了舊版錯誤的紀錄。請隨便換一個「其他的網頁」掃描一次，系統就會恢復正常！";
+                reportData.advice = "請測試其他網址";
+            }
+
+            document.getElementById('score-text').innerText = `風險指數: ${score}%`;
+            document.getElementById('report-level').innerText = reportData.riskLevel || "未提供";
+            document.getElementById('report-reason').innerText = reportData.reason || "系統無法解析原因。";
+            document.getElementById('report-advice').innerText = reportData.advice || "無建議。";
+
+            // 渲染詐騙維度
+            const dimSection = document.getElementById('dimensions-section');
+            const dimContainer = document.getElementById('report-dimensions');
+            if (reportData.dimensions && Object.keys(reportData.dimensions).length > 0) {
+                dimContainer.innerHTML = '';
+                for (let [key, val] of Object.entries(reportData.dimensions)) {
+                    let labelName = key.split('_')[1] || key;
+                    let color = val > CONFIG.RISK_THRESHOLD_HIGH ? '#d93025' : (val > CONFIG.RISK_THRESHOLD_MEDIUM ? '#f29900' : '#1e8e3e');
+                    dimContainer.innerHTML += `
+                        <div class="dim-row">
+                            <div class="dim-label">${labelName}</div>
+                            <div class="dim-bar-bg"><div class="dim-bar-fill" style="width: ${val}%; background-color: ${color};"></div></div>
+                            <div class="dim-score" style="color:${color}">${val}</div>
+                        </div>
+                    `;
                 }
+                dimSection.style.display = 'block';
+            } else {
+                dimSection.style.display = 'none';
+            }
 
-                // 渲染風險關鍵字
-                const kwSection = document.getElementById('keyword-section');
-                const kwContainer = document.getElementById('report-keywords');
-                kwContainer.innerHTML = '';
-                if (reportData.highlight_keywords && reportData.highlight_keywords.length > 0) {
-                    kwSection.style.display = 'block';
-                    reportData.highlight_keywords.forEach(kw => {
-                        const span = document.createElement('span');
-                        span.className = 'keyword-badge';
-                        span.innerText = kw;
-                        kwContainer.appendChild(span);
-                    });
-                } else { 
-                    kwSection.style.display = 'none'; 
-                }
+            // 渲染風險關鍵字
+            const kwSection = document.getElementById('keyword-section');
+            const kwContainer = document.getElementById('report-keywords');
+            kwContainer.innerHTML = '';
+            if (reportData.highlight_keywords && reportData.highlight_keywords.length > 0) {
+                kwSection.style.display = 'block';
+                reportData.highlight_keywords.forEach(kw => {
+                    const span = document.createElement('span');
+                    span.className = 'keyword-badge';
+                    span.innerText = kw;
+                    kwContainer.appendChild(span);
+                });
+            } else { 
+                kwSection.style.display = 'none'; 
+            }
 
-                scoreContainer.style.display = "block";
-                reportContainer.style.display = "block";
-                setTimeout(() => { progressBar.style.width = score + "%"; }, 150);
+            scoreContainer.style.display = "block";
+            reportContainer.style.display = "block";
+            setTimeout(() => { progressBar.style.width = score + "%"; }, 150);
 
-                if (score < 30) {
-                    appBody.className = "theme-safe";
-                    headerTitle.innerText = "✅ 檢測通過：安全網頁";
-                } else if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
-                    appBody.className = "theme-danger";
-                    headerTitle.innerText = "❌ 極度危險！請立即離開！";
-                } else {
-                    appBody.className = "theme-warning";
-                    headerTitle.innerText = "⚠️ 警告：請提高警覺";
-                }
-
-            } else { throw new Error(data.error || "未知錯誤"); }
+            if (reportData.riskLevel === "讀取異常 (快取中毒)") {
+                appBody.className = "theme-warning";
+                headerTitle.innerText = "⚠️ 發現快取中毒";
+            } else if (score < 30) {
+                appBody.className = "theme-safe";
+                headerTitle.innerText = "✅ 檢測通過：安全網頁";
+            } else if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
+                appBody.className = "theme-danger";
+                headerTitle.innerText = "❌ 極度危險！請立即離開！";
+            } else {
+                appBody.className = "theme-warning";
+                headerTitle.innerText = "⚠️ 警告：請提高警覺";
+            }
 
         } catch (err) {
             loadingDiv.style.display = "none";
@@ -313,7 +330,7 @@ function updateUIAsBound(familyID) {
 // 🛡️ 背景即時輪詢戰情室資料
 function startFamilyAlertsPolling(familyID) {
     if (pollingInterval) clearInterval(pollingInterval);
-    fetchFamilyAlerts(familyID); // 啟動時先抓一次
+    fetchFamilyAlerts(familyID); 
     pollingInterval = setInterval(() => { fetchFamilyAlerts(familyID); }, CONFIG.POLLING_INTERVAL_MS);
 }
 
@@ -342,7 +359,6 @@ async function fetchFamilyAlerts(familyID) {
             box.style.display = 'block';
         }
     } catch (e) {
-        // 背景靜默更新，錯誤不打擾使用者
         console.log("戰情室更新失敗", e);
     }
 }
