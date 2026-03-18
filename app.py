@@ -21,7 +21,7 @@ if sys.stdout.encoding != 'utf-8':
 if sys.stderr.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# 🛡️ 關鍵修正：清除環境中的代理設定，防止 OpenAI 套件啟動時崩潰
+# 🛡️ 清除環境中的代理設定，防止 Azure OpenAI 連線問題
 os.environ.pop('HTTP_PROXY', None)
 os.environ.pop('HTTPS_PROXY', None)
 os.environ.pop('http_proxy', None)
@@ -44,6 +44,10 @@ app.config['JSON_AS_ASCII'] = False
 
 # 🛡️ CORS 全面開放，確保戰情室與擴充功能都能順利連線
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# 💡 專屬台灣時間產生器 (解決 Render 慢 8 小時的問題)
+def get_tw_time():
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
 
 # ==========================================
 # 🔑 金鑰與第三方服務初始化
@@ -123,19 +127,28 @@ def handle_message(event):
                         break
             
             if not my_family_id or my_family_id == 'none':
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 系統尚未記錄您的家庭 ID。\n請確認您已在擴充功能端將 LINE 帳號連動完成！"))
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 尚未綁定家庭 ID，請先在擴充功能完成連動。"))
                 return
 
             all_records = db.reference('scan_history').get()
             if all_records:
                 family_records = [val for val in all_records.values() if isinstance(val, dict) and val.get('familyID') == my_family_id]
                 total_scans = len(family_records)
-                danger_count = sum(1 for val in family_records if int(json.loads(val.get('report', '{}')).get('riskScore', 0)) >= 70)
                 
-                reply_text = f"🛡️ 【{my_family_id} 家庭防詐戰情室】\n--------------------\n🔍 總掃描次數：{total_scans} 次\n🛑 成功攔截危險：{danger_count} 次\n--------------------\n🟢 目前家人上網安全無虞！"
+                # 🛡️ 強化：安全解析風險分數
+                danger_count = 0
+                for val in family_records:
+                    report_raw = val.get('report', '{}')
+                    # 如果 report 是字串就 parse，否則直接用
+                    report_data = json.loads(report_raw) if isinstance(report_raw, str) else report_raw
+                    if int(report_data.get('riskScore', 0)) >= 70:
+                        danger_count += 1
+                
+                reply_text = f"🛡️ 【{my_family_id} 家庭戰情室】\n--------------------\n🔍 總掃描次數：{total_scans} 次\n🛑 攔截風險：{danger_count} 次\n--------------------\n🟢 目前家人上網環境受保護中！"
             else:
-                reply_text = "目前家庭資料庫中尚無任何掃描紀錄喔！"
-        except Exception:
+                reply_text = "目前家庭資料庫中尚無掃描紀錄。"
+        except Exception as e:
+            print(f"戰情讀取報錯: {e}")
             reply_text = "⚠️ 戰情系統讀取失敗，請稍後再試。"
             
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
@@ -160,32 +173,30 @@ def scan_url():
     if not target_url and not image_url and not web_text:
         return jsonify({"error": "系統未接收到可供分析的內容"}), 400
 
-    # 1. 🚀 快取檢查與「排毒」機制 (完整展開)
+    # 1. 🚀 快取檢查與「排毒」機制
     if firebase_initialized and target_url and not image_url and not is_urgent:
         safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150] 
         try:
             cached_result = db.reference(f'url_cache/{safe_url_key}').get()
             if cached_result:
                 try:
-                    cached_dict = json.loads(cached_result)
+                    cached_dict = json.loads(cached_result) if isinstance(cached_result, str) else cached_result
                 except Exception:
                     cached_dict = {}
 
-                # 🛡️ 判斷記憶是否壞掉：如果裡面有分數，代表是正常的紀錄
+                # 🛡️ 判斷記憶是否壞掉
                 if 'riskScore' in cached_dict or 'RiskScore' in cached_dict or 'risk_score' in cached_dict:
-                    # 💡 無敵回傳：同時給予 json 字串與展開的物件，保證擴充功能一定讀得到！
                     response_data = cached_dict.copy()
-                    response_data["report"] = cached_result
+                    response_data["report"] = json.dumps(cached_dict, ensure_ascii=False) if not isinstance(cached_result, str) else cached_result
                     return jsonify(response_data)
                 else:
-                    # 發現壞掉的記憶，強制刪除！讓系統等一下去問 AI
                     print(f"🧹 清除 {target_url} 的損壞快取紀錄")
                     db.reference(f'url_cache/{safe_url_key}').delete()
         except Exception as e:
             print(f"⚠️ 讀取快取發生異常: {str(e)}")
             pass
 
-    # 2. 緊急推播處理 (完整保留)
+    # 2. 緊急推播處理
     if is_urgent:
         def send_emergency_alert():
             try:
@@ -197,7 +208,7 @@ def scan_url():
                         'report': json.dumps({"riskScore": 100, "riskLevel": "極度危險", "reason": web_text}, ensure_ascii=False),
                         'userID': user_id, 
                         'familyID': family_id, 
-                        'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        'timestamp': get_tw_time()
                     })
             except Exception:
                 pass
@@ -243,13 +254,11 @@ def scan_url():
             response_format={ "type": "json_object" }
         )
         
-        # 將 AI 的文字回覆轉化為真正的 JSON 物件與字串
         report_dict = json.loads(clean_json_text(response.choices[0].message.content))
         report_str = json.dumps(report_dict, ensure_ascii=False)
         
-        # 4. 資料庫寫入與 LINE 推播 (完整展開)
+        # 4. 資料庫寫入與 LINE 推播
         if firebase_initialized:
-            # 寫入快取
             if target_url and not image_url:
                 safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150]
                 try:
@@ -257,28 +266,24 @@ def scan_url():
                 except Exception:
                     pass
 
-            # LINE 警報推播
             if report_dict.get('riskLevel') in ['高度危險', '極度危險']:
                 alert_msg = f"🚨 家庭資安警報！\n家人可能遇到詐騙訊息\n風險等級：{report_dict.get('riskLevel')}\n原因：{report_dict.get('reason')}"
                 threading.Thread(target=lambda: line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert_msg))).start()
 
-            # 寫入歷史掃描紀錄
             db.reference('scan_history').push({
                 'url': target_url, 
                 'report': report_str, 
                 'userID': user_id, 
                 'familyID': family_id, 
-                'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                'timestamp': get_tw_time()
             })
         
-        # 💡 終極無敵回傳格式：包羅萬象，外掛想怎麼抓都可以！
         response_data = report_dict.copy()
         response_data["report"] = report_str
         return jsonify(response_data)
 
     except Exception as e:
         print(f"❌ 分析失敗：{str(e)}")
-        # 💡 如果 Azure 發生錯誤，回傳 200 與完整錯誤報告，讓外掛顯示錯誤原因而不是 NaN
         fallback_data = {
             "riskScore": 0, 
             "riskLevel": "分析中斷", 
@@ -292,7 +297,7 @@ def scan_url():
         return jsonify(response_data), 200
 
 # ==========================================
-# 👨‍👩‍👧 家庭防護與其他 API 端點 (完整展開版)
+# 👨‍👩‍👧 家庭防護與其他 API 端點
 # ==========================================
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_false_positive():
@@ -303,7 +308,7 @@ def report_false_positive():
         db.reference('false_positives').push({
             'url': data.get('url', ''), 
             'reason': data.get('reported_reason', ''),
-            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            'timestamp': get_tw_time()
         })
         return jsonify({"status": "success"})
     except Exception as e: 
@@ -321,7 +326,7 @@ def create_family():
             'guardianUID': uid, 
             'memberUIDs': {}, 
             'familyID': invite_code, 
-            'createdAt': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            'createdAt': get_tw_time()
         })
         
         db.reference(f'users/{uid}').update({
@@ -339,7 +344,10 @@ def join_family():
         return jsonify({"status": "error", "message": "資料庫備援中，暫時無法加入"})
     try:
         data = request.json
-        uid, code = data.get('inviteCode', '').upper()
+        
+        # 💡 關鍵修正：分開取得變數，避免拆解錯誤
+        uid = data.get('uid')
+        code = data.get('inviteCode', '').upper()
         
         if db.reference(f'families/{code}').get():
             db.reference(f'families/{code}/memberUIDs/{uid}').set(True)
