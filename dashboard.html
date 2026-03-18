@@ -2,7 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>AI 防詐戰情室 - 終極穩定版</title>
+    <title>AI 防詐戰情室 - 雲端同步版</title>
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; }
@@ -55,7 +56,7 @@
 
     <div class="control-panel">
         <label>輸入家庭邀請碼：</label>
-        <input type="text" id="family-id-input" placeholder="例如: 6SHVJ0" value="6SHVJ0">
+        <input type="text" id="family-id-input" placeholder="例如: 45PSWZ" value="45PSWZ">
         <button id="btn-manual" class="btn-manual">🔄 手動更新</button>
         <button id="btn-start" class="btn-start">▶️ 開啟自動監控</button>
         <button id="btn-stop" class="btn-stop">⏹️ 停止監控</button>
@@ -135,7 +136,8 @@
             document.getElementById('btn-stop').style.display = "inline-block";
 
             fetchLogs(familyID); 
-            monitoringInterval = setInterval(() => fetchLogs(familyID), 5000); 
+            // 💡 輪詢頻率同步 config.js 設定
+            monitoringInterval = setInterval(() => fetchLogs(familyID), window.CONFIG?.POLLING_INTERVAL_MS || 5000); 
         });
 
         document.getElementById('btn-stop').addEventListener('click', () => {
@@ -152,7 +154,8 @@
 
         async function fetchLogs(familyID) {
             try {
-                const res = await fetch('http://127.0.0.1:5000/api/get_alerts', {
+                // 💡 修正點：使用 CONFIG.API_BASE_URL 連線至雲端 Render
+                const res = await fetch(`${CONFIG.API_BASE_URL}/api/get_alerts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ familyID: familyID })
@@ -166,7 +169,7 @@
                 }
             } catch (err) {
                 console.error("連線後端失敗", err);
-                document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#da3633;">❌ 連線失敗，請確認 Python 伺服器正在執行中</td></tr>';
+                document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#da3633;">❌ 連線失敗，請確認 Render 伺服器狀態是否正常</td></tr>';
             }
         }
 
@@ -187,7 +190,7 @@
                 let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
                 if (isNaN(score)) score = 0;
                 
-                if (score >= 70) dangerCount++; else safeCount++;
+                if (score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70)) dangerCount++; else safeCount++;
                 labels.push(record.timestamp.split(' ')[1]);
                 scores.push(score);
             });
@@ -213,8 +216,8 @@
                 
                 let reason = report.reason || report.Reason || report.description || "系統已自動記錄此特徵";
 
-                let riskClass = score >= 70 ? 'risk-high' : (score >= 30 ? 'risk-warn' : 'risk-safe');
-                let statusBadge = score >= 70 ? '🛑 已攔截' : '✅ 允許通行';
+                let riskClass = score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70) ? 'risk-high' : (score >= (window.CONFIG?.RISK_THRESHOLD_MEDIUM || 40) ? 'risk-warn' : 'risk-safe');
+                let statusBadge = score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70) ? '🛑 已攔截' : '✅ 允許通行';
 
                 let tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -227,7 +230,7 @@
                 tbody.appendChild(tr);
             });
 
-            checkEmergency(records[0], dangerCount); 
+            checkEmergency(records[0]); 
         }
 
         function drawRatioChart(safe, danger) {
@@ -287,7 +290,7 @@
             if (isNaN(score)) score = 0;
 
             const banner = document.getElementById('emergency-banner');
-            if (score >= 70 && latestRecord.timestamp !== lastAlertTime) {
+            if (score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70) && latestRecord.timestamp !== lastAlertTime) {
                 banner.style.display = "block";
                 lastAlertTime = latestRecord.timestamp; 
                 setTimeout(() => { banner.style.display = "none"; }, 8000);
