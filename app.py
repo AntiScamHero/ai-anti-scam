@@ -42,7 +42,7 @@ load_dotenv()
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
-# 🛡️ 關鍵修正：CORS 全面開放，確保戰情室與擴充功能都能順利連線
+# 🛡️ CORS 全面開放，確保戰情室與擴充功能都能順利連線
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # ==========================================
@@ -141,7 +141,7 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
 # ==========================================
-# 🛡️ 核心 API：AI 掃描端點
+# 🛡️ 核心 API：AI 掃描端點 (已還原完整快取與儲存邏輯)
 # ==========================================
 @app.route('/')
 def home():
@@ -160,7 +160,18 @@ def scan_url():
     if not target_url and not image_url and not web_text:
         return jsonify({"error": "系統未接收到可供分析的內容"}), 400
 
-    # 1. 緊急推播處理 (強制跳轉攔截時觸發)
+    # 1. 🚀 已還原：快取檢查 (僅在資料庫正常時執行，節省 API 費用)
+    if firebase_initialized and target_url and not image_url and not is_urgent:
+        safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150] 
+        try:
+            cached_result = db.reference(f'url_cache/{safe_url_key}').get()
+            if cached_result:
+                # 命中快取，直接回傳擴充功能需要的格式
+                return jsonify({"report": cached_result})
+        except Exception:
+            pass
+
+    # 2. 緊急推播處理 (強制跳轉攔截時觸發)
     if is_urgent:
         def send_emergency_alert():
             try:
@@ -178,7 +189,7 @@ def scan_url():
         threading.Thread(target=send_emergency_alert).start()
         return jsonify({"status": "success", "message": "緊急推播已在背景秒發"})
 
-    # 2. 呼叫 Azure OpenAI 進行分析
+    # 3. 呼叫 Azure OpenAI 進行分析
     try:
         system_prompt = """你是一位專門防護台灣使用者的資安專家。
         請用最白話的台灣繁體中文回答。回傳標準 JSON 格式（絕對不可包含 Markdown 標記），包含：
@@ -217,24 +228,36 @@ def scan_url():
             response_format={ "type": "json_object" }
         )
         
-        # 💡 關鍵修正：將 AI 的文字回覆轉化為真正的 JSON 物件，解決擴充功能 NaN% 的問題
+        # 💡 完美修復點：將回傳值解析並轉化為安全的 JSON 字串
         report_dict = json.loads(clean_json_text(response.choices[0].message.content))
+        report_str = json.dumps(report_dict, ensure_ascii=False)
         
-        # 3. 資料庫寫入與 LINE 推播
+        # 4. 🚀 已還原：資料庫寫入 (包含快取寫入) 與 LINE 推播
         if firebase_initialized:
+            # 寫入快取
+            if target_url and not image_url:
+                safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150]
+                try:
+                    db.reference(f'url_cache/{safe_url_key}').set(report_str)
+                except Exception: pass
+
+            # LINE 警報推播
             if report_dict.get('riskLevel') in ['高度危險', '極度危險']:
                 alert_msg = f"🚨 家庭資安警報！\n家人可能遇到詐騙訊息\n風險等級：{report_dict.get('riskLevel')}\n原因：{report_dict.get('reason')}"
                 threading.Thread(target=lambda: line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert_msg))).start()
 
+            # 寫入歷史掃描紀錄 (戰情室會抓這裡的資料)
             db.reference('scan_history').push({
                 'url': target_url, 
-                'report': json.dumps(report_dict, ensure_ascii=False), # 資料庫存字串
+                'report': report_str, 
                 'userID': user_id, 
                 'familyID': family_id, 
                 'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
         
-        return jsonify(report_dict) # 擴充功能直接接收 JSON 物件
+        # 💡 完美回傳格式：滿足外掛擴充功能抓取 data.report 的需求，不再出現 NaN！
+        return jsonify({"report": report_str})
+
     except Exception as e:
         print(f"❌ 分析失敗：{str(e)}")
         # 發生錯誤時給予安全的回退格式，防止擴充功能崩潰
@@ -242,11 +265,11 @@ def scan_url():
             "riskScore": 0, 
             "riskLevel": "分析中斷", 
             "dimensions": {"financial_誘騙":0, "personal_個資":0, "urgency_時間壓力":0, "authority_冒充權威":0},
-            "reason": f"系統連線異常: {str(e)}", 
+            "reason": f"系統連線異常或分析逾時: {str(e)}", 
             "advice": "請稍後再試", 
             "highlight_keywords": []
         }
-        return jsonify(fallback_data), 500
+        return jsonify({"report": json.dumps(fallback_data, ensure_ascii=False)}), 200
 
 # ==========================================
 # 👨‍👩‍👧 家庭防護與其他 API 端點
