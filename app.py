@@ -141,7 +141,7 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
 # ==========================================
-# 🛡️ 核心 API：AI 掃描端點 (已還原完整快取與儲存邏輯)
+# 🛡️ 核心 API：AI 掃描端點 (完整展開版)
 # ==========================================
 @app.route('/')
 def home():
@@ -160,18 +160,21 @@ def scan_url():
     if not target_url and not image_url and not web_text:
         return jsonify({"error": "系統未接收到可供分析的內容"}), 400
 
-    # 1. 🚀 已還原：快取檢查 (僅在資料庫正常時執行，節省 API 費用)
+    # 1. 🚀 快取檢查 (完整保留)
     if firebase_initialized and target_url and not image_url and not is_urgent:
         safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150] 
         try:
             cached_result = db.reference(f'url_cache/{safe_url_key}').get()
             if cached_result:
-                # 命中快取，直接回傳擴充功能需要的格式
-                return jsonify({"report": cached_result})
+                # 💡 無敵回傳：同時給予 json 字串與展開的物件，保證擴充功能一定讀得到！
+                cached_dict = json.loads(cached_result)
+                response_data = cached_dict.copy()
+                response_data["report"] = cached_result
+                return jsonify(response_data)
         except Exception:
             pass
 
-    # 2. 緊急推播處理 (強制跳轉攔截時觸發)
+    # 2. 緊急推播處理 (完整保留)
     if is_urgent:
         def send_emergency_alert():
             try:
@@ -185,7 +188,8 @@ def scan_url():
                         'familyID': family_id, 
                         'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     })
-            except Exception: pass
+            except Exception:
+                pass
         threading.Thread(target=send_emergency_alert).start()
         return jsonify({"status": "success", "message": "緊急推播已在背景秒發"})
 
@@ -220,7 +224,7 @@ def scan_url():
                 "role": "user", 
                 "content": [{"type": "text", "text": f"請分析以下內容：\n{web_text[:3500]}"}]
             })
-            model_to_use = os.getenv("AZURE_MODEL_TEXT", "gpt-4o") # 預設使用 gpt-4o
+            model_to_use = os.getenv("AZURE_MODEL_TEXT", "gpt-4o")
 
         response = client.chat.completions.create(
             model=model_to_use, 
@@ -228,25 +232,26 @@ def scan_url():
             response_format={ "type": "json_object" }
         )
         
-        # 💡 完美修復點：將回傳值解析並轉化為安全的 JSON 字串
+        # 將 AI 的文字回覆轉化為真正的 JSON 物件與字串
         report_dict = json.loads(clean_json_text(response.choices[0].message.content))
         report_str = json.dumps(report_dict, ensure_ascii=False)
         
-        # 4. 🚀 已還原：資料庫寫入 (包含快取寫入) 與 LINE 推播
+        # 4. 資料庫寫入與 LINE 推播 (完整展開)
         if firebase_initialized:
             # 寫入快取
             if target_url and not image_url:
                 safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:150]
                 try:
                     db.reference(f'url_cache/{safe_url_key}').set(report_str)
-                except Exception: pass
+                except Exception:
+                    pass
 
             # LINE 警報推播
             if report_dict.get('riskLevel') in ['高度危險', '極度危險']:
                 alert_msg = f"🚨 家庭資安警報！\n家人可能遇到詐騙訊息\n風險等級：{report_dict.get('riskLevel')}\n原因：{report_dict.get('reason')}"
                 threading.Thread(target=lambda: line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=alert_msg))).start()
 
-            # 寫入歷史掃描紀錄 (戰情室會抓這裡的資料)
+            # 寫入歷史掃描紀錄
             db.reference('scan_history').push({
                 'url': target_url, 
                 'report': report_str, 
@@ -255,28 +260,33 @@ def scan_url():
                 'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
         
-        # 💡 完美回傳格式：滿足外掛擴充功能抓取 data.report 的需求，不再出現 NaN！
-        return jsonify({"report": report_str})
+        # 💡 終極無敵回傳格式：包羅萬象，外掛想怎麼抓都可以！
+        response_data = report_dict.copy()
+        response_data["report"] = report_str
+        return jsonify(response_data)
 
     except Exception as e:
         print(f"❌ 分析失敗：{str(e)}")
-        # 發生錯誤時給予安全的回退格式，防止擴充功能崩潰
+        # 💡 如果 Azure 發生錯誤，回傳 200 與完整錯誤報告，讓外掛顯示錯誤原因而不是 NaN
         fallback_data = {
             "riskScore": 0, 
             "riskLevel": "分析中斷", 
             "dimensions": {"financial_誘騙":0, "personal_個資":0, "urgency_時間壓力":0, "authority_冒充權威":0},
-            "reason": f"系統連線異常或分析逾時: {str(e)}", 
-            "advice": "請稍後再試", 
+            "reason": f"系統連線異常: {str(e)}", 
+            "advice": "請檢查 Azure API 設定", 
             "highlight_keywords": []
         }
-        return jsonify({"report": json.dumps(fallback_data, ensure_ascii=False)}), 200
+        response_data = fallback_data.copy()
+        response_data["report"] = json.dumps(fallback_data, ensure_ascii=False)
+        return jsonify(response_data), 200
 
 # ==========================================
-# 👨‍👩‍👧 家庭防護與其他 API 端點
+# 👨‍👩‍👧 家庭防護與其他 API 端點 (完整展開版)
 # ==========================================
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_false_positive():
-    if not firebase_initialized: return jsonify({"status": "success"}) 
+    if not firebase_initialized: 
+        return jsonify({"status": "success"}) 
     try:
         data = request.json
         db.reference('false_positives').push({
@@ -295,13 +305,19 @@ def create_family():
     try:
         uid = request.json.get('uid')
         invite_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
         db.reference(f'families/{invite_code}').set({
             'guardianUID': uid, 
             'memberUIDs': {}, 
             'familyID': invite_code, 
             'createdAt': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
-        db.reference(f'users/{uid}').update({'role': 'guardian', 'familyID': invite_code})
+        
+        db.reference(f'users/{uid}').update({
+            'role': 'guardian', 
+            'familyID': invite_code
+        })
+        
         return jsonify({"status": "success", "inviteCode": invite_code})
     except Exception as e: 
         return jsonify({"status": "error"})
@@ -313,10 +329,15 @@ def join_family():
     try:
         data = request.json
         uid, code = data.get('inviteCode', '').upper()
+        
         if db.reference(f'families/{code}').get():
             db.reference(f'families/{code}/memberUIDs/{uid}').set(True)
-            db.reference(f'users/{uid}').update({'role': 'member', 'familyID': code})
+            db.reference(f'users/{uid}').update({
+                'role': 'member', 
+                'familyID': code
+            })
             return jsonify({"status": "success"})
+            
         return jsonify({"status": "fail", "message": "無效的邀請碼"})
     except Exception as e: 
         return jsonify({"status": "error"})
@@ -333,6 +354,7 @@ def get_alerts():
         all_records = db.reference('scan_history').get()
         result = [val for key, val in all_records.items() if val.get('familyID') == family_id] if all_records else []
         result.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
         return jsonify({"status": "success", "data": result[:10]})
     except Exception as e: 
         return jsonify({"status": "error", "message": str(e)})
