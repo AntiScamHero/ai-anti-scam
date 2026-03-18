@@ -2,7 +2,7 @@ import requests
 import time
 
 # 修改成您的 API 網址 (記得確保 Render 上的伺服器正在運行)
-BASE_URL = "https://你的專案.onrender.com"
+BASE_URL = "https://ai-anti-scam.onrender.com"
 
 def run_50_tests():
     print("🚀 啟動 50 項全功能壓力測試...")
