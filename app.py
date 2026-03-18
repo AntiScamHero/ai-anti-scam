@@ -34,20 +34,10 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
 # ---------------------------------------------------------
-# 🛡️ CORS 安全設定
+# 🛡️ CORS 安全設定 (已修正：全面開放跨網域)
 # ---------------------------------------------------------
-# 改為從環境變數讀取擴充功能 ID，預設值為提示文字
-ALLOWED_EXTENSION_ID = os.getenv("CHROME_EXTENSION_ID", "chrome-extension://YOUR_EXTENSION_ID_HERE")
-
-CORS(app, resources={
-    r"/*": {
-        "origins": [
-            ALLOWED_EXTENSION_ID,
-            "http://localhost:5000",   
-            "http://127.0.0.1:5000"
-        ]
-    }
-})
+# 這裡改為允許所有來源 ("*")，確保不論是擴充功能還是你電腦上的 dashboard.html 都能順利連線
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # ---------------------------------------------------------
 # 🔑 金鑰與第三方服務初始化
