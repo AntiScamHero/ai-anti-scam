@@ -12,13 +12,15 @@ from dotenv import load_dotenv
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit, join_room  # 👑 新增 WebSocket 模組
+
 import firebase_admin
 from firebase_admin import credentials, db 
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
-# ✨ 導入我們剛剛拆分出去的模組！
+# 導入資安與 AI 模組
 from security import mask_sensitive_data, is_genuine_white_listed, TRUSTED_DOMAINS
 from ai_service import analyze_risk_with_ai
 
@@ -33,12 +35,15 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# 👑 初始化 WebSocket (允許跨域)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 def get_tw_time():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
 
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
-LINE_USER_ID = os.getenv("LINE_USER_ID")
+LINE_USER_ID = os.getenv("LINE_USER_ID") # 這是開發者的備用 ID
 
 # Firebase 初始化
 KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "/etc/secrets/serviceAccountKey.json")
@@ -53,8 +58,40 @@ try:
 except Exception as e:
     print(f"⚠️ Firebase 啟動失敗：{repr(e)}")
 
+
 # ==========================================
-# 🚀 核心 API：AI 掃描端點 (架構極簡版)
+# 👑 新增：動態 LINE 守護者推播系統
+# ==========================================
+def send_dynamic_line_alert(family_id, url, reason):
+    """根據 family_id 找出對應的守護者 LINE ID 並發送警報"""
+    if not firebase_initialized or family_id == 'none': return
+    try:
+        # 去資料庫查這個家庭的守護者 UID
+        family_node = db.reference(f'families/{family_id}').get()
+        guardian_uid = family_node.get('guardianUID') if family_node else None
+        
+        target_line_id = LINE_USER_ID # 預設 Fallback 給開發者測試用
+        
+        if guardian_uid:
+            # 查守護者註冊的 LINE ID (假設你有在 user 節點綁定 line_id)
+            user_node = db.reference(f'users/{guardian_uid}').get()
+            if user_node and user_node.get('line_id'):
+                target_line_id = user_node.get('line_id')
+        
+        if target_line_id:
+            msg = (
+                f"🚨 【AI 防詐盾牌 - 緊急警報】🚨\n"
+                f"您的家人剛剛觸發了高風險網頁！\n\n"
+                f"🔍 原因：{reason[:50]}\n"
+                f"🌐 網址：{url[:50]}...\n\n"
+                f"系統已主動攔截保護，請確認家人狀況！"
+            )
+            line_bot_api.push_message(target_line_id, TextSendMessage(text=msg))
+    except Exception as e:
+        print(f"LINE 動態推播失敗: {e}")
+
+# ==========================================
+# 🚀 核心 API：AI 掃描端點
 # ==========================================
 @app.route('/scan', methods=['POST'])
 def scan_url():
@@ -114,37 +151,63 @@ def scan_url():
                 return jsonify({**c_data, "report": json.dumps(c_data, ensure_ascii=False), "masked_text": web_text})
         except: pass
 
-    # 緊急通報
+    # 緊急通報 (由前端 content.js 強制阻擋觸發)
     if is_urgent:
-        def send_alert():
-            try: line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=f"🚨 緊急通報 (已強制阻擋)：\n網址: {target_url}\n內容: {web_text[:100]}"))
-            except: pass
-        threading.Thread(target=send_alert).start()
+        def handle_urgent():
+            # 👑 透過 WebSocket 即時閃紅燈
+            socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
+            send_dynamic_line_alert(family_id, target_url, "【觸發強制防護盾】" + web_text[:50])
+        threading.Thread(target=handle_urgent).start()
         return jsonify({"status": "success"})
 
-    # ✨ 呼叫獨立出去的 Vision AI 模組 ✨
+    # 呼叫獨立出去的 Vision AI 模組
     jailbreak_keywords = ['忽略', 'ignore', 'instruction', 'system prompt', '繞過', 'bypass', '系統指示']
     is_jailbreak_attempt = any(k in raw_text.lower() for k in jailbreak_keywords)
 
     report_dict = analyze_risk_with_ai(target_url, web_text, image_url, is_jailbreak_attempt)
     report_str = json.dumps(report_dict, ensure_ascii=False)
+    score = int(report_dict.get('riskScore', 0))
 
-    # 非同步寫入資料庫與 LINE 推播
+    # 👑 非同步處理：寫入資料庫、WebSocket 即時推播、LINE 通報
     if firebase_initialized:
-        threading.Thread(target=lambda: db.reference('scan_history').push({
-            'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': get_tw_time()
-        })).start()
-        
-        if target_url:
-            threading.Thread(target=lambda: db.reference(f'url_cache/{safe_url_key}').set(report_str)).start()
+        def background_tasks():
+            timestamp = get_tw_time()
+            
+            # 1. 寫入 Firebase
+            db.reference('scan_history').push({
+                'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp
+            })
+            if target_url:
+                db.reference(f'url_cache/{safe_url_key}').set(report_str)
+            
+            # 2. 透過 WebSocket 即時更新該家庭的戰情室儀表板
+            socketio.emit('new_scan_result', {
+                'url': target_url, 'riskScore': score, 'reason': report_dict.get('reason'), 'timestamp': timestamp
+            }, room=family_id)
 
-        if report_dict.get('riskScore', 0) >= 75:
-            threading.Thread(target=lambda: line_bot_api.push_message(LINE_USER_ID, TextSendMessage(text=f"🚨 高風險警報！\n原因：{report_dict.get('reason')[:50]}") )).start()
+            # 3. 若分數超標，觸發 LINE 動態通報
+            if score >= 75:
+                send_dynamic_line_alert(family_id, target_url, report_dict.get('reason'))
+
+        threading.Thread(target=background_tasks).start()
 
     return jsonify({**report_dict, "report": report_str, "masked_text": web_text})
 
+
 # ==========================================
-# 🟢 LINE Bot 戰情室完整邏輯
+# 👑 WebSocket 房間管理
+# ==========================================
+@socketio.on('join_family_room')
+def handle_join_family_room(data):
+    """前端戰情室連線時，加入專屬的家庭房間"""
+    family_id = data.get('familyID')
+    if family_id:
+        join_room(family_id)
+        print(f"💻 戰情室已連線並加入房間: {family_id}")
+
+
+# ==========================================
+# 🟢 LINE Bot 戰情室邏輯 (維持原樣)
 # ==========================================
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -175,7 +238,7 @@ def handle_message(event):
         except: pass
 
 # ==========================================
-# 👨‍👩‍👧 完整家庭與紀錄 API
+# 👨‍👩‍👧 完整家庭與紀錄 API (維持原樣)
 # ==========================================
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_fp():
@@ -230,4 +293,5 @@ def clear_alerts():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    # 👑 啟動時必須改用 socketio.run 來支援 WebSocket
+    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
