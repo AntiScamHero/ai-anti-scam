@@ -1,12 +1,10 @@
 flask==3.0.0
 flask-cors==4.0.0
-openai==1.58.1
+openai[datalib]==1.58.1  <-- 🎯 就是改這行！把 [datalib] 加進去
 firebase-admin==6.2.0
 python-dotenv==1.0.0
 line-bot-sdk==3.5.0
 gunicorn==21.2.0
 httpx==0.27.2
-# --- 以下為新增的套件 ---
 flask-socketio==5.3.6
 eventlet==0.35.2
-numpy==1.26.4
