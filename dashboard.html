@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>AI 防詐戰情室 - 雲端同步版</title>
-    <script src="config.js"></script>
+    <title>AI 防詐戰情室 - 全自動記憶版</title>
+    <script src="config.js"></script> 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; }
@@ -21,9 +21,11 @@
         .btn-stop:hover { background: #f85149; }
         .btn-manual { background: #1f6feb; color: white; }
         .btn-manual:hover { background: #388bfd; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        .status-badge { padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; background: #30363d; color: #8b949e; }
+        .status-badge { padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; background: #30363d; color: #8b949e; transition: 0.3s; }
         .status-connected { background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid #238636; }
+        .status-loading { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid #d29922; }
 
         #emergency-banner { display: none; background: #da3633; color: white; padding: 15px 20px; border-radius: 10px; margin-bottom: 20px; font-weight: bold; font-size: 18px; text-align: center; box-shadow: 0 0 20px rgba(218, 54, 51, 0.5); animation: flash 1s infinite alternate; }
         @keyframes flash { from { opacity: 1; } to { opacity: 0.7; } }
@@ -55,8 +57,8 @@
     </div>
 
     <div class="control-panel">
-        <label>輸入家庭邀請碼：</label>
-        <input type="text" id="family-id-input" placeholder="例如: 45PSWZ" value="45PSWZ">
+        <label>家庭邀請碼：</label>
+        <input type="text" id="family-id-input" placeholder="請輸入 6 碼">
         <button id="btn-manual" class="btn-manual">🔄 手動更新</button>
         <button id="btn-start" class="btn-start">▶️ 開啟自動監控</button>
         <button id="btn-stop" class="btn-stop">⏹️ 停止監控</button>
@@ -105,74 +107,157 @@
             </tr>
         </thead>
         <tbody id="log-table-body">
-            <tr><td colspan="5" style="text-align:center; color:#8b949e;">請輸入家庭邀請碼並點擊「手動更新」...</td></tr>
+            <tr><td colspan="5" style="text-align:center; color:#8b949e;">請輸入家庭邀請碼並開啟監控...</td></tr>
         </tbody>
     </table>
 
     <script>
+        // --- 預設設定防呆 (避免找不到 config.js 時壞掉) ---
+        window.CONFIG = window.CONFIG || {
+            API_BASE_URL: "http://127.0.0.1:5000", // 如果你部署到雲端，請在這裡改成雲端網址
+            POLLING_INTERVAL_MS: 5000,
+            RISK_THRESHOLD_HIGH: 70,
+            RISK_THRESHOLD_MEDIUM: 40
+        };
+
         setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-TW'); }, 1000);
 
         let monitoringInterval = null;
         let lastAlertTime = "";
         let ratioChartInstance = null;
         let trendChartInstance = null;
-        
+        let isFetching = false; // 防止重複發送請求
+
+        // ==========================================
+        // ✨ 新增功能 1：網頁載入時「自動記憶與恢復」
+        // ==========================================
+        window.onload = () => {
+            const savedFamilyID = localStorage.getItem('savedFamilyID');
+            const isAutoMonitorOn = localStorage.getItem('autoMonitor') === 'true';
+
+            if (savedFamilyID) {
+                document.getElementById('family-id-input').value = savedFamilyID;
+                if (isAutoMonitorOn) {
+                    startMonitoring(savedFamilyID);
+                }
+            }
+        };
+
+        // ==========================================
+        // ✨ 新增功能 2：操作按鈕邏輯強化 (加入狀態儲存)
+        // ==========================================
         document.getElementById('btn-manual').addEventListener('click', () => {
+            if (isFetching) return;
             const familyID = document.getElementById('family-id-input').value.trim().toUpperCase();
-            if(!familyID) return alert("請輸入邀請碼");
+            if(!familyID) return alert("請輸入 6 碼邀請碼");
+            
+            localStorage.setItem('savedFamilyID', familyID); // 記憶代碼
             fetchLogs(familyID);
         });
 
         document.getElementById('btn-start').addEventListener('click', () => {
             const familyID = document.getElementById('family-id-input').value.trim().toUpperCase();
-            if(!familyID) return alert("請輸入邀請碼");
+            if(!familyID) return alert("請輸入 6 碼邀請碼");
+            
+            localStorage.setItem('savedFamilyID', familyID); // 記憶代碼
+            localStorage.setItem('autoMonitor', 'true');     // 記憶開啟監控
+            startMonitoring(familyID);
+        });
 
+        document.getElementById('btn-stop').addEventListener('click', stopMonitoring);
+
+        function startMonitoring(familyID) {
             if (monitoringInterval) clearInterval(monitoringInterval);
 
-            document.getElementById('connection-status').className = "status-badge status-connected";
-            document.getElementById('connection-status').innerText = `🟢 監控中 (代碼: ${familyID})`;
             document.getElementById('family-id-input').disabled = true;
             document.getElementById('btn-start').style.display = "none";
             document.getElementById('btn-stop').style.display = "inline-block";
-
+            
             fetchLogs(familyID); 
-            // 💡 輪詢頻率同步 config.js 設定
-            monitoringInterval = setInterval(() => fetchLogs(familyID), window.CONFIG?.POLLING_INTERVAL_MS || 5000); 
-        });
+            monitoringInterval = setInterval(() => fetchLogs(familyID), window.CONFIG.POLLING_INTERVAL_MS); 
+        }
 
-        document.getElementById('btn-stop').addEventListener('click', () => {
+        function stopMonitoring() {
             if (monitoringInterval) {
                 clearInterval(monitoringInterval);
                 monitoringInterval = null;
             }
+            localStorage.setItem('autoMonitor', 'false'); // 記憶關閉監控
+            
             document.getElementById('connection-status').className = "status-badge";
             document.getElementById('connection-status').innerText = `🔴 暫停監控`;
             document.getElementById('family-id-input').disabled = false;
             document.getElementById('btn-start').style.display = "inline-block";
             document.getElementById('btn-stop').style.display = "none";
-        });
+            document.getElementById('btn-manual').innerText = "🔄 手動更新";
+            document.getElementById('btn-manual').disabled = false;
+        }
 
+        // ==========================================
+        // ✨ 新增功能 3：加入「讀取中」視覺回饋 (Loading State)
+        // ==========================================
         async function fetchLogs(familyID) {
+            if (isFetching) return;
+            isFetching = true;
+
+            const statusBadge = document.getElementById('connection-status');
+            const btnManual = document.getElementById('btn-manual');
+            
+            // 變更 UI 狀態讓使用者知道「系統有在動」
+            statusBadge.className = "status-badge status-loading";
+            statusBadge.innerText = `⏳ 讀取資料中...`;
+            btnManual.innerText = "⏳ 讀取中...";
+            btnManual.disabled = true;
+
             try {
-                // 💡 修正點：使用 CONFIG.API_BASE_URL 連線至雲端 Render
                 const res = await fetch(`${CONFIG.API_BASE_URL}/api/get_alerts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ familyID: familyID })
                 });
+                
+                if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                
                 const data = await res.json();
                 
+                // 恢復 UI 連線成功狀態
+                statusBadge.className = "status-badge status-connected";
+                statusBadge.innerText = `🟢 監控中 (代碼: ${familyID})`;
+
                 if (data.data && data.data.length > 0) {
                     updateDashboard(data.data);
                 } else {
-                    document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#e3b341; font-weight:bold;">⚠️ 目前雲端沒有此家庭的紀錄，請讓長輩端執行一次「網頁掃描」即可顯示！</td></tr>';
+                    document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#e3b341; font-weight:bold;">🟢 連線成功！目前資料庫中沒有此家庭的警報紀錄。</td></tr>';
+                    
+                    // 若無資料，將圖表歸零
+                    document.getElementById('stat-total').innerText = 0;
+                    document.getElementById('stat-safe').innerText = 0;
+                    document.getElementById('stat-danger').innerText = 0;
+                    drawRatioChart(1, 0); // 給個空的比例圖
+                    drawTrendChart([], []);
                 }
             } catch (err) {
                 console.error("連線後端失敗", err);
-                document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#da3633;">❌ 連線失敗，請確認 Render 伺服器狀態是否正常</td></tr>';
+                statusBadge.className = "status-badge";
+                statusBadge.innerText = `🔴 連線失敗`;
+                document.getElementById('log-table-body').innerHTML = `<tr><td colspan="5" style="text-align:center; color:#da3633;">❌ 無法連線至伺服器 (${CONFIG.API_BASE_URL})，請確認伺服器是否已啟動。</td></tr>`;
+                
+                // 如果連線失敗，自動停止監控以免不斷發送錯誤請求
+                if (monitoringInterval) stopMonitoring();
+            } finally {
+                isFetching = false;
+                if (!monitoringInterval) {
+                    btnManual.innerText = "🔄 手動更新";
+                    btnManual.disabled = false;
+                } else {
+                    btnManual.innerText = "🔄 更新完成";
+                    setTimeout(() => { if(monitoringInterval) btnManual.innerText = "🔄 手動更新"; }, 1000);
+                    btnManual.disabled = false;
+                }
             }
         }
 
+        // --- 以下為圖表與表格渲染邏輯 (不變) ---
         function updateDashboard(records) {
             const tbody = document.getElementById('log-table-body');
             tbody.innerHTML = "";
@@ -190,7 +275,7 @@
                 let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
                 if (isNaN(score)) score = 0;
                 
-                if (score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70)) dangerCount++; else safeCount++;
+                if (score >= (window.CONFIG.RISK_THRESHOLD_HIGH)) dangerCount++; else safeCount++;
                 labels.push(record.timestamp.split(' ')[1]);
                 scores.push(score);
             });
@@ -204,20 +289,15 @@
 
             records.forEach(record => {
                 let report = {};
-                try {
-                    report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report;
-                } catch(e) {
-                    report = { riskScore: 0, reason: "資料解析失敗" };
-                }
+                try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } 
+                catch(e) { report = { riskScore: 0, reason: "資料解析失敗" }; }
                 
-                let rawScore = report.riskScore || report.RiskScore || report.risk_score;
-                let score = parseInt(rawScore);
+                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
                 if (isNaN(score)) score = 0; 
                 
                 let reason = report.reason || report.Reason || report.description || "系統已自動記錄此特徵";
-
-                let riskClass = score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70) ? 'risk-high' : (score >= (window.CONFIG?.RISK_THRESHOLD_MEDIUM || 40) ? 'risk-warn' : 'risk-safe');
-                let statusBadge = score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70) ? '🛑 已攔截' : '✅ 允許通行';
+                let riskClass = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? 'risk-high' : (score >= window.CONFIG.RISK_THRESHOLD_MEDIUM ? 'risk-warn' : 'risk-safe');
+                let statusBadge = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? '🛑 已攔截' : '✅ 允許通行';
 
                 let tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -236,16 +316,11 @@
         function drawRatioChart(safe, danger) {
             const ctx = document.getElementById('ratioChart').getContext('2d');
             if(ratioChartInstance) ratioChartInstance.destroy();
-            
             ratioChartInstance = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: ['安全放行', '危險攔截'],
-                    datasets: [{
-                        data: [safe, danger],
-                        backgroundColor: ['#238636', '#da3633'],
-                        borderWidth: 0
-                    }]
+                    datasets: [{ data: [safe, danger], backgroundColor: ['#238636', '#da3633'], borderWidth: 0 }]
                 },
                 options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#c9d1d9' } } } }
             });
@@ -254,20 +329,11 @@
         function drawTrendChart(labels, data) {
             const ctx = document.getElementById('trendChart').getContext('2d');
             if(trendChartInstance) trendChartInstance.destroy();
-
             trendChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: '網頁風險指數',
-                        data: data,
-                        borderColor: '#58a6ff',
-                        backgroundColor: 'rgba(88, 166, 255, 0.2)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4
-                    }]
+                    datasets: [{ label: '網頁風險指數', data: data, borderColor: '#58a6ff', backgroundColor: 'rgba(88, 166, 255, 0.2)', borderWidth: 2, fill: true, tension: 0.4 }]
                 },
                 options: { 
                     responsive: true, 
@@ -282,15 +348,12 @@
 
         function checkEmergency(latestRecord) {
             let report = {};
-            try {
-                report = typeof latestRecord.report === 'string' ? JSON.parse(latestRecord.report) : latestRecord.report;
-            } catch(e) {}
-            
+            try { report = typeof latestRecord.report === 'string' ? JSON.parse(latestRecord.report) : latestRecord.report; } catch(e) {}
             let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
             if (isNaN(score)) score = 0;
 
             const banner = document.getElementById('emergency-banner');
-            if (score >= (window.CONFIG?.RISK_THRESHOLD_HIGH || 70) && latestRecord.timestamp !== lastAlertTime) {
+            if (score >= window.CONFIG.RISK_THRESHOLD_HIGH && latestRecord.timestamp !== lastAlertTime) {
                 banner.style.display = "block";
                 lastAlertTime = latestRecord.timestamp; 
                 setTimeout(() => { banner.style.display = "none"; }, 8000);
