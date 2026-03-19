@@ -6,12 +6,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client = AzureOpenAI(
-    api_version="2024-08-01-preview",
-    azure_endpoint=os.getenv("AZURE_ENDPOINT", "").strip().rstrip('/'),
-    api_key=os.getenv("AZURE_API_KEY", "").strip(),
-)
-
 def clean_json_text(text):
     text = text.strip()
     text = re.sub(r'^```json\s*|```$', '', text, flags=re.MULTILINE)
@@ -21,6 +15,14 @@ def analyze_risk_with_ai(target_url, web_text, image_url, is_jailbreak_attempt):
     """
     ✨ 終極多模態 (Multimodal) 分析引擎：同時看文字與圖片！
     """
+    # 👑 關鍵修復：將 Client 初始化移入函數內部 (Lazy Loading)
+    # 徹底避免 Render 啟動瞬間讀不到環境變數而引發的崩潰
+    client = AzureOpenAI(
+        api_version="2024-08-01-preview",
+        azure_endpoint=os.getenv("AZURE_ENDPOINT", "https://default.openai.azure.com/").strip().rstrip('/') or "https://default.openai.azure.com/",
+        api_key=os.getenv("AZURE_API_KEY", "dummy_key").strip() or "dummy_key",
+    )
+    
     system_prompt = (
         "你是一位頂尖資安防詐專家。請嚴格審查網址、內容以及圖片（若使用者有提供）。\n"
         "【任務1 - 網域防禦】：若網址非官方網域（如 .xyz, .cc），請判定 80 分以上高風險。\n"
