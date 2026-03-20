@@ -1,3 +1,7 @@
+# 🟢 確保 Eventlet 在最一開始就接管系統執行緒，避免背景任務打架
+import eventlet
+eventlet.monkey_patch()
+
 import sys
 import io
 import os
@@ -190,9 +194,10 @@ def scan_url():
     # 緊急強制通報
     if is_urgent:
         def handle_urgent():
-            socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
-            send_dynamic_line_alert(family_id, target_url, "【觸發強制防護盾】" + web_text[:50])
-        threading.Thread(target=handle_urgent).start()
+            with app.app_context(): # 🟢 修復點：帶入 Flask 狀態
+                socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
+                send_dynamic_line_alert(family_id, target_url, "【觸發強制防護盾】" + web_text[:50])
+        socketio.start_background_task(handle_urgent) # 🟢 修復點：使用 socketio 背景排程
         return jsonify({"status": "success"})
 
     # 🛡️ 防線 4：呼叫 AI 模組
@@ -205,22 +210,23 @@ def scan_url():
 
     if firebase_initialized:
         def background_tasks():
-            timestamp = get_tw_time()
-            
-            db.reference('scan_history').push({
-                'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp
-            })
-            if target_url:
-                db.reference(f'url_cache/{safe_url_key}').set(report_str)
-            
-            socketio.emit('new_scan_result', {
-                'url': target_url, 'riskScore': score, 'reason': report_dict.get('reason'), 'timestamp': timestamp
-            }, room=family_id)
+            with app.app_context(): # 🟢 修復點：帶入 Flask 狀態
+                timestamp = get_tw_time()
+                
+                db.reference('scan_history').push({
+                    'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp
+                })
+                if target_url:
+                    db.reference(f'url_cache/{safe_url_key}').set(report_str)
+                
+                socketio.emit('new_scan_result', {
+                    'url': target_url, 'riskScore': score, 'reason': report_dict.get('reason'), 'timestamp': timestamp
+                }, room=family_id)
 
-            if score >= 75:
-                send_dynamic_line_alert(family_id, target_url, report_dict.get('reason'))
+                if score >= 75:
+                    send_dynamic_line_alert(family_id, target_url, report_dict.get('reason'))
 
-        threading.Thread(target=background_tasks).start()
+        socketio.start_background_task(background_tasks) # 🟢 修復點：使用 socketio 背景排程
 
     return jsonify({**report_dict, "report": report_str, "masked_text": web_text})
 
@@ -362,7 +368,7 @@ def clear_alerts():
     return jsonify({"status": "success"})
 
 # ==========================================
-# 📞 緊急聯絡人：動態聯防 API (全新加入)
+# 📞 緊急聯絡人：動態聯防 API
 # ==========================================
 @app.route('/api/set_contact', methods=['POST'])
 def set_contact():
