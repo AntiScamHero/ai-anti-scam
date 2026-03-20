@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (已加入清除警報功能版與 XSS 修復)
+ * AI 防詐盾牌 - 核心控制邏輯 (極速版：前端文字萃取與逾時保護)
  */
 
 let currentUserID = "";
@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// 🛡️ API 自動重試機制
+// 🛡️ API 自動重試機制 (加入 AbortError 逾時不重試邏輯)
 async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
     for (let i = 0; i < maxRetries; i++) {
         try {
@@ -32,6 +32,7 @@ async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
             if (response.ok) return response;
             throw new Error(`HTTP error: ${response.status}`);
         } catch (err) {
+            if (err.name === 'AbortError') throw err; // 逾時立刻中斷，不浪費時間重試
             if (i === maxRetries - 1) throw err;
             await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
         }
@@ -113,21 +114,35 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
 
         let pageText = "";
         try {
+            // 🚀 第一刀：極速萃取法 (只抓標題與前 800 字)
             const inject = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
-                func: () => document.documentElement.innerText || document.documentElement.textContent
+                func: () => {
+                    const title = document.title;
+                    const bodyText = (document.documentElement.innerText || document.documentElement.textContent || "")
+                        .replace(/\s+/g, ' ')
+                        .substring(0, 800);
+                    return `[標題]:${title} [內文]:${bodyText}`;
+                }
             });
             pageText = inject[0]?.result || "";
         } catch (err) { console.warn("抓取文字失敗:", err); }
 
         let safePageText = maskSensitiveData(pageText);
 
+        // ⚠️ 建立 10 秒強制逾時機制
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); 
+
         try {
             let response = await fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, {
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: tab.url, text: safePageText, userID: currentUserID, familyID: currentFamilyID })
+                body: JSON.stringify({ url: tab.url, text: safePageText, userID: currentUserID, familyID: currentFamilyID }),
+                signal: controller.signal // 綁定逾時中斷器
             });
+            clearTimeout(timeoutId); // 成功回傳則取消逾時倒數
+            
             let data = await response.json();
             loadingDiv.style.display = "none";
 
@@ -232,8 +247,16 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
         } catch (err) {
             loadingDiv.style.display = "none";
             reportContainer.style.display = "block";
+            
+            // 處理 AbortError 逾時與一般錯誤
+            let isTimeout = err.name === 'AbortError';
+            let titleHtml = isTimeout ? '⏳ <b>分析逾時</b>' : '🔌 <b>系統整理中</b>';
+            let descHtml = isTimeout 
+                ? '網頁過於龐大或網路連線不穩。建議您手動確認此網頁來源是否安全。' 
+                : '防詐盾牌正在與雲端同步資料，請稍後再試。';
+
             document.getElementById('report-reason').innerHTML = `
-                🔌 <b>系統整理中</b><br>防詐盾牌正在與雲端同步資料，請稍後再試。
+                ${titleHtml}<br>${descHtml}
                 <br><br>
                 <button id="retry-btn" style="background:#5f6368; padding:8px; width:auto; font-size:14px; box-shadow:none;">🔄 重新掃描</button>
             `;
@@ -343,7 +366,6 @@ function startFamilyAlertsPolling(familyID) {
     pollingInterval = setInterval(() => { fetchFamilyAlerts(familyID); }, CONFIG.POLLING_INTERVAL_MS);
 }
 
-// 修改後的 fetchFamilyAlerts，加入「清除按鈕」與「無資料自動隱藏」邏輯
 async function fetchFamilyAlerts(familyID) {
     if (familyID === 'none') return;
     try {
@@ -366,11 +388,9 @@ async function fetchFamilyAlerts(familyID) {
             result.data.forEach(item => {
                 let r = {};
                 try { r = JSON.parse(item.report); } catch(e) { r = { riskLevel: "紀錄" }; }
-                let time = item.timestamp.split(' ')[1]; // 只取時間部分
+                let time = item.timestamp.split(' ')[1]; 
                 
-                // 🟢 安全更新：防禦原因欄位 XSS
                 let reasonText = r.reason ? r.reason.substring(0, 20) : "安全掃描";
-                // 簡易跳脫
                 reasonText = reasonText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 
                 html += `
@@ -391,7 +411,6 @@ async function fetchFamilyAlerts(familyID) {
     }
 }
 
-// 🗑️ 綁定「清除紀錄」按鈕的點擊事件
 document.getElementById('family-alerts-box').addEventListener('click', async (e) => {
     if (e.target.id === 'clear-alerts-btn') {
         const btn = e.target;
