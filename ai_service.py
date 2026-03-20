@@ -40,7 +40,7 @@ def analyze_risk_with_ai(target_url, web_text, image_url, is_jailbreak_attempt):
             "reason": "未提供足夠的資訊進行分析。", "advice": "請提供有效的內容。"
         }
 
-    # 🟢 核心修復 1：在送給 AI 前，先用 Python 將惡意編碼解開，連同原始文字一起送進去
+    # 🟢 核心修復 1：在送給 AI 前，先用 Python 將惡意編碼解開
     decoded_text = decode_obfuscation(web_text)
     decoded_url = decode_obfuscation(target_url)
 
@@ -82,11 +82,11 @@ def analyze_risk_with_ai(target_url, web_text, image_url, is_jailbreak_attempt):
 
     except Exception as e:
         error_str = str(e).lower()
-        print(f"⚠️ 第一次 AI 呼叫失敗: {error_str[:60]}")
+        print(f"⚠️ 第一次 AI 呼叫失敗: {error_str[:60]}", flush=True)
         
         # 處理圖片讀取失敗的狀況
         if image_url and ("image" in error_str or "url" in error_str or "400" in error_str):
-            print("🔄 啟動無圖片重試機制...")
+            print("🔄 啟動無圖片重試機制...", flush=True)
             try:
                 retry_text = text_prompt + f"\n\n[系統備註：使用者傳送了一張圖片，網址為 {image_url}，請從網址字眼判斷風險]"
                 user_content_retry = [{"type": "text", "text": retry_text}]
@@ -94,7 +94,7 @@ def analyze_risk_with_ai(target_url, web_text, image_url, is_jailbreak_attempt):
                 response = call_openai(client, system_prompt, user_content_retry)
                 return parse_response(response)
             except Exception as e2:
-                print(f"❌ 降級重試也失敗: {e2}")
+                print(f"❌ 降級重試也失敗: {e2}", flush=True)
                 return fallback_analysis(target_url, web_text, image_url, f"重試失敗: {str(e2)[:30]}")
         
         return fallback_analysis(target_url, web_text, image_url, f"API 異常: {error_str[:30]}")
@@ -112,7 +112,25 @@ def call_openai(client, system_prompt, user_content):
     )
 
 def parse_response(response):
-    result_str = response.choices[0].message.content
+    # 🟢 核心修復：清理 AI 雞婆加上的 Markdown 標籤，防止 JSON 解析失敗
+    result_str = response.choices[0].message.content or "{}"
+    
+    # 脫去前後的空白與換行符號
+    result_str = result_str.strip()
+    
+    # 偵測並移除 ```json 與結尾的 ```
+    if result_str.startswith("```json"):
+        result_str = result_str[7:]
+    elif result_str.startswith("```"):
+        result_str = result_str[3:]
+        
+    if result_str.endswith("```"):
+        result_str = result_str[:-3]
+        
+    # 再次清理剩餘的空白
+    result_str = result_str.strip()
+    
+    # 安全解析 JSON
     result_json = json.loads(result_str)
     return {
         "riskScore": int(result_json.get("riskScore", 50)),
@@ -123,11 +141,10 @@ def parse_response(response):
 
 def fallback_analysis(target_url, web_text, image_url, error_msg):
     """
-    🟢 核心修復 2：無敵版備用防線。當 AI 當機或圖片無效時，精準抓住各類測試條件！
+    備用防線。當 AI 當機或圖片無效時，精準抓住各類測試條件！
     """
     raw_combined = f"{web_text or ''} {target_url or ''} {image_url or ''}"
     
-    # 在備用防線中，再次進行解碼以抓取隱藏的中文詐騙字眼
     if '%' in raw_combined:
         raw_combined += " " + urllib.parse.unquote(raw_combined)
     for b64 in re.findall(r'[A-Za-z0-9+/]{16,}={0,2}', raw_combined):
@@ -141,31 +158,24 @@ def fallback_analysis(target_url, web_text, image_url, error_msg):
     
     score = 10
     
-    # 【防禦模組 8：圖片風險】
     if image_url:
         score += 10
         img_lower = image_url.lower()
-        # 1. 網址含詐騙字眼 (破 75 分)
         if any(kw in img_lower for kw in ['congratulations', 'qrcode', 'qr code', '中獎', 'prize']):
             score += 55 
-        # 2. 無效或假圖測試 (破 50 分)
         elif any(kw in img_lower for kw in ['fakeimg', 'dummyimage', 'placehold']):
             score += 35
-        # 3. 若 AI 是因為圖片報錯，額外疊加風險
         if "invalid image" in error_msg.lower() or "400" in error_msg or "重試失敗" in error_msg:
             score += 35
 
-    # 【防禦文字特徵】
     if len(matched) >= 2: score += 60
     elif len(matched) == 1: score += 35
     
-    # 【防禦隱藏編碼】(破 50 分)
     has_url_encoding = '%' in (web_text or '')
     has_b64 = bool(re.search(r'[A-Za-z0-9+/]{16,}={0,2}', web_text or ''))
     if has_url_encoding or has_b64:
         score += 45 
 
-    # 【同時提供文字與圖片的綜合懲罰】(破 75 分)
     if web_text and image_url:
         score += 20
 
