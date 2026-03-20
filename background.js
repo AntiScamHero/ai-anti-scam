@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理 + 跨世代語音守護)
+ * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理)
  */
 importScripts('config.js');
 
@@ -41,11 +41,29 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 body: JSON.stringify({ url: tab.url, text: targetData, image_url: imageUrl, userID: storage.userID || "anonymous", familyID: storage.familyID || "none" })
             });
             const data = await response.json();
+            
+            let reportData = data;
             if (data.report) {
-                let reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
-                let score = parseInt(reportData.riskScore) || 0; 
-                chrome.notifications.clear("scanning");
-                chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: score >= CONFIG.RISK_THRESHOLD_HIGH ? `🚨 發現詐騙！` : "✅ 掃描完成", message: `【風險指數: ${score}%】\n${reportData.advice || "請保持警覺"}` });
+                reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
+            }
+            
+            let score = parseInt(reportData.riskScore) || 0; 
+            chrome.notifications.clear("scanning");
+            
+            // 💡 核心修復：如果手動掃描發現分數超過 70 分，直接觸發強制跳轉與語音廣播！
+            if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
+                if (tab && tab.id) {
+                    chrome.tabs.update(tab.id, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reportData.reason) + "&original_url=" + encodeURIComponent(tab.url) });
+                    chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
+                    
+                    // 強制後端觸發緊急推播到 LINE
+                    fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: tab.url, text: `【手動掃描攔截】${reportData.reason}`, image_url: "", userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: true })
+                    });
+                }
+            } else {
+                chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: "✅ 掃描完成", message: `【風險指數: ${score}%】\n${reportData.advice || "請保持警覺"}` });
             }
         } catch (err) {
             chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: "❌ 分析失敗", message: "網路連線異常，請稍後再試。" });
@@ -54,14 +72,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // 處理前端跳轉阻擋
     if (request.action === "triggerBlock") {
         if (sender.tab && sender.tab.id) {
             const originalUrl = sender.tab.url ? sender.tab.url : "";
             chrome.tabs.update(sender.tab.id, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
         }
-        
-        // 🟢 跨世代語音守護橋接：更有溫度、更能引起長輩注意的台詞
         chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
         
         chrome.storage.local.get(['userID', 'familyID']).then(storage => {
@@ -72,10 +87,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
     }
     
-    // 處理前端自動傳來的圖片背景掃描
     if (request.action === "scanImageInBackground") {
         chrome.storage.local.get(['userID', 'familyID']).then(storage => {
-            fetch(`${CONFIG.API_BASE_URL}/scan`, {  // 背景掃描不重試以省資源
+            fetch(`${CONFIG.API_BASE_URL}/scan`, { 
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: request.pageUrl, text: "背景圖片自動分析", image_url: request.imageUrl, userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: false })
             }).then(res => res.json()).then(data => {

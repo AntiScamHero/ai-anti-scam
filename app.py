@@ -107,9 +107,6 @@ def send_dynamic_line_alert(family_id, url, reason):
     except Exception as e:
         print(f"LINE 動態推播失敗: {e}", flush=True)
 
-# ==========================================
-# 🌐 測試用首頁 (確認伺服器存活狀態)
-# ==========================================
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({
@@ -118,9 +115,6 @@ def health_check():
         "time": get_tw_time()
     })
 
-# ==========================================
-# 🚀 核心 API：完美四層防護掃描端點
-# ==========================================
 @app.route('/scan', methods=['POST'])
 def scan_url():
     data = request.json or {}
@@ -151,19 +145,32 @@ def scan_url():
             "advice": "正常存取即可", "masked_text": web_text
         })
 
-    # 🛡️ 防線 2：子網域釣魚與 165 黑名單攔截
-    if target_url and not is_white_listed:
-        if check_165_blacklist(target_url):
-            report_dict = {"riskScore": 100, "riskLevel": "極度危險", "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
-            return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
+    # 🛡️ 防線 2：子網域釣魚與 165 黑名單攔截 (💡優化：同時檢查反白文字中的網址)
+    check_list = [target_url]
+    if "http" in raw_text.lower() or "www." in raw_text.lower() or ".net" in raw_text.lower() or ".com" in raw_text.lower():
+        extracted_urls = re.findall(r'(?:https?://|www\.)[^\s]+', raw_text)
+        if extracted_urls:
+            check_list.extend(extracted_urls)
+        else:
+            check_list.append(raw_text.strip())
+
+    for u in check_list:
+        if not u: continue
+        parse_u = u if u.startswith('http') else 'http://' + u
         
-        try:
-            host = urlparse(target_url.lower().strip()).hostname or ""
-            for domain in TRUSTED_DOMAINS:
-                if domain in host and not host.endswith("." + domain) and host != domain:
-                    return jsonify({"riskScore": 100, "riskLevel": "極度危險", "reason": f"偽裝網域 (試圖欺騙 {domain})", "masked_text": web_text})
-        except: 
-            pass
+        if not is_genuine_white_listed(parse_u):
+            if check_165_blacklist(parse_u):
+                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
+                return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
+            
+            try:
+                host = urlparse(parse_u.lower().strip()).hostname or ""
+                for domain in TRUSTED_DOMAINS:
+                    if domain in host and not host.endswith("." + domain) and host != domain:
+                        report_dict = {"riskScore": 100, "riskLevel": "極度危險", "reason": f"偽裝網域 (試圖欺騙 {domain})", "advice": "請勿點擊或輸入任何資料！"}
+                        return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
+            except: 
+                pass
 
     # 🛡️ 防線 3：啟發式規避特徵掃描
     evasion_patterns = [
@@ -194,10 +201,10 @@ def scan_url():
     # 緊急強制通報
     if is_urgent:
         def handle_urgent():
-            with app.app_context(): # 🟢 修復點：帶入 Flask 狀態
+            with app.app_context(): 
                 socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
                 send_dynamic_line_alert(family_id, target_url, "【觸發強制防護盾】" + web_text[:50])
-        socketio.start_background_task(handle_urgent) # 🟢 修復點：使用 socketio 背景排程
+        socketio.start_background_task(handle_urgent) 
         return jsonify({"status": "success"})
 
     # 🛡️ 防線 4：呼叫 AI 模組
@@ -210,7 +217,7 @@ def scan_url():
 
     if firebase_initialized:
         def background_tasks():
-            with app.app_context(): # 🟢 修復點：帶入 Flask 狀態
+            with app.app_context(): 
                 timestamp = get_tw_time()
                 
                 db.reference('scan_history').push({
@@ -226,7 +233,7 @@ def scan_url():
                 if score >= 75:
                     send_dynamic_line_alert(family_id, target_url, report_dict.get('reason'))
 
-        socketio.start_background_task(background_tasks) # 🟢 修復點：使用 socketio 背景排程
+        socketio.start_background_task(background_tasks) 
 
     return jsonify({**report_dict, "report": report_str, "masked_text": web_text})
 
@@ -368,14 +375,13 @@ def clear_alerts():
     return jsonify({"status": "success"})
 
 # ==========================================
-# 📞 緊急聯絡人：動態聯防 API
+# 📞 緊急聯絡人：動態聯防 API 
 # ==========================================
 @app.route('/api/set_contact', methods=['POST'])
 def set_contact():
-    """讓守護者(子女)設定自己的聯絡方式"""
     data = request.json
     uid = data.get('uid')
-    contact = data.get('contact') # 格式應為 "tel:0912345678" 或 "https://line.me/ti/p/你的ID"
+    contact = data.get('contact') 
     
     if firebase_initialized and uid and contact:
         db.reference(f'users/{uid}').update({'emergency_contact': contact})
@@ -384,9 +390,7 @@ def set_contact():
 
 @app.route('/api/get_contact', methods=['POST'])
 def get_contact():
-    """長輩端點擊按鈕時，動態抓取子女的聯絡方式"""
     fid = request.json.get('familyID')
-    # 如果沒綁定家庭，預設回傳 165
     if not firebase_initialized or not fid or fid == 'none':
         return jsonify({"status": "fail", "contact": "tel:165"}) 
         
@@ -403,7 +407,6 @@ def get_contact():
     except Exception as e:
         print(f"取得聯絡人失敗: {e}", flush=True)
         
-    # 如果系統找不到子女電話，依然安全回傳 165 專線
     return jsonify({"status": "fail", "contact": "tel:165"})
 
 
