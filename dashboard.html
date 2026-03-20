@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <title>AI 防詐戰情室 - WebSocket 即時連線版</title>
     <script src="config.js"></script> 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+    <script src="[https://cdn.socket.io/4.7.2/socket.io.min.js](https://cdn.socket.io/4.7.2/socket.io.min.js)"></script>
     <style>
         body { margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; }
@@ -131,7 +131,7 @@
     <script>
         // --- 預設設定 ---
         window.CONFIG = window.CONFIG || {
-            API_BASE_URL: "http://127.0.0.1:5000",
+            API_BASE_URL: "[http://127.0.0.1:5000](http://127.0.0.1:5000)",
             RISK_THRESHOLD_HIGH: 70,
             RISK_THRESHOLD_MEDIUM: 40
         };
@@ -176,20 +176,16 @@
                     document.getElementById('socket-indicator').style.display = "none";
                 });
 
-                // 👑 接收到新的掃描結果！不需要 Polling 了！
                 socket.on('new_scan_result', (data) => {
                     console.log("📥 收到即時掃描資料:", data);
-                    // 為了保持資料的完整性與圖表的正確渲染，直接呼叫 fetchLogs 拉取最新 20 筆
                     fetchLogs(familyID, true); 
                 });
 
-                // 👑 接收到強制攔截的緊急警報！
                 socket.on('emergency_alert', (data) => {
                     console.log("🚨 收到緊急警報:", data);
                     showEmergencyBanner(data.url, data.reason);
                 });
             } else {
-                // 如果 Socket 已經存在，只要切換房間即可
                 socket.emit('join_family_room', { familyID: familyID });
             }
         }
@@ -197,13 +193,13 @@
         function showEmergencyBanner(url, reason) {
             const banner = document.getElementById('emergency-banner');
             const detail = document.getElementById('emergency-detail');
-            detail.innerText = `網址：${url.substring(0, 50)}... | 特徵：${reason}`;
+            // 安全插入文字
+            detail.textContent = `網址：${url.substring(0, 50)}... | 特徵：${reason}`;
             banner.style.display = "block";
             
-            // 讓危險數值跳動一下
             const dangerElement = document.getElementById('stat-danger');
             dangerElement.classList.remove('pop-effect');
-            void dangerElement.offsetWidth; // 觸發 reflow 重新執行動畫
+            void dangerElement.offsetWidth; 
             dangerElement.classList.add('pop-effect');
 
             setTimeout(() => { banner.style.display = "none"; }, 10000);
@@ -237,7 +233,6 @@
             document.getElementById('btn-start').style.display = "none";
             document.getElementById('btn-stop').style.display = "inline-block";
             
-            // 啟動 WebSocket 並抓取歷史紀錄
             initSocket(familyID);
             fetchLogs(familyID, false); 
         }
@@ -259,7 +254,7 @@
         }
 
         // ==========================================
-        // 資料拉取與渲染邏輯
+        // 資料拉取與渲染邏輯 (防 XSS 安全升級)
         // ==========================================
         async function fetchLogs(familyID, isRealtimeUpdate = false) {
             if (isFetching) return;
@@ -305,7 +300,7 @@
 
         function updateDashboard(records, isRealtimeUpdate) {
             const tbody = document.getElementById('log-table-body');
-            tbody.innerHTML = "";
+            tbody.innerHTML = ""; // 先清空表格
             
             let safeCount = 0;
             let dangerCount = 0;
@@ -349,19 +344,40 @@
                 let riskClass = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? 'risk-high' : (score >= window.CONFIG.RISK_THRESHOLD_MEDIUM ? 'risk-warn' : 'risk-safe');
                 let statusBadge = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? '🛑 已攔截' : '✅ 允許通行';
 
+                // 🟢 安全更新：完全避免使用 innerHTML 串接字串，全面改用 createElement 以防禦 DOM XSS
                 let tr = document.createElement('tr');
-                // 如果是透過 WebSocket 推播進來的第一筆最新資料，加入高亮動畫
                 if (isRealtimeUpdate && index === 0) {
                     tr.className = "new-row-highlight";
                 }
 
-                tr.innerHTML = `
-                    <td style="font-family:monospace; color:#8b949e;">${record.timestamp.split(' ')[1]}</td>
-                    <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${record.url}">${record.url}</td>
-                    <td class="${riskClass}"><span style="font-size:18px; font-weight:bold;">${score}</span> / 100</td>
-                    <td style="max-width:400px; font-size:13px; color:#c9d1d9;">${reason}</td>
-                    <td class="${riskClass}">${statusBadge}</td>
-                `;
+                let tdTime = document.createElement('td');
+                tdTime.style.cssText = "font-family:monospace; color:#8b949e;";
+                tdTime.textContent = record.timestamp.split(' ')[1];
+
+                let tdUrl = document.createElement('td');
+                tdUrl.style.cssText = "max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+                tdUrl.title = record.url;
+                tdUrl.textContent = record.url;
+
+                let tdScore = document.createElement('td');
+                tdScore.className = riskClass;
+                // 分數是數字可以安全放入
+                tdScore.innerHTML = `<span style="font-size:18px; font-weight:bold;">${score}</span> / 100`; 
+
+                let tdReason = document.createElement('td');
+                tdReason.style.cssText = "max-width:400px; font-size:13px; color:#c9d1d9;";
+                tdReason.textContent = reason;
+
+                let tdStatus = document.createElement('td');
+                tdStatus.className = riskClass;
+                tdStatus.textContent = statusBadge;
+
+                tr.appendChild(tdTime);
+                tr.appendChild(tdUrl);
+                tr.appendChild(tdScore);
+                tr.appendChild(tdReason);
+                tr.appendChild(tdStatus);
+                
                 tbody.appendChild(tr);
             });
         }

@@ -22,6 +22,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 
+# 🟢 引入 Flask-Limiter 防護惡意刷爆 API
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 import firebase_admin
 from firebase_admin import credentials, db 
 
@@ -47,6 +51,14 @@ load_dotenv()
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# 👑 啟動 API 限流器 (Rate Limiter)，使用輕量級記憶體儲存
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["1000 per day", "100 per hour"],
+    storage_uri="memory://"
+)
 
 # 👑 初始化 WebSocket
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -115,7 +127,9 @@ def health_check():
         "time": get_tw_time()
     })
 
+# 🟢 對核心掃描端點加上嚴格的獨立頻率限制 (每分鐘最多 15 次)
 @app.route('/scan', methods=['POST'])
+@limiter.limit("15 per minute")
 def scan_url():
     data = request.json or {}
     
@@ -145,7 +159,7 @@ def scan_url():
             "advice": "正常存取即可", "masked_text": web_text
         })
 
-    # 🛡️ 防線 2：子網域釣魚與 165 黑名單攔截 (💡優化：同時檢查反白文字中的網址)
+    # 🛡️ 防線 2：子網域釣魚與 165 黑名單攔截
     check_list = [target_url]
     if "http" in raw_text.lower() or "www." in raw_text.lower() or ".net" in raw_text.lower() or ".com" in raw_text.lower():
         extracted_urls = re.findall(r'(?:https?://|www\.)[^\s]+', raw_text)

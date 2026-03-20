@@ -1,10 +1,28 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (已加入清除警報功能版)
+ * AI 防詐盾牌 - 核心控制邏輯 (已加入清除警報功能版與 XSS 修復)
  */
 
 let currentUserID = "";
 let currentFamilyID = "none";
 let pollingInterval = null;
+
+// 🟢 友善長輩：一打開介面自動讀取剪貼簿的邀請碼
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const text = await navigator.clipboard.readText();
+        const match = text.match(/aishield:([A-Z0-9]{6})/i);
+        if (match && match[1]) {
+            const inviteInput = document.getElementById('invite_input');
+            if (inviteInput && inviteInput.style.display !== 'none') {
+                inviteInput.value = match[1].toUpperCase();
+                inviteInput.style.backgroundColor = '#e8f0fe';
+                setTimeout(() => { inviteInput.style.backgroundColor = ''; }, 1000);
+            }
+        }
+    } catch (e) {
+        // 忽略剪貼簿讀取權限或為空的錯誤
+    }
+});
 
 // 🛡️ API 自動重試機制
 async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
@@ -132,25 +150,48 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
                 reportData.advice = "請安心瀏覽！";
             }
 
-            document.getElementById('score-text').innerText = `風險指數: ${score}%`;
-            document.getElementById('report-level').innerText = reportData.riskLevel || "安全無虞";
-            document.getElementById('report-reason').innerText = reportData.reason || "系統已完成基礎安全掃描。";
-            document.getElementById('report-advice').innerText = reportData.advice || "無特別建議。";
+            // 🟢 安全更新：使用 textContent 防禦潛在 XSS 攻擊
+            document.getElementById('score-text').textContent = `風險指數: ${score}%`;
+            document.getElementById('report-level').textContent = reportData.riskLevel || "安全無虞";
+            document.getElementById('report-reason').textContent = reportData.reason || "系統已完成基礎安全掃描。";
+            document.getElementById('report-advice').textContent = reportData.advice || "無特別建議。";
 
             const dimSection = document.getElementById('dimensions-section');
             const dimContainer = document.getElementById('report-dimensions');
+            
+            // 🟢 安全更新：完全替換 innerHTML 為 createElement 組合
             if (reportData.dimensions && Object.keys(reportData.dimensions).length > 0) {
-                dimContainer.innerHTML = '';
+                dimContainer.textContent = ''; // 清空
                 for (let [key, val] of Object.entries(reportData.dimensions)) {
                     let labelName = key.split('_')[1] || key;
                     let color = val > CONFIG.RISK_THRESHOLD_HIGH ? '#d93025' : (val > CONFIG.RISK_THRESHOLD_MEDIUM ? '#f29900' : '#1e8e3e');
-                    dimContainer.innerHTML += `
-                        <div class="dim-row">
-                            <div class="dim-label">${labelName}</div>
-                            <div class="dim-bar-bg"><div class="dim-bar-fill" style="width: ${val}%; background-color: ${color};"></div></div>
-                            <div class="dim-score" style="color:${color}">${val}</div>
-                        </div>
-                    `;
+                    
+                    let row = document.createElement('div');
+                    row.className = 'dim-row';
+                    
+                    let label = document.createElement('div');
+                    label.className = 'dim-label';
+                    label.textContent = labelName; // 防 XSS
+                    
+                    let barBg = document.createElement('div');
+                    barBg.className = 'dim-bar-bg';
+                    
+                    let barFill = document.createElement('div');
+                    barFill.className = 'dim-bar-fill';
+                    barFill.style.width = `${val}%`;
+                    barFill.style.backgroundColor = color;
+                    
+                    barBg.appendChild(barFill);
+                    
+                    let scoreDiv = document.createElement('div');
+                    scoreDiv.className = 'dim-score';
+                    scoreDiv.style.color = color;
+                    scoreDiv.textContent = val; // 防 XSS
+                    
+                    row.appendChild(label);
+                    row.appendChild(barBg);
+                    row.appendChild(scoreDiv);
+                    dimContainer.appendChild(row);
                 }
                 dimSection.style.display = 'block';
             } else {
@@ -159,13 +200,14 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
 
             const kwSection = document.getElementById('keyword-section');
             const kwContainer = document.getElementById('report-keywords');
-            kwContainer.innerHTML = '';
+            kwContainer.textContent = '';
+            
             if (reportData.highlight_keywords && reportData.highlight_keywords.length > 0) {
                 kwSection.style.display = 'block';
                 reportData.highlight_keywords.forEach(kw => {
                     const span = document.createElement('span');
                     span.className = 'keyword-badge';
-                    span.innerText = kw;
+                    span.textContent = kw; // 防 XSS
                     kwContainer.appendChild(span);
                 });
             } else { 
@@ -278,9 +320,9 @@ document.getElementById('btn_join_family').addEventListener('click', async () =>
 
 document.getElementById('code_box').addEventListener('click', function() {
     const code = document.getElementById('display_code').innerText;
-    navigator.clipboard.writeText(code).then(() => {
+    navigator.clipboard.writeText("aishield:" + code).then(() => {
         const originalText = document.getElementById('display_code').innerText;
-        document.getElementById('display_code').innerText = "已複製 ✅";
+        document.getElementById('display_code').innerText = "已複製專屬連結 ✅";
         setTimeout(() => { document.getElementById('display_code').innerText = originalText; }, 1500);
     });
 });
@@ -325,7 +367,12 @@ async function fetchFamilyAlerts(familyID) {
                 let r = {};
                 try { r = JSON.parse(item.report); } catch(e) { r = { riskLevel: "紀錄" }; }
                 let time = item.timestamp.split(' ')[1]; // 只取時間部分
+                
+                // 🟢 安全更新：防禦原因欄位 XSS
                 let reasonText = r.reason ? r.reason.substring(0, 20) : "安全掃描";
+                // 簡易跳脫
+                reasonText = reasonText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                
                 html += `
                     <div class="alert-item">
                         <span class="alert-time">🕒 ${time} - [${r.riskLevel || "安全"}]</span>
@@ -336,7 +383,6 @@ async function fetchFamilyAlerts(familyID) {
             box.innerHTML = html;
             box.style.display = 'block';
         } else {
-            // 無資料時隱藏
             box.style.display = 'none';
             box.innerHTML = '';
         }
@@ -345,7 +391,7 @@ async function fetchFamilyAlerts(familyID) {
     }
 }
 
-// 🗑️ 綁定「清除紀錄」按鈕的點擊事件 (使用事件代理)
+// 🗑️ 綁定「清除紀錄」按鈕的點擊事件
 document.getElementById('family-alerts-box').addEventListener('click', async (e) => {
     if (e.target.id === 'clear-alerts-btn') {
         const btn = e.target;

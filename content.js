@@ -18,6 +18,34 @@ function hashString(str) {
     return hash.toString(16); // 轉為 16 進位字串節省記憶體
 }
 
+// 🟢 新增：智慧型高風險段落萃取 (防止惡意文字藏在長網頁最下方被截斷)
+function extractHighRiskText(text, maxLength = 4000) {
+    if (text.length <= maxLength) return text;
+    
+    // 尋找高風險特徵詞的索引位置
+    const riskKeywords = ["保證獲利", "加賴", "飆股", "解凍", "中獎", "登入", "身分證", "帳號", "密碼"];
+    let snippets = [];
+    let lastIndex = 0;
+
+    for (let kw of riskKeywords) {
+        let idx = text.indexOf(kw, lastIndex);
+        if (idx !== -1) {
+            // 抓取關鍵字前後 250 字元的上下文
+            let start = Math.max(0, idx - 250);
+            let end = Math.min(text.length, idx + 250);
+            snippets.push(text.substring(start, end));
+            lastIndex = end;
+        }
+    }
+
+    let finalStr = snippets.join("\n...\n");
+    // 如果都沒關鍵字，就回傳頭尾段落
+    if (finalStr.length === 0) {
+        return text.substring(0, 2000) + "\n...\n" + text.substring(text.length - 2000);
+    }
+    return finalStr.substring(0, maxLength); // 最終防護截斷
+}
+
 // ==========================================
 // 🛡️ 模組 1：惡意行為捕捉 (BehaviorAnalyzer)
 // ==========================================
@@ -46,7 +74,6 @@ class BehaviorAnalyzer {
 // ==========================================
 // 🌐 模組 2：DOM 元素觀察者 (連結與圖片)
 // ==========================================
-// 🟢 修正 1：把測試釣魚網址加入黑名單
 const badDomains = ["testsafebrowsing.appspot.com", "fake-scam-delivery.com", "win-free-iphone-now.net", "lucky-verify-login.net"];
 
 // 連結掃描器：針對已知惡意網域進行本地端光速攔截
@@ -58,7 +85,6 @@ const linkObserver = new IntersectionObserver((entries, observer) => {
                 const linkUrl = new URL(link.href);
                 if (badDomains.some(domain => linkUrl.hostname.includes(domain))) {
                     link.style.cssText = 'color: #ff0000 !important; font-weight: bold; text-decoration: underline wavy red; background-color: #ffe6e6;';
-                    // 🟢 修正 2：不再只跳 alert，直接觸發滿版紅色鎖死大絕招！
                     triggerSafeBlock("發現 165 黑名單釣魚連結：" + linkUrl.hostname);
                 }
             } catch (e) {}
@@ -143,20 +169,24 @@ function triggerSafeBlock(reason) {
     }
 }
 
-// 核心掃描器 (已加入效能優化)
+// 核心掃描器 (已加入效能優化與 iframe 掃描)
 function scanScamWords() {
     if (hasTriggeredBlock) return;
     const textContent = document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
     
+    // 🟢 抓取 Iframe 中的 src 進行檢查 (防止跨域隱藏)
+    let iframeUrls = Array.from(document.querySelectorAll('iframe')).map(f => f.src).filter(src => src);
+    let iframeText = iframeUrls.length > 0 ? `\n[隱藏的Iframe網址]: ${iframeUrls.join(', ')}` : "";
+
     const cleanText = textContent.trim();
     
-    // 💡 效能優化 1：過濾極短無意義文本 (少於 50 字不掃描)，節省 CPU 運算
-    if (cleanText.length < 50) {
+    // 效能優化 1：過濾極短無意義文本
+    if (cleanText.length < 50 && iframeUrls.length === 0) {
         observeElements(); 
         return;
     }
 
-    // 💡 效能優化 2：Hash 快取比對，若內容未改變則直接跳過
+    // 效能優化 2：Hash 快取比對
     const textHash = hashString(cleanText);
     if (scannedCache.has(textHash)) {
         observeElements();
@@ -166,14 +196,16 @@ function scanScamWords() {
     // 將新內容加入快取
     scannedCache.add(textHash);
     
-    // 為防止記憶體洩漏，當快取超過 50 筆時清空一半
     if (scannedCache.size > 50) {
         const cacheIterator = scannedCache.values();
         for (let i = 0; i < 25; i++) scannedCache.delete(cacheIterator.next().value);
     }
 
+    // 🟢 套用智慧型萃取，防止截斷
+    const smartText = extractHighRiskText(cleanText) + iframeText;
+    
     // 進行本地個資脫敏
-    const safeText = maskSensitiveData(cleanText); 
+    const safeText = maskSensitiveData(smartText); 
 
     // 關鍵字速查防線
     for (let keyword of scamKeywords) {
@@ -198,20 +230,20 @@ document.addEventListener('mousemove', () => { lastActivityTime = Date.now(); },
 document.addEventListener('keydown', () => { lastActivityTime = Date.now(); }, { passive: true });
 
 function scheduleIdleScan() {
-    // 💡 效能優化 3：閒置休眠模式 (超過設定時間無操作即暫停掃描)
+    // 效能優化 3：閒置休眠模式 (超過設定時間無操作即暫停掃描)
     if (Date.now() - lastActivityTime > (window.CONFIG?.INACTIVITY_TIMEOUT_MS || 300000)) {
         setTimeout(scheduleIdleScan, 5000); 
         return;
     }
     
-    // 💡 效能優化 4：API 頻率限制 (Rate Limiting)
+    // 效能優化 4：API 頻率限制 (Rate Limiting)
     if (scanCount >= (window.CONFIG?.MAX_SCANS_PER_MINUTE || 10)) {
         setTimeout(() => { scanCount = 0; scheduleIdleScan(); }, 60000);
         return;
     }
     scanCount++;
 
-    // 💡 效能優化 5：利用 requestIdleCallback 讓出主執行緒，確保網頁捲動不卡頓
+    // 效能優化 5：利用 requestIdleCallback 讓出主執行緒，確保網頁捲動不卡頓
     if (window.requestIdleCallback) {
         requestIdleCallback(() => { 
             scanScamWords(); 
@@ -229,9 +261,8 @@ function scheduleIdleScan() {
 // 🛡️ 啟動邏輯：系統判定與免死金牌
 // ==========================================
 if (window.self === window.top) {
-    // 判斷是否為系統自家的安全頁面 (包含 dashboard, 本地檔案, 擴充功能設定頁)
+    // 判斷是否為系統自家的安全頁面
     const isSystemPage = window.location.protocol === 'chrome-extension:' ||
-                         // window.location.protocol === 'file:' ||  <-- 🟢 修正 3：已移除這行，允許掃描桌面 test.html！
                          window.location.href.includes('dashboard.html') ||
                          window.location.href.includes('blocked.html') ||
                          window.location.hostname === 'localhost' ||
