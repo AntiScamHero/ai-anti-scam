@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理)
+ * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理 + 跨世代語音守護)
  */
 importScripts('config.js');
 
@@ -60,7 +60,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const originalUrl = sender.tab.url ? sender.tab.url : "";
             chrome.tabs.update(sender.tab.id, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
         }
-        chrome.tts.speak("緊急警告！系統偵測到高風險詐騙內容，為了您的安全，已主動為您攔截！", { 'lang': 'zh-TW', 'rate': 1.1 });
+        
+        // 🟢 跨世代語音守護橋接：更有溫度、更能引起長輩注意的台詞
+        chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
         
         chrome.storage.local.get(['userID', 'familyID']).then(storage => {
             fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 

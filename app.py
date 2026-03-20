@@ -7,8 +7,12 @@ import random
 import string
 import threading
 import re
+import warnings  # 🟢 引入警告控制模組
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+
+# 🛑 隱藏 Python 3.14 與 LINE SDK 產生的 Pydantic V1 相容性警告
+warnings.filterwarnings("ignore", message=".*Pydantic V1.*")
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -16,9 +20,12 @@ from flask_socketio import SocketIO, emit, join_room
 
 import firebase_admin
 from firebase_admin import credentials, db 
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+
+# 🟢 LINE Bot v3 新版 SDK 引入
+from linebot.v3 import WebhookHandler
+from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, PushMessageRequest, TextMessage
+from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 # 導入資安與 AI 模組
 from security import mask_sensitive_data, is_genuine_white_listed, check_165_blacklist, TRUSTED_DOMAINS
@@ -43,7 +50,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 def get_tw_time():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
 
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
+# 🟢 LINE Bot v3 初始化設定
+configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 LINE_USER_ID = os.getenv("LINE_USER_ID")
 
@@ -58,7 +66,7 @@ try:
     elif firebase_admin._apps:
         firebase_initialized = True
 except Exception as e:
-    print(f"⚠️ Firebase 啟動失敗：{repr(e)}")
+    print(f"⚠️ Firebase 啟動失敗：{repr(e)}", flush=True)
 
 # 👑 LINE 動態守護者推播
 def send_dynamic_line_alert(family_id, url, reason):
@@ -83,9 +91,28 @@ def send_dynamic_line_alert(family_id, url, reason):
                 f"🌐 網址：{url[:50]}...\n\n"
                 f"系統已主動攔截保護，請確認家人狀況！"
             )
-            line_bot_api.push_message(target_line_id, TextSendMessage(text=msg))
+            # 🟢 使用 v3 推播寫法
+            with ApiClient(configuration) as api_client:
+                line_bot_api = MessagingApi(api_client)
+                line_bot_api.push_message(
+                    PushMessageRequest(
+                        to=target_line_id,
+                        messages=[TextMessage(text=msg)]
+                    )
+                )
     except Exception as e:
-        print(f"LINE 動態推播失敗: {e}")
+        print(f"LINE 動態推播失敗: {e}", flush=True)
+
+# ==========================================
+# 🌐 測試用首頁 (確認伺服器存活狀態)
+# ==========================================
+@app.route('/', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "success", 
+        "message": "🟢 AI 防詐騙伺服器正常運作中！",
+        "time": get_tw_time()
+    })
 
 # ==========================================
 # 🚀 核心 API：完美四層防護掃描端點
@@ -122,12 +149,10 @@ def scan_url():
 
     # 🛡️ 防線 2：子網域釣魚與 165 黑名單攔截
     if target_url and not is_white_listed:
-        # 165 黑名單比對
         if check_165_blacklist(target_url):
             report_dict = {"riskScore": 100, "riskLevel": "極度危險", "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
         
-        # 偽裝子網域比對
         try:
             host = urlparse(target_url.lower().strip()).hostname or ""
             for domain in TRUSTED_DOMAINS:
@@ -136,7 +161,7 @@ def scan_url():
         except: 
             pass
 
-    # 🛡️ 防線 3：啟發式規避特徵掃描 (阻擋勒索與火星文)
+    # 🛡️ 防線 3：啟發式規避特徵掃描
     evasion_patterns = [
         (r'在我車上|綁架|斷手斷腳|不准報警|不准報案', '暴力威脅與綁架勒索'),
         (r'中[•\.\-\*\_\s]+獎|中[•\.\-\*\_\s]+奖', '特殊符號切割規避'),
@@ -151,7 +176,7 @@ def scan_url():
             report_dict = {"riskScore": 95, "riskLevel": "極度危險", "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
-    # ⚡ 快取檢查 (節省 API 成本)
+    # ⚡ 快取檢查
     safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:120] if target_url else "no_url"
     if firebase_initialized and target_url and not image_url and not is_urgent and not is_white_listed:
         try:
@@ -162,7 +187,7 @@ def scan_url():
         except: 
             pass
 
-    # 緊急強制通報 (由前端內容攔截觸發)
+    # 緊急強制通報
     if is_urgent:
         def handle_urgent():
             socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
@@ -170,7 +195,7 @@ def scan_url():
         threading.Thread(target=handle_urgent).start()
         return jsonify({"status": "success"})
 
-    # 🛡️ 防線 4：呼叫 Vision AI 模組進行終極判斷
+    # 🛡️ 防線 4：呼叫 AI 模組
     jailbreak_keywords = ['忽略', 'ignore', 'instruction', 'system prompt', '繞過', 'bypass', '系統指示']
     is_jailbreak_attempt = any(k in raw_text.lower() for k in jailbreak_keywords)
 
@@ -178,7 +203,6 @@ def scan_url():
     report_str = json.dumps(report_dict, ensure_ascii=False)
     score = int(report_dict.get('riskScore', 0))
 
-    # 非同步寫入資料庫與發送警報
     if firebase_initialized:
         def background_tasks():
             timestamp = get_tw_time()
@@ -208,7 +232,7 @@ def handle_join_family_room(data):
     family_id = data.get('familyID')
     if family_id:
         join_room(family_id)
-        print(f"💻 戰情室已連線並加入房間: {family_id}")
+        print(f"💻 戰情室已連線並加入房間: {family_id}", flush=True)
 
 # ==========================================
 # 🟢 LINE Bot 戰情室邏輯
@@ -223,7 +247,7 @@ def callback():
         return jsonify({"status": "error"}), 400
     return 'OK'
 
-@handler.add(MessageEvent, message=TextMessage)
+@handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     if not firebase_initialized: return
     user_msg = event.message.text
@@ -234,20 +258,33 @@ def handle_message(event):
             users_ref = db.reference('users').get()
             my_family_id = next((u.get('familyID') for u in users_ref.values() if isinstance(u, dict) and u.get('line_id') == line_user_id), 'none')
             
-            if my_family_id == 'none':
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 此 LINE 帳號尚未綁定任何家庭 ID。"))
-                return
+            with ApiClient(configuration) as api_client:
+                line_bot_api = MessagingApi(api_client)
                 
-            all_rec = db.reference('scan_history').get()
-            f_records = [v for v in all_rec.values() if isinstance(v, dict) and v.get('familyID') == my_family_id] if all_rec else []
-            danger = sum(1 for v in f_records if int(json.loads(v.get('report', '{}')).get('riskScore', 0)) >= 70)
-            
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🛡️ 【{my_family_id} 家庭戰情室】\n🔍 總掃描：{len(f_records)} 次\n🛑 已攔截：{danger} 次"))
-        except: 
-            pass
+                if my_family_id == 'none':
+                    line_bot_api.reply_message(
+                        ReplyMessageRequest(
+                            reply_token=event.reply_token,
+                            messages=[TextMessage(text="⚠️ 此 LINE 帳號尚未綁定任何家庭 ID。")]
+                        )
+                    )
+                    return
+                    
+                all_rec = db.reference('scan_history').get()
+                f_records = [v for v in all_rec.values() if isinstance(v, dict) and v.get('familyID') == my_family_id] if all_rec else []
+                danger = sum(1 for v in f_records if int(json.loads(v.get('report', '{}')).get('riskScore', 0)) >= 70)
+                
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text=f"🛡️ 【{my_family_id} 家庭戰情室】\n🔍 總掃描：{len(f_records)} 次\n🛑 已攔截：{danger} 次")]
+                    )
+                )
+        except Exception as e: 
+            print(f"LINE Bot 處理錯誤: {e}", flush=True)
 
 # ==========================================
-# 👨‍👩‍👧 完整家庭與紀錄 API (展開完整版)
+# 👨‍👩‍👧 完整家庭與紀錄 API
 # ==========================================
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_fp():
@@ -326,5 +363,9 @@ def clear_alerts():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    # 👑 啟動時必須改用 socketio.run 來支援 WebSocket
-    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+    print("\n" + "="*50)
+    print("🚀 系統啟動中...")
+    print(f"👉 請打開瀏覽器點擊這個連結測試：http://127.0.0.1:{port}/")
+    print("="*50 + "\n", flush=True)
+    
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
