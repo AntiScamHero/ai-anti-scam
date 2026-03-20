@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     const urlParams = new URLSearchParams(window.location.search);
     const reason = urlParams.get('reason');
 
@@ -7,6 +7,45 @@ document.addEventListener('DOMContentLoaded', function() {
         reasonBox.textContent = reason ? reason : "偵測到高度危險內容";
     }
 
+    // 🌟 【核心功能】：跨世代語音守護 - 動態聯絡按鈕
+    const callBtn = document.getElementById('call-btn');
+    if (callBtn) {
+        try {
+            // 1. 從 Chrome 擴充功能中抓取這台電腦綁定的 familyID
+            const storage = await chrome.storage.local.get(['familyID']);
+            const familyID = storage.familyID || 'none';
+
+            // 2. 向後端詢問守護者 (子女) 的專屬聯絡方式
+            const response = await fetch(`${CONFIG.API_BASE_URL}/api/get_contact`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ familyID: familyID })
+            });
+            
+            const data = await response.json();
+            
+            // 3. 判斷並動態改變按鈕
+            if (data.status === 'success' && data.contact) {
+                // 情境 A：成功抓到子女電話或 LINE (按鈕維持綠色)
+                callBtn.href = data.contact;
+            } else {
+                // 情境 B：未綁定家庭，或子女還沒設定電話 -> 觸發 165 防呆機制
+                callBtn.href = "tel:165";
+                callBtn.innerHTML = "📞 撥打 165 反詐騙專線";
+                callBtn.style.backgroundColor = "#ff9800"; // 變成橘色警告色
+                callBtn.style.boxShadow = "0 8px 25px rgba(255, 152, 0, 0.6)";
+            }
+        } catch (err) {
+            console.error("無法取得聯絡資訊", err);
+            // 網路錯誤時的最終保底防線
+            callBtn.href = "tel:165";
+            callBtn.innerHTML = "📞 撥打 165 反詐騙專線";
+            callBtn.style.backgroundColor = "#ff9800";
+            callBtn.style.boxShadow = "0 8px 25px rgba(255, 152, 0, 0.6)";
+        }
+    }
+
+    // ================= 以下為原本的離開與回報邏輯 =================
     const leaveBtn = document.getElementById('manual-leave-btn');
     
     let countdown = 3;
@@ -37,7 +76,6 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             reportBtn.innerText = "⏳ 傳送中...";
             try {
-                // 🛡️ 使用 CONFIG
                 await fetch(`${CONFIG.API_BASE_URL}/api/report_false_positive`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

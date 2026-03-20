@@ -361,6 +361,46 @@ def clear_alerts():
             
     return jsonify({"status": "success"})
 
+# ==========================================
+# 📞 緊急聯絡人：動態聯防 API (全新加入)
+# ==========================================
+@app.route('/api/set_contact', methods=['POST'])
+def set_contact():
+    """讓守護者(子女)設定自己的聯絡方式"""
+    data = request.json
+    uid = data.get('uid')
+    contact = data.get('contact') # 格式應為 "tel:0912345678" 或 "https://line.me/ti/p/你的ID"
+    
+    if firebase_initialized and uid and contact:
+        db.reference(f'users/{uid}').update({'emergency_contact': contact})
+        return jsonify({"status": "success"})
+    return jsonify({"status": "error"})
+
+@app.route('/api/get_contact', methods=['POST'])
+def get_contact():
+    """長輩端點擊按鈕時，動態抓取子女的聯絡方式"""
+    fid = request.json.get('familyID')
+    # 如果沒綁定家庭，預設回傳 165
+    if not firebase_initialized or not fid or fid == 'none':
+        return jsonify({"status": "fail", "contact": "tel:165"}) 
+        
+    try:
+        family_node = db.reference(f'families/{fid}').get()
+        if family_node and isinstance(family_node, dict) and family_node.get('guardianUID'):
+            guardian_uid = family_node.get('guardianUID')
+            user_node = db.reference(f'users/{guardian_uid}').get()
+            
+            if user_node and isinstance(user_node, dict):
+                contact = user_node.get('emergency_contact')
+                if contact:
+                    return jsonify({"status": "success", "contact": contact})
+    except Exception as e:
+        print(f"取得聯絡人失敗: {e}", flush=True)
+        
+    # 如果系統找不到子女電話，依然安全回傳 165 專線
+    return jsonify({"status": "fail", "contact": "tel:165"})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print("\n" + "="*50)
