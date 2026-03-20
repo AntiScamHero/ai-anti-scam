@@ -157,7 +157,6 @@
             RISK_THRESHOLD_MEDIUM: 40
         };
 
-        // 時鐘
         setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-TW', { hour12: false }); }, 1000);
 
         let socket = null;
@@ -165,13 +164,11 @@
         let trendChartInstance = null;
         let isFetching = false;
 
-        // 🌟 數字滾動動畫函數 (核心視覺升級)
         function animateValue(obj, start, end, duration) {
             let startTimestamp = null;
             const step = (timestamp) => {
                 if (!startTimestamp) startTimestamp = timestamp;
                 const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                // 創造 ease-out 的減速效果
                 const easeOut = 1 - Math.pow(1 - progress, 3);
                 obj.innerText = Math.floor(easeOut * (end - start) + start);
                 if (progress < 1) {
@@ -179,7 +176,7 @@
                 } else {
                     obj.innerText = end;
                     obj.classList.remove('pop-effect');
-                    void obj.offsetWidth; // 觸發重繪
+                    void obj.offsetWidth; 
                     obj.classList.add('pop-effect');
                 }
             };
@@ -187,15 +184,29 @@
         }
 
         window.onload = () => {
-            const savedFamilyID = localStorage.getItem('savedFamilyID');
-            const isAutoMonitorOn = localStorage.getItem('autoMonitor') === 'true';
-
             Chart.defaults.color = '#8b949e';
             Chart.defaults.font.size = 14;
 
-            if (savedFamilyID) {
-                document.getElementById('family-id-input').value = savedFamilyID;
-                if (isAutoMonitorOn) startMonitoring(savedFamilyID);
+            // 🌟 核心修改：優先從網址讀取 ?familyID=XXXXXX
+            const urlParams = new URLSearchParams(window.location.search);
+            let familyID = urlParams.get('familyID');
+
+            // 如果網址沒有，才回去找 localStorage (防重新整理掉紀錄)
+            if (!familyID) {
+                familyID = localStorage.getItem('savedFamilyID');
+            }
+
+            const isAutoMonitorOn = localStorage.getItem('autoMonitor') === 'true';
+
+            if (familyID) {
+                document.getElementById('family-id-input').value = familyID;
+                
+                // 如果是從網址傳過來的，或是之前設定了自動監控，就直接連線啟動！
+                if (urlParams.has('familyID') || isAutoMonitorOn) {
+                    localStorage.setItem('savedFamilyID', familyID); 
+                    localStorage.setItem('autoMonitor', 'true');     
+                    startMonitoring(familyID);
+                }
             }
         };
 
@@ -307,7 +318,6 @@
                 scores.push(score);
             });
 
-            // 🌟 觸發數字滾動動畫
             const totalEl = document.getElementById('stat-total');
             const safeEl = document.getElementById('stat-safe');
             const dangerEl = document.getElementById('stat-danger');
@@ -324,7 +334,6 @@
                 try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } catch(e) { report = { riskScore: 0, reason: "解析失敗" }; }
                 
                 let score = parseInt(report.riskScore || report.RiskScore || report.risk_score) || 0;
-                // 加入 scamDNA 顯示
                 let dna = report.scamDNA ? `[${report.scamDNA.join(', ')}] ` : "";
                 let reason = dna + (report.reason || "系統記錄此特徵");
                 
@@ -359,7 +368,6 @@
             });
         }
 
-        // 🌟 Chart.js 優化：投影機粗體與漸層
         function drawRatioChart(safe, danger) {
             const ctx = document.getElementById('ratioChart').getContext('2d');
             if(ratioChartInstance) ratioChartInstance.destroy();
@@ -383,7 +391,6 @@
         function drawTrendChart(labels, data) {
             const ctx = document.getElementById('trendChart').getContext('2d');
             
-            // 創造漸層填滿效果
             let gradient = ctx.createLinearGradient(0, 0, 0, 300);
             gradient.addColorStop(0, 'rgba(51, 181, 229, 0.6)');
             gradient.addColorStop(1, 'rgba(51, 181, 229, 0.05)');

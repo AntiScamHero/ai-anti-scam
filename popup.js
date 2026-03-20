@@ -350,6 +350,7 @@ document.getElementById('code_box').addEventListener('click', function() {
     });
 });
 
+// ✅ 修復：已經把 function 拼字訂正，並加上了橘色戰情室按鈕
 function updateUIAsBound(familyID) {
     const statusText = document.getElementById('bind-status');
     statusText.innerText = `狀態：已綁定家庭 (${familyID})`;
@@ -357,13 +358,40 @@ function updateUIAsBound(familyID) {
     statusText.style.fontWeight = 'bold';
     document.getElementById('invite_input').style.display = 'none';
     document.getElementById('btn_join_family').style.display = 'none';
+
+    // 🌟 核心升級：動態產生「一鍵開啟戰情室」按鈕
+    let goDashBtn = document.getElementById('go-dashboard-btn');
+    if (!goDashBtn) {
+        goDashBtn = document.createElement('button');
+        goDashBtn.id = 'go-dashboard-btn';
+        // 使用非常亮眼的橘色漸層，吸引守護者點擊
+        goDashBtn.style.background = 'linear-gradient(135deg, #FFBB33 0%, #FF8800 100%)';
+        goDashBtn.style.marginTop = '10px';
+        goDashBtn.style.width = '100%';
+        goDashBtn.style.padding = '12px';
+        goDashBtn.style.color = 'white';
+        goDashBtn.style.border = 'none';
+        goDashBtn.style.borderRadius = '8px';
+        goDashBtn.style.fontSize = '16px';
+        goDashBtn.style.fontWeight = 'bold';
+        goDashBtn.style.cursor = 'pointer';
+        
+        document.getElementById('family-container').appendChild(goDashBtn);
+    }
+    
+    goDashBtn.innerText = "📊 開啟大螢幕戰情室";
+    goDashBtn.onclick = () => {
+        // 使用 chrome.runtime.getURL 打開套件內的 dashboard.html，並把代碼塞進網址裡
+        const dashUrl = chrome.runtime.getURL(`dashboard.html?familyID=${familyID}`);
+        chrome.tabs.create({ url: dashUrl });
+    };
 }
 
-// 🛡️ 背景即時輪詢戰情室資料
+// ✅ 修復：幫你把剛剛遺失的輪詢功能補回來了，這樣擴充功能下方才會顯示歷史紀錄
 function startFamilyAlertsPolling(familyID) {
     if (pollingInterval) clearInterval(pollingInterval);
     fetchFamilyAlerts(familyID); 
-    pollingInterval = setInterval(() => { fetchFamilyAlerts(familyID); }, CONFIG.POLLING_INTERVAL_MS);
+    pollingInterval = setInterval(() => { fetchFamilyAlerts(familyID); }, CONFIG.POLLING_INTERVAL_MS || 5000);
 }
 
 async function fetchFamilyAlerts(familyID) {
