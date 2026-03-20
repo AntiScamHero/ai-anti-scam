@@ -4,97 +4,120 @@
     <meta charset="UTF-8">
     <title>AI 防詐戰情室 - WebSocket 即時連線版</title>
     <script src="config.js"></script> 
-    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
-    <script src="[https://cdn.socket.io/4.7.2/socket.io.min.js](https://cdn.socket.io/4.7.2/socket.io.min.js)"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; }
-        .header h1 { margin: 0; color: #58a6ff; font-size: 24px; letter-spacing: 2px; }
-        
-        .control-panel { background: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
-        input { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 10px 15px; border-radius: 5px; font-size: 16px; font-weight: bold; letter-spacing: 2px; outline: none; text-align: center; width: 150px; }
-        input:focus { border-color: #58a6ff; }
-        
-        button { border: none; padding: 10px 20px; border-radius: 5px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        .btn-start { background: #238636; color: white; }
-        .btn-start:hover { background: #2ea043; }
-        .btn-stop { background: #da3633; color: white; display: none; }
-        .btn-stop:hover { background: #f85149; }
-        .btn-manual { background: #1f6feb; color: white; }
-        .btn-manual:hover { background: #388bfd; }
-        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        /* 🎨 投影機專用高對比配色 */
+        :root {
+            --bg-dark: #0d1117;
+            --panel-bg: #161b22;
+            --border-color: #30363d;
+            --text-main: #ffffff;
+            --text-sub: #8b949e;
+            --safe-green: #00C851; /* 極亮綠 */
+            --danger-red: #FF4444; /* 極亮紅 */
+            --brand-blue: #33b5e5;
+        }
 
-        .status-badge { padding: 8px 15px; border-radius: 20px; font-size: 14px; font-weight: bold; background: #30363d; color: #8b949e; transition: 0.3s; }
-        .status-connected { background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid #238636; box-shadow: 0 0 10px rgba(63, 185, 80, 0.4); }
-        .status-loading { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid #d29922; }
-
-        /* 👑 升級版的緊急橫幅動畫 */
-        #emergency-banner { display: none; background: linear-gradient(90deg, #da3633 0%, #b32d2a 100%); color: white; padding: 15px 20px; border-radius: 10px; margin-bottom: 20px; font-weight: bold; font-size: 18px; text-align: center; box-shadow: 0 0 25px rgba(218, 54, 51, 0.8); animation: strobe 0.5s infinite alternate; }
-        @keyframes strobe { from { opacity: 1; transform: scale(1); } to { opacity: 0.85; transform: scale(1.01); } }
-
-        .dashboard-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-bottom: 20px; }
-        .chart-container { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; }
-        .chart-title { font-size: 16px; font-weight: bold; color: #8b949e; margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
+        body { margin: 0; padding: 25px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-dark); color: var(--text-main); }
         
-        .stats-boxes { display: flex; gap: 15px; margin-bottom: 20px; }
-        .stat-box { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; text-align: center; position: relative; overflow: hidden; }
-        .stat-value { font-size: 36px; font-weight: bold; margin: 10px 0; transition: transform 0.3s; }
-        .val-safe { color: #3fb950; }
-        .val-danger { color: #ff7b72; }
-        
-        /* 數值跳動特效 */
-        .pop-effect { animation: pop 0.5s ease-out; }
-        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border-color); padding-bottom: 15px; margin-bottom: 25px; }
+        .header h1 { margin: 0; color: var(--brand-blue); font-size: 32px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(51, 181, 229, 0.4); }
+        #clock { font-size: 20px; font-weight: bold; letter-spacing: 1px; }
 
-        table { width: 100%; border-collapse: collapse; background: #161b22; border-radius: 10px; overflow: hidden; border: 1px solid #30363d; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #30363d; }
-        th { background: #21262d; color: #8b949e; font-weight: 600; text-transform: uppercase; font-size: 13px; }
+        .control-panel { background: var(--panel-bg); padding: 25px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 25px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        
+        label { font-size: 18px; font-weight: bold; }
+        input { background: #000; border: 2px solid var(--border-color); color: var(--text-main); padding: 12px 20px; border-radius: 8px; font-size: 20px; font-weight: 900; letter-spacing: 4px; outline: none; text-align: center; width: 180px; transition: 0.3s; }
+        input:focus { border-color: var(--brand-blue); box-shadow: 0 0 15px rgba(51, 181, 229, 0.3); }
+        
+        button { border: none; padding: 12px 25px; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; letter-spacing: 1px; }
+        .btn-start { background: var(--safe-green); color: black; }
+        .btn-start:hover { background: #00E676; box-shadow: 0 0 15px rgba(0, 200, 81, 0.6); transform: translateY(-2px); }
+        .btn-stop { background: var(--danger-red); color: white; display: none; }
+        .btn-stop:hover { background: #ff5e5e; box-shadow: 0 0 15px rgba(255, 68, 68, 0.6); }
+        .btn-manual { background: var(--border-color); color: white; }
+        .btn-manual:hover { background: #4b5563; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* 🟢 醒目的即時連線指示燈 */
+        .status-badge { padding: 12px 20px; border-radius: 30px; font-size: 16px; font-weight: 900; background: var(--border-color); color: var(--text-sub); transition: 0.3s; display: flex; align-items: center; gap: 10px; }
+        .status-connected { background: rgba(0, 200, 81, 0.15); color: var(--safe-green); border: 2px solid var(--safe-green); box-shadow: 0 0 20px rgba(0, 200, 81, 0.3); }
+        
+        .live-indicator { display: inline-block; width: 14px; height: 14px; background-color: var(--safe-green); border-radius: 50%; animation: pulse 1.2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 200, 81, 0.8); } 70% { box-shadow: 0 0 0 12px rgba(0, 200, 81, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 200, 81, 0); } }
+
+        /* 緊急橫幅 */
+        #emergency-banner { display: none; background: linear-gradient(90deg, #FF4444 0%, #CC0000 100%); color: white; padding: 20px; border-radius: 12px; margin-bottom: 25px; font-weight: 900; font-size: 22px; text-align: center; box-shadow: 0 0 30px rgba(255, 68, 68, 0.8); animation: strobe 0.4s infinite alternate; letter-spacing: 1px; }
+        @keyframes strobe { from { opacity: 1; transform: scale(1); } to { opacity: 0.9; transform: scale(1.02); } }
+
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 25px; margin-bottom: 25px; }
+        .chart-container { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .chart-title { font-size: 20px; font-weight: 900; color: var(--text-main); margin-bottom: 20px; border-bottom: 2px solid var(--border-color); padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center;}
+        
+        /* 數據看板 */
+        .stats-boxes { display: flex; gap: 20px; margin-bottom: 25px; }
+        .stat-box { flex: 1; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .stat-title { color: var(--text-sub); font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;}
+        .stat-value { font-size: 55px; font-weight: 900; margin: 15px 0 5px 0; font-family: monospace; text-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        
+        .val-safe { color: var(--safe-green); }
+        .val-danger { color: var(--danger-red); }
+        
+        /* 數值放大特效 */
+        .pop-effect { animation: pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
+
+        /* 表格優化 */
+        table { width: 100%; border-collapse: collapse; background: var(--panel-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        th, td { padding: 18px 20px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 16px; }
+        th { background: #21262d; color: var(--text-main); font-weight: 900; text-transform: uppercase; font-size: 15px; letter-spacing: 1px; }
         tr:hover { background: #1c2128; }
         
-        /* 新資料亮起特效 */
-        .new-row-highlight { animation: highlightRow 2s ease-out forwards; }
-        @keyframes highlightRow { 0% { background-color: rgba(88, 166, 255, 0.3); } 100% { background-color: transparent; } }
+        .new-row-highlight { animation: highlightRow 2.5s ease-out forwards; }
+        @keyframes highlightRow { 0% { background-color: rgba(51, 181, 229, 0.4); } 100% { background-color: transparent; } }
 
-        .risk-high { color: #ff7b72; font-weight: bold; }
-        .risk-safe { color: #3fb950; }
-        .risk-warn { color: #d29922; }
-        .live-indicator { display: inline-block; width: 10px; height: 10px; background-color: #3fb950; border-radius: 50%; margin-right: 8px; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(63, 185, 80, 0); } 100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); } }
+        .risk-high { color: var(--danger-red); font-weight: 900; }
+        .risk-safe { color: var(--safe-green); font-weight: bold;}
+        .risk-warn { color: #FFBB33; font-weight: bold;}
     </style>
 </head>
 <body>
 
     <div class="header">
         <h1>🛡️ AI 遠端家庭防護網 - 戰情儀表板</h1>
-        <div id="clock" style="font-family: monospace; color: #8b949e;">--:--:--</div>
+        <div id="clock">--:--:--</div>
     </div>
 
     <div class="control-panel">
-        <label>家庭邀請碼：</label>
-        <input type="text" id="family-id-input" placeholder="請輸入 6 碼" maxlength="6">
-        <button id="btn-manual" class="btn-manual">🔄 手動同步</button>
-        <button id="btn-start" class="btn-start">▶️ 連線基地台</button>
+        <label>📡 守護者連線：</label>
+        <input type="text" id="family-id-input" placeholder="輸入 6 碼" maxlength="6">
+        <button id="btn-start" class="btn-start">▶️ 啟動即時監控</button>
         <button id="btn-stop" class="btn-stop">⏹️ 斷開連線</button>
+        <button id="btn-manual" class="btn-manual">🔄 更新數據</button>
+        
+        <div style="flex-grow: 1;"></div>
+        
         <div id="connection-status" class="status-badge">🔴 尚未連線 / 閒置中</div>
     </div>
 
     <div id="emergency-banner">
         ⚠️ [緊急警報] 您的家人剛剛瀏覽了高風險網頁，系統已強制攔截！
-        <div id="emergency-detail" style="font-size: 14px; font-weight: normal; margin-top: 5px; color: #ffcccc;"></div>
+        <div id="emergency-detail" style="font-size: 16px; font-weight: normal; margin-top: 8px; color: rgba(255,255,255,0.9);"></div>
     </div>
 
     <div class="stats-boxes">
         <div class="stat-box">
-            <div style="color:#8b949e">總掃描次數</div>
-            <div class="stat-value" id="stat-total">0</div>
+            <div class="stat-title">總掃描次數</div>
+            <div class="stat-value" id="stat-total" data-target="0">0</div>
         </div>
         <div class="stat-box">
-            <div style="color:#8b949e">安全放行</div>
-            <div class="stat-value val-safe" id="stat-safe">0</div>
+            <div class="stat-title">安全放行</div>
+            <div class="stat-value val-safe" id="stat-safe" data-target="0">0</div>
         </div>
         <div class="stat-box">
-            <div style="color:#8b949e">危險攔截</div>
-            <div class="stat-value val-danger" id="stat-danger">0</div>
+            <div class="stat-title">危險攔截</div>
+            <div class="stat-value val-danger" id="stat-danger" data-target="0">0</div>
         </div>
     </div>
 
@@ -105,51 +128,70 @@
         </div>
         <div class="chart-container">
             <div class="chart-title">
-                <span>📈 近期風險趨勢 (分數)</span>
-                <span id="socket-indicator" style="display:none; font-size:12px; color:#3fb950;"><span class="live-indicator"></span>即時串流中</span>
+                <span>📈 近期風險趨勢 (危險指數)</span>
             </div>
             <canvas id="trendChart"></canvas>
         </div>
     </div>
 
-    <div class="chart-title" style="margin-top:20px;">📜 詳細掃描紀錄 (最新 20 筆)</div>
+    <div class="chart-title" style="margin-top:30px; border-bottom:none;">📜 詳細掃描紀錄 (即時更新)</div>
     <table>
         <thead>
             <tr>
-                <th>偵測時間</th>
+                <th>時間</th>
                 <th>目標網址</th>
                 <th>風險指數</th>
-                <th>AI 分析原因</th>
-                <th>狀態</th>
+                <th>AI 心理分析與特徵</th>
+                <th>系統狀態</th>
             </tr>
         </thead>
         <tbody id="log-table-body">
-            <tr><td colspan="5" style="text-align:center; color:#8b949e;">請輸入家庭邀請碼並開啟連線...</td></tr>
+            <tr><td colspan="5" style="text-align:center; color:#8b949e; font-size:18px; padding:30px;">請輸入家庭邀請碼並啟動連線...</td></tr>
         </tbody>
     </table>
 
     <script>
-        // --- 預設設定 ---
         window.CONFIG = window.CONFIG || {
-            API_BASE_URL: "[http://127.0.0.1:5000](http://127.0.0.1:5000)",
+            API_BASE_URL: "http://127.0.0.1:5000",
             RISK_THRESHOLD_HIGH: 70,
             RISK_THRESHOLD_MEDIUM: 40
         };
 
-        setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-TW'); }, 1000);
+        // 時鐘
+        setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-TW', { hour12: false }); }, 1000);
 
         let socket = null;
         let ratioChartInstance = null;
         let trendChartInstance = null;
         let isFetching = false;
-        let currentFamilyID = "";
 
-        // ==========================================
-        // 👑 初始化與 WebSocket 邏輯
-        // ==========================================
+        // 🌟 數字滾動動畫函數 (核心視覺升級)
+        function animateValue(obj, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                // 創造 ease-out 的減速效果
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                obj.innerText = Math.floor(easeOut * (end - start) + start);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                } else {
+                    obj.innerText = end;
+                    obj.classList.remove('pop-effect');
+                    void obj.offsetWidth; // 觸發重繪
+                    obj.classList.add('pop-effect');
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
         window.onload = () => {
             const savedFamilyID = localStorage.getItem('savedFamilyID');
             const isAutoMonitorOn = localStorage.getItem('autoMonitor') === 'true';
+
+            Chart.defaults.color = '#8b949e';
+            Chart.defaults.font.size = 14;
 
             if (savedFamilyID) {
                 document.getElementById('family-id-input').value = savedFamilyID;
@@ -162,27 +204,21 @@
                 socket = io(CONFIG.API_BASE_URL);
 
                 socket.on('connect', () => {
-                    console.log('🔗 WebSocket 連線成功');
                     document.getElementById('connection-status').className = "status-badge status-connected";
-                    document.getElementById('connection-status').innerHTML = `<span class="live-indicator"></span>連線成功 (代碼: ${familyID})`;
-                    document.getElementById('socket-indicator').style.display = "inline-block";
+                    document.getElementById('connection-status').innerHTML = `<span class="live-indicator"></span>即時防護中 (代碼: ${familyID})`;
                     socket.emit('join_family_room', { familyID: familyID });
                 });
 
                 socket.on('disconnect', () => {
-                    console.log('❌ WebSocket 斷線');
-                    document.getElementById('connection-status').className = "status-badge status-loading";
-                    document.getElementById('connection-status').innerText = `⚠️ 伺服器斷線，嘗試重連中...`;
-                    document.getElementById('socket-indicator').style.display = "none";
+                    document.getElementById('connection-status').className = "status-badge";
+                    document.getElementById('connection-status').innerText = `⚠️ 連線中斷，重試中...`;
                 });
 
                 socket.on('new_scan_result', (data) => {
-                    console.log("📥 收到即時掃描資料:", data);
                     fetchLogs(familyID, true); 
                 });
 
                 socket.on('emergency_alert', (data) => {
-                    console.log("🚨 收到緊急警報:", data);
                     showEmergencyBanner(data.url, data.reason);
                 });
             } else {
@@ -193,33 +229,20 @@
         function showEmergencyBanner(url, reason) {
             const banner = document.getElementById('emergency-banner');
             const detail = document.getElementById('emergency-detail');
-            // 安全插入文字
-            detail.textContent = `網址：${url.substring(0, 50)}... | 特徵：${reason}`;
+            detail.textContent = `網域：${url.substring(0, 40)}... | 攔截原因：${reason}`;
             banner.style.display = "block";
-            
-            const dangerElement = document.getElementById('stat-danger');
-            dangerElement.classList.remove('pop-effect');
-            void dangerElement.offsetWidth; 
-            dangerElement.classList.add('pop-effect');
-
-            setTimeout(() => { banner.style.display = "none"; }, 10000);
+            setTimeout(() => { banner.style.display = "none"; }, 8000);
         }
 
-        // ==========================================
-        // 介面控制邏輯
-        // ==========================================
         document.getElementById('btn-manual').addEventListener('click', () => {
-            if (isFetching) return;
             const familyID = document.getElementById('family-id-input').value.trim().toUpperCase();
             if(!familyID) return alert("請輸入 6 碼邀請碼");
-            localStorage.setItem('savedFamilyID', familyID); 
             fetchLogs(familyID, false);
         });
 
         document.getElementById('btn-start').addEventListener('click', () => {
             const familyID = document.getElementById('family-id-input').value.trim().toUpperCase();
             if(!familyID) return alert("請輸入 6 碼邀請碼");
-            
             localStorage.setItem('savedFamilyID', familyID); 
             localStorage.setItem('autoMonitor', 'true');     
             startMonitoring(familyID);
@@ -228,160 +251,115 @@
         document.getElementById('btn-stop').addEventListener('click', stopMonitoring);
 
         function startMonitoring(familyID) {
-            currentFamilyID = familyID;
             document.getElementById('family-id-input').disabled = true;
             document.getElementById('btn-start').style.display = "none";
             document.getElementById('btn-stop').style.display = "inline-block";
-            
             initSocket(familyID);
             fetchLogs(familyID, false); 
         }
 
         function stopMonitoring() {
             localStorage.setItem('autoMonitor', 'false');
-            
-            if (socket) {
-                socket.disconnect();
-                socket = null;
-            }
-            
+            if (socket) { socket.disconnect(); socket = null; }
             document.getElementById('connection-status').className = "status-badge";
             document.getElementById('connection-status').innerText = `🔴 已斷開連線`;
-            document.getElementById('socket-indicator').style.display = "none";
             document.getElementById('family-id-input').disabled = false;
             document.getElementById('btn-start').style.display = "inline-block";
             document.getElementById('btn-stop').style.display = "none";
         }
 
-        // ==========================================
-        // 資料拉取與渲染邏輯 (防 XSS 安全升級)
-        // ==========================================
         async function fetchLogs(familyID, isRealtimeUpdate = false) {
             if (isFetching) return;
             isFetching = true;
-
-            const btnManual = document.getElementById('btn-manual');
-            btnManual.innerText = "⏳ 同步中...";
-            btnManual.disabled = true;
-
             try {
                 const res = await fetch(`${CONFIG.API_BASE_URL}/api/get_alerts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ familyID: familyID })
                 });
-                
                 if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-                
                 const data = await res.json();
 
                 if (data.data && data.data.length > 0) {
                     updateDashboard(data.data, isRealtimeUpdate);
-                } else {
-                    document.getElementById('log-table-body').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#e3b341; font-weight:bold;">🟢 基地台連線成功！目前沒有任何警報紀錄。</td></tr>';
-                    document.getElementById('stat-total').innerText = 0;
-                    document.getElementById('stat-safe').innerText = 0;
-                    document.getElementById('stat-danger').innerText = 0;
-                    drawRatioChart(1, 0); 
-                    drawTrendChart([], []);
                 }
             } catch (err) {
-                console.error("連線後端失敗", err);
-                if (!socket || !socket.connected) {
-                    document.getElementById('connection-status').className = "status-badge";
-                    document.getElementById('connection-status').innerText = `🔴 API 連線失敗`;
-                }
+                console.error("API 連線失敗", err);
             } finally {
                 isFetching = false;
-                btnManual.innerText = "🔄 手動同步";
-                btnManual.disabled = false;
             }
         }
 
         function updateDashboard(records, isRealtimeUpdate) {
             const tbody = document.getElementById('log-table-body');
-            tbody.innerHTML = ""; // 先清空表格
+            tbody.innerHTML = ""; 
             
-            let safeCount = 0;
-            let dangerCount = 0;
-            let labels = [];
-            let scores = [];
-
+            let safeCount = 0, dangerCount = 0, labels = [], scores = [];
             let chartRecords = [...records].reverse();
 
             chartRecords.forEach(record => {
                 let report = {};
                 try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } catch(e) {}
-                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
-                if (isNaN(score)) score = 0;
+                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score) || 0;
                 
-                if (score >= (window.CONFIG.RISK_THRESHOLD_HIGH)) dangerCount++; else safeCount++;
+                if (score >= window.CONFIG.RISK_THRESHOLD_HIGH) dangerCount++; else safeCount++;
                 labels.push(record.timestamp.split(' ')[1]);
                 scores.push(score);
             });
 
-            // 數值跳動動畫處理
+            // 🌟 觸發數字滾動動畫
             const totalEl = document.getElementById('stat-total');
             const safeEl = document.getElementById('stat-safe');
             const dangerEl = document.getElementById('stat-danger');
 
-            if (totalEl.innerText !== records.length.toString()) { totalEl.classList.remove('pop-effect'); void totalEl.offsetWidth; totalEl.classList.add('pop-effect'); totalEl.innerText = records.length; }
-            if (safeEl.innerText !== safeCount.toString()) { safeEl.classList.remove('pop-effect'); void safeEl.offsetWidth; safeEl.classList.add('pop-effect'); safeEl.innerText = safeCount; }
-            if (dangerEl.innerText !== dangerCount.toString()) { dangerEl.classList.remove('pop-effect'); void dangerEl.offsetWidth; dangerEl.classList.add('pop-effect'); dangerEl.innerText = dangerCount; }
+            if (parseInt(totalEl.innerText) !== records.length) animateValue(totalEl, parseInt(totalEl.innerText), records.length, 1000);
+            if (parseInt(safeEl.innerText) !== safeCount) animateValue(safeEl, parseInt(safeEl.innerText), safeCount, 1000);
+            if (parseInt(dangerEl.innerText) !== dangerCount) animateValue(dangerEl, parseInt(dangerEl.innerText), dangerCount, 1000);
 
             drawRatioChart(safeCount, dangerCount);
             drawTrendChart(labels, scores);
 
             records.forEach((record, index) => {
                 let report = {};
-                try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } 
-                catch(e) { report = { riskScore: 0, reason: "資料解析失敗" }; }
+                try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } catch(e) { report = { riskScore: 0, reason: "解析失敗" }; }
                 
-                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score);
-                if (isNaN(score)) score = 0; 
+                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score) || 0;
+                // 加入 scamDNA 顯示
+                let dna = report.scamDNA ? `[${report.scamDNA.join(', ')}] ` : "";
+                let reason = dna + (report.reason || "系統記錄此特徵");
                 
-                let reason = report.reason || report.Reason || report.description || "系統已自動記錄此特徵";
                 let riskClass = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? 'risk-high' : (score >= window.CONFIG.RISK_THRESHOLD_MEDIUM ? 'risk-warn' : 'risk-safe');
-                let statusBadge = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? '🛑 已攔截' : '✅ 允許通行';
+                let statusBadge = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? '🛑 強制攔截' : '✅ 安全放行';
 
-                // 🟢 安全更新：完全避免使用 innerHTML 串接字串，全面改用 createElement 以防禦 DOM XSS
                 let tr = document.createElement('tr');
-                if (isRealtimeUpdate && index === 0) {
-                    tr.className = "new-row-highlight";
-                }
+                if (isRealtimeUpdate && index === 0) tr.className = "new-row-highlight";
 
                 let tdTime = document.createElement('td');
                 tdTime.style.cssText = "font-family:monospace; color:#8b949e;";
                 tdTime.textContent = record.timestamp.split(' ')[1];
 
                 let tdUrl = document.createElement('td');
-                tdUrl.style.cssText = "max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
-                tdUrl.title = record.url;
+                tdUrl.style.cssText = "max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
                 tdUrl.textContent = record.url;
 
                 let tdScore = document.createElement('td');
                 tdScore.className = riskClass;
-                // 分數是數字可以安全放入
-                tdScore.innerHTML = `<span style="font-size:18px; font-weight:bold;">${score}</span> / 100`; 
+                tdScore.innerHTML = `<span style="font-size:22px;">${score}</span> / 100`; 
 
                 let tdReason = document.createElement('td');
-                tdReason.style.cssText = "max-width:400px; font-size:13px; color:#c9d1d9;";
+                tdReason.style.cssText = "max-width:350px; line-height: 1.5; color:#c9d1d9;";
                 tdReason.textContent = reason;
 
                 let tdStatus = document.createElement('td');
                 tdStatus.className = riskClass;
                 tdStatus.textContent = statusBadge;
 
-                tr.appendChild(tdTime);
-                tr.appendChild(tdUrl);
-                tr.appendChild(tdScore);
-                tr.appendChild(tdReason);
-                tr.appendChild(tdStatus);
-                
+                tr.append(tdTime, tdUrl, tdScore, tdReason, tdStatus);
                 tbody.appendChild(tr);
             });
         }
 
+        // 🌟 Chart.js 優化：投影機粗體與漸層
         function drawRatioChart(safe, danger) {
             const ctx = document.getElementById('ratioChart').getContext('2d');
             if(ratioChartInstance) ratioChartInstance.destroy();
@@ -389,27 +367,53 @@
                 type: 'doughnut',
                 data: {
                     labels: ['安全放行', '危險攔截'],
-                    datasets: [{ data: [safe, danger], backgroundColor: ['#238636', '#da3633'], borderWidth: 0 }]
+                    datasets: [{ data: [safe, danger], backgroundColor: ['#00C851', '#FF4444'], borderWidth: 0, hoverOffset: 10 }]
                 },
-                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#c9d1d9' } } }, animation: { duration: 500 } }
+                options: { 
+                    responsive: true, 
+                    cutout: '65%',
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { color: '#fff', font: { size: 16, weight: 'bold' }, padding: 20 } } 
+                    }, 
+                    animation: { duration: 1000, easing: 'easeOutQuart' } 
+                }
             });
         }
 
         function drawTrendChart(labels, data) {
             const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            // 創造漸層填滿效果
+            let gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(51, 181, 229, 0.6)');
+            gradient.addColorStop(1, 'rgba(51, 181, 229, 0.05)');
+
             if(trendChartInstance) trendChartInstance.destroy();
             trendChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [{ label: '網頁風險指數', data: data, borderColor: '#58a6ff', backgroundColor: 'rgba(88, 166, 255, 0.2)', borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: '#58a6ff' }]
+                    datasets: [{ 
+                        label: '風險指數', 
+                        data: data, 
+                        borderColor: '#33b5e5', 
+                        backgroundColor: gradient, 
+                        borderWidth: 4, 
+                        fill: true, 
+                        tension: 0.4, 
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#33b5e5',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 8
+                    }]
                 },
                 options: { 
                     responsive: true, 
-                    animation: { duration: 500 },
+                    animation: { duration: 1000, easing: 'easeOutQuart' },
                     scales: { 
-                        y: { beginAtZero: true, max: 100, grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
-                        x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+                        y: { beginAtZero: true, max: 100, grid: { color: '#30363d' }, ticks: { color: '#fff', font: { size: 14 } } },
+                        x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 14 } } }
                     },
                     plugins: { legend: { display: false } }
                 }

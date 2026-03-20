@@ -7,12 +7,12 @@
     <style>
         body { 
             margin: 0; padding: 0; 
-            background-color: #d93025; /* 強烈的血紅色背景 */
+            background-color: #d93025; 
             color: #ffffff; 
-            font-family: '微軟正黑體', 'Segoe UI', sans-serif; 
+            font-family: '微軟正黑體', 'PingFang TC', sans-serif; 
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            height: 100vh; text-align: center; 
-            animation: bg-blink 2s infinite alternate; /* 背景閃爍警告特效 */
+            min-height: 100vh; text-align: center; 
+            animation: bg-blink 3s infinite alternate; /* 放慢閃爍速度，避免長輩眼睛不適 */
         }
         @keyframes bg-blink {
             0% { background-color: #b3140a; }
@@ -25,58 +25,82 @@
             box-shadow: 0 0 40px rgba(0,0,0,0.8);
             border: 5px solid #ff5c5c;
             max-width: 90%;
-            width: 600px;
+            width: 650px;
         }
-        h1 { color: #ff5c5c; font-size: 45px; margin-top: 0; margin-bottom: 20px; animation: text-blink 1s infinite; }
-        @keyframes text-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        p { font-size: 26px; margin-bottom: 15px; color: #eeeeee; font-weight: bold; line-height: 1.5; }
-        .keyword-box { background-color: #ffcc00; color: #000; padding: 15px 25px; border-radius: 12px; font-size: 32px; font-weight: 900; margin: 25px 0; display: inline-block; }
+        h1 { color: #ff5c5c; font-size: 45px; margin-top: 0; margin-bottom: 15px; }
         
-        /* 巨大無比的聯絡家人按鈕 */
+        p { font-size: 26px; margin-bottom: 15px; color: #eeeeee; font-weight: bold; line-height: 1.5; }
+        
+        /* 動態 AI 分析理由 */
+        .keyword-box { 
+            background-color: #ffcc00; color: #000; padding: 15px 25px; 
+            border-radius: 12px; font-size: 28px; font-weight: 900; 
+            margin: 15px 0; display: inline-block; line-height: 1.4;
+        }
+
+        /* 詐騙 DNA 標籤區塊 */
+        .dna-container {
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 25px;
+        }
+        .dna-tag {
+            background-color: #ffcccc; color: #c53030; padding: 8px 18px; 
+            border-radius: 50px; font-size: 20px; font-weight: bold;
+        }
+        
+        /* 巨大聯絡家人按鈕 */
         .call-family-btn { 
-            background-color: #00c300; /* LINE 標誌性綠色 */
-            color: white; 
-            padding: 25px 40px; 
-            font-size: 36px; 
-            font-weight: 900; 
-            border: none; 
-            border-radius: 50px; 
-            cursor: pointer; 
-            transition: 0.3s; 
-            box-shadow: 0 8px 25px rgba(0, 195, 0, 0.6); 
-            text-decoration: none;
-            display: inline-block;
-            margin-top: 20px;
-            margin-bottom: 40px;
-            width: 85%;
-            letter-spacing: 2px;
+            background-color: #00c300; color: white; padding: 25px 40px; 
+            font-size: 36px; font-weight: 900; border: none; border-radius: 50px; 
+            cursor: pointer; transition: 0.3s; box-shadow: 0 8px 25px rgba(0, 195, 0, 0.6); 
+            text-decoration: none; display: inline-block; margin-top: 10px; margin-bottom: 30px; 
+            width: 85%; letter-spacing: 2px;
         }
         .call-family-btn:hover { background-color: #00a000; transform: scale(1.05); }
 
-        .links-area { margin-top: 20px; display: flex; flex-direction: column; gap: 20px; }
-        .leave-btn { background-color: #555; color: white; padding: 12px 25px; font-size: 20px; border: none; border-radius: 8px; cursor: pointer; text-decoration: none;}
-        a.small-link { color: #aaaaaa; font-size: 16px; text-decoration: underline; cursor: pointer; }
+        .links-area { display: flex; flex-direction: column; gap: 20px; align-items: center;}
+        
+        .leave-btn { 
+            background-color: #38a169; color: white; padding: 18px 30px; 
+            font-size: 24px; font-weight: bold; border: none; border-radius: 12px; 
+            cursor: pointer; width: 85%; box-shadow: 0 4px 10px rgba(56, 161, 105, 0.4);
+        }
+        .leave-btn:hover { background-color: #2f855a; }
+
+        /* 冷靜期強制鎖定按鈕 */
+        .bypass-btn {
+            background-color: #555555; color: #aaaaaa; padding: 12px 25px; 
+            font-size: 18px; border: none; border-radius: 8px; cursor: not-allowed; width: 85%;
+        }
+        .bypass-btn:not(:disabled) {
+            background-color: transparent; color: #aaaaaa; border: 2px solid #555; cursor: pointer;
+        }
+        .bypass-btn:not(:disabled):hover { background-color: #222; }
+
+        a.small-link { color: #aaaaaa; font-size: 18px; text-decoration: underline; cursor: pointer; margin-top: 10px;}
     </style>
 </head>
 <body>
     <div class="alert-box">
         <h1>🚨 緊急警告 🚨</h1>
-        <p>這是一個危險的詐騙網頁！</p>
-        <p>為保護您的財產，系統已強制鎖定。</p>
+        <p>這是一個危險的詐騙網頁！<br>為保護您的財產，系統已強制鎖定。</p>
         
+        <div class="dna-container" id="dna-box"></div>
+
         <div class="keyword-box" id="reason-box">分析中...</div>
         
         <br>
-        <a href="tel:0912345678" class="call-family-btn" id="call-btn">
-            📞 立即聯繫子女
+        <a href="tel:165" class="call-family-btn" id="call-btn">
+            ⏳ 讀取聯絡資訊中...
         </a>
 
         <div class="links-area">
-            <button id="manual-leave-btn" class="leave-btn">關閉此危險網頁</button>
+            <button id="manual-leave-btn" class="leave-btn">✅ 安全關閉此網頁</button>
+            <button id="bypass-btn" class="bypass-btn" disabled>強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button>
             <a href="#" id="report-false-btn" class="small-link">覺得這是誤判？回報給開發團隊</a>
-            <a href="#" id="bypass-btn" class="small-link" style="color:#666;">我了解風險，仍要繼續前往 (不建議)</a>
         </div>
     </div>
+
+    <audio id="warning-audio" src="warning-voice.mp3" preload="auto"></audio>
 
     <script src="config.js"></script>
     <script src="blocked.js"></script>

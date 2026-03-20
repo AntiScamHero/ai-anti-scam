@@ -84,10 +84,32 @@ try:
 except Exception as e:
     print(f"⚠️ Firebase 啟動失敗：{repr(e)}", flush=True)
 
-# 👑 LINE 動態守護者推播
-def send_dynamic_line_alert(family_id, url, reason):
+
+# 🌟 【第三階段核心】：AI 心理防詐關心語錄生成器
+def get_dynamic_advice(scam_dna_list):
+    dna_str = ",".join(scam_dna_list) if isinstance(scam_dna_list, list) else str(scam_dna_list)
+    
+    if "金錢誘惑" in dna_str or "投資" in dna_str:
+        return "『最近是不是有看到什麼好康的中獎或投資機會呀？要不要幫你看看？』"
+    elif "限時壓力" in dna_str or "恐懼訴求" in dna_str:
+        return "『最近是不是有收到什麼包裹卡關、海外網購出問題、或是帳戶要被凍結的緊急通知？別慌，那通常是騙人的喔！』"
+    elif "權威誘導" in dna_str:
+        return "『剛剛是不是有收到自稱海關或警察的訊息？他們不會隨便傳網址叫人點喔，我們先求證一下。』"
+    elif "親情勒索" in dna_str:
+        return "『最近有沒有收到誰說急需用錢的訊息？現在 AI 詐騙很多，匯款前記得先通個電話確認喔！』"
+    elif "沉沒成本" in dna_str:
+        return "『是不是為了拿回之前的錢，對方又叫你匯手續費？這通常是無底洞，我們一起踩煞車好嗎？』"
+    else:
+        return "『剛剛上網有沒有遇到什麼奇怪的畫面，或是要求輸入密碼的網頁呀？』"
+
+# 👑 LINE 動態守護者推播 (升級版)
+def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=None):
     if not firebase_initialized or family_id == 'none': 
         return
+    
+    if scam_dna is None:
+        scam_dna = ["未知套路"]
+        
     try:
         family_node = db.reference(f'families/{family_id}').get()
         guardian_uid = family_node.get('guardianUID') if family_node else None
@@ -100,13 +122,22 @@ def send_dynamic_line_alert(family_id, url, reason):
                 target_line_id = user_node.get('line_id')
         
         if target_line_id:
+            # 💖 情感升級：溫柔介入與心理陪伴指南
+            dna_tags = "、".join(scam_dna)
+            care_message = get_dynamic_advice(scam_dna)
+            
             msg = (
-                f"🚨 【AI 防詐盾牌 - 緊急警報】🚨\n"
-                f"您的家人剛剛觸發了高風險網頁！\n\n"
-                f"🔍 原因：{reason[:50]}\n"
-                f"🌐 網址：{url[:50]}...\n\n"
-                f"系統已主動攔截保護，請確認家人狀況！"
+                f"💞【AI 防詐盾牌 - 親情守護通知】\n"
+                f"您的親友剛剛遇到了一個高風險網頁！\n\n"
+                f"🛡️ 系統已成功為其暫時攔截。\n"
+                f"🚨 威脅分析：此網頁疑似使用了「{dna_tags}」的心理操縱術 (危險指數：{risk_score}分)。\n"
+                f"🔍 攔截原因：{reason[:50]}\n\n"
+                f"💡 溫柔陪伴指南：\n"
+                f"當事者現在可能感到慌張。建議您撥個電話關心，請【避免責備】，可以用這句話當作開頭：\n"
+                f"{care_message}\n\n"
+                f"🔗 攔截網址：{url[:40]}..."
             )
+            
             # 🟢 使用 v3 推播寫法
             with ApiClient(configuration) as api_client:
                 line_bot_api = MessagingApi(api_client)
@@ -118,6 +149,7 @@ def send_dynamic_line_alert(family_id, url, reason):
                 )
     except Exception as e:
         print(f"LINE 動態推播失敗: {e}", flush=True)
+
 
 @app.route('/', methods=['GET'])
 def health_check():
@@ -155,7 +187,7 @@ def scan_url():
     # 🛡️ 防線 1：官方信任網域
     if is_white_listed and not is_urgent:
         return jsonify({
-            "riskScore": 0, "riskLevel": "安全無虞", "reason": "官方信任網域", 
+            "riskScore": 0, "riskLevel": "安全無虞", "scamDNA": ["無"], "reason": "官方信任網域", 
             "advice": "正常存取即可", "masked_text": web_text
         })
 
@@ -174,31 +206,31 @@ def scan_url():
         
         if not is_genuine_white_listed(parse_u):
             if check_165_blacklist(parse_u):
-                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
+                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
             try:
                 host = urlparse(parse_u.lower().strip()).hostname or ""
                 for domain in TRUSTED_DOMAINS:
                     if domain in host and not host.endswith("." + domain) and host != domain:
-                        report_dict = {"riskScore": 100, "riskLevel": "極度危險", "reason": f"偽裝網域 (試圖欺騙 {domain})", "advice": "請勿點擊或輸入任何資料！"}
+                        report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["偽裝官方"], "reason": f"偽裝網域 (試圖欺騙 {domain})", "advice": "請勿點擊或輸入任何資料！"}
                         return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             except: 
                 pass
 
     # 🛡️ 防線 3：啟發式規避特徵掃描
     evasion_patterns = [
-        (r'在我車上|綁架|斷手斷腳|不准報警|不准報案', '暴力威脅與綁架勒索'),
-        (r'中[•\.\-\*\_\s]+獎|中[•\.\-\*\_\s]+奖', '特殊符號切割規避'),
-        (r'仲獎|點機|伱巳|領娶|點撃|得獲您|知通獎中', '火星文與反轉排版規避'),
-        (r'恭喜您中奖了|点击领取奖金', '簡體字詐騙模板'),
-        (r'当選しました|おめでとうございます', '異常日文夾雜規避'),
-        (r'Congratulations.*中獎|中獎.*claim', '中英混雜規避'),
-        (r'bit\.ly/|rebrand\.ly/|tinyurl\.com/|pse\.is/', '高風險隱藏短網址')
+        (r'在我車上|綁架|斷手斷腳|不准報警|不准報案', '暴力威脅與綁架勒索', '恐懼訴求'),
+        (r'中[•\.\-\*\_\s]+獎|中[•\.\-\*\_\s]+奖', '特殊符號切割規避', '規避查緝'),
+        (r'仲獎|點機|伱巳|領娶|點撃|得獲您|知通獎中', '火星文與反轉排版規避', '規避查緝'),
+        (r'恭喜您中奖了|点击领取奖金', '簡體字詐騙模板', '金錢誘惑'),
+        (r'当選しました|おめでとうございます', '異常日文夾雜規避', '規避查緝'),
+        (r'Congratulations.*中獎|中獎.*claim', '中英混雜規避', '規避查緝'),
+        (r'bit\.ly/|rebrand\.ly/|tinyurl\.com/|pse\.is/', '高風險隱藏短網址', '未知套路')
     ]
-    for pattern, reason in evasion_patterns:
+    for pattern, reason, dna_tag in evasion_patterns:
         if re.search(pattern, raw_text, re.IGNORECASE):
-            report_dict = {"riskScore": 95, "riskLevel": "極度危險", "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
+            report_dict = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": [dna_tag], "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
     # ⚡ 快取檢查
@@ -217,7 +249,13 @@ def scan_url():
         def handle_urgent():
             with app.app_context(): 
                 socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
-                send_dynamic_line_alert(family_id, target_url, "【觸發強制防護盾】" + web_text[:50])
+                send_dynamic_line_alert(
+                    family_id=family_id, 
+                    url=target_url, 
+                    reason="【觸發強制防護盾】" + web_text[:50], 
+                    risk_score=100, 
+                    scam_dna=["系統強制警示"]
+                )
         socketio.start_background_task(handle_urgent) 
         return jsonify({"status": "success"})
 
@@ -245,7 +283,13 @@ def scan_url():
                 }, room=family_id)
 
                 if score >= 75:
-                    send_dynamic_line_alert(family_id, target_url, report_dict.get('reason'))
+                    send_dynamic_line_alert(
+                        family_id=family_id, 
+                        url=target_url, 
+                        reason=report_dict.get('reason', '未知風險'),
+                        risk_score=score,
+                        scam_dna=report_dict.get('scamDNA', ["高風險套路"])
+                    )
 
         socketio.start_background_task(background_tasks) 
 
