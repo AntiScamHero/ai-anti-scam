@@ -46,7 +46,8 @@ class BehaviorAnalyzer {
 // ==========================================
 // 🌐 模組 2：DOM 元素觀察者 (連結與圖片)
 // ==========================================
-const badDomains = ["testsafebrowsing.appspot.com", "fake-scam-delivery.com", "win-free-iphone-now.net"];
+// 🟢 修正 1：把測試釣魚網址加入黑名單
+const badDomains = ["testsafebrowsing.appspot.com", "fake-scam-delivery.com", "win-free-iphone-now.net", "lucky-verify-login.net"];
 
 // 連結掃描器：針對已知惡意網域進行本地端光速攔截
 const linkObserver = new IntersectionObserver((entries, observer) => {
@@ -57,10 +58,8 @@ const linkObserver = new IntersectionObserver((entries, observer) => {
                 const linkUrl = new URL(link.href);
                 if (badDomains.some(domain => linkUrl.hostname.includes(domain))) {
                     link.style.cssText = 'color: #ff0000 !important; font-weight: bold; text-decoration: underline wavy red; background-color: #ffe6e6;';
-                    link.addEventListener('click', e => { 
-                        e.preventDefault(); 
-                        alert("🚨【AI 防詐盾牌警告】\n此為高度危險詐騙連結！已阻擋。"); 
-                    });
+                    // 🟢 修正 2：不再只跳 alert，直接觸發滿版紅色鎖死大絕招！
+                    triggerSafeBlock("發現 165 黑名單釣魚連結：" + linkUrl.hostname);
                 }
             } catch (e) {}
             observer.unobserve(link); 
@@ -98,7 +97,7 @@ function observeElements() {
 // ==========================================
 // 🧠 模組 3：核心文本掃描與脫敏
 // ==========================================
-const scamKeywords = ["保證獲利", "加賴領取", "穩賺不賠", "飆股", "破解程式", "名額有限", "內部消息", "無風險投資"];
+const scamKeywords = ["保證獲利", "加賴領取", "穩賺不賠", "飆股", "破解程式", "名額有限", "內部消息", "無風險投資", "斷手斷腳", "不准報警"];
 let hasTriggeredBlock = false; 
 
 // 本地端極速個資脫敏 (Edge Computing 概念展示)
@@ -129,6 +128,11 @@ function triggerSafeBlock(reason) {
     try {
         // 通知 Background.js 進行跳轉與記錄
         chrome.runtime.sendMessage({ action: "triggerBlock", reason: reason });
+        
+        // 雙重保險：如果背景程式 1 秒後沒反應，前端自己強制跳轉
+        setTimeout(() => {
+            window.location.replace(chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reason) + "&original_url=" + encodeURIComponent(window.location.href));
+        }, 1000);
     } catch (error) {
         // 容錯機制：若無法通訊，本地強制跳轉至警告頁面
         try {
@@ -227,7 +231,7 @@ function scheduleIdleScan() {
 if (window.self === window.top) {
     // 判斷是否為系統自家的安全頁面 (包含 dashboard, 本地檔案, 擴充功能設定頁)
     const isSystemPage = window.location.protocol === 'chrome-extension:' ||
-                         window.location.protocol === 'file:' ||
+                         // window.location.protocol === 'file:' ||  <-- 🟢 修正 3：已移除這行，允許掃描桌面 test.html！
                          window.location.href.includes('dashboard.html') ||
                          window.location.href.includes('blocked.html') ||
                          window.location.hostname === 'localhost' ||
