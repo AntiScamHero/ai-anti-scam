@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 
 TRUSTED_DOMAINS = [
     "google.com", "yahoo.com", "gov.tw", "line.me", 
-    "facebook.com", "apple.com", "momo.com.tw", "pchome.com.tw"
+    "facebook.com", "apple.com", "momo.com.tw", "momoshop.com.tw", "pchome.com.tw", "shopee.tw"
 ]
 
 def to_half_width(text):

@@ -45,7 +45,11 @@ chrome.storage.local.get(['userID', 'familyID'], (result) => {
 function isWhitelisted(url) {
     try {
         const hostname = new URL(url).hostname;
-        const whitelist = ['google.com', 'youtube.com', 'yahoo.com.tw', 'gov.tw', 'facebook.com', 'line.me', 'instagram.com'];
+        const whitelist = [
+            'google.com', 'youtube.com', 'yahoo.com.tw', 'gov.tw', 
+            'facebook.com', 'line.me', 'instagram.com', 
+            'momoshop.com.tw', 'pchome.com.tw', 'shopee.tw'
+        ];
         return whitelist.some(domain => hostname === domain || hostname.endsWith('.' + domain));
     } catch { return false; }
 }

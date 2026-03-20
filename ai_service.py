@@ -132,11 +132,13 @@ def parse_response(response):
     
     # 安全解析 JSON
     result_json = json.loads(result_str)
+    
+    # 💡 修正：把超瞎的 50 分預設值，改為更合理的安全預設值
     return {
-        "riskScore": int(result_json.get("riskScore", 50)),
-        "riskLevel": result_json.get("riskLevel", "未定"),
-        "reason": result_json.get("reason", "AI 分析完成"),
-        "advice": result_json.get("advice", "請保持警覺")
+        "riskScore": int(result_json.get("riskScore", 15)),
+        "riskLevel": result_json.get("riskLevel", "安全無虞"),
+        "reason": result_json.get("reason", "未發現明顯的詐騙特徵，屬於一般網頁。"),
+        "advice": result_json.get("advice", "請維持一般上網警覺即可。")
     }
 
 def fallback_analysis(target_url, web_text, image_url, error_msg):
