@@ -187,11 +187,9 @@
             Chart.defaults.color = '#8b949e';
             Chart.defaults.font.size = 14;
 
-            // 🌟 核心修改：優先從網址讀取 ?familyID=XXXXXX
             const urlParams = new URLSearchParams(window.location.search);
             let familyID = urlParams.get('familyID');
 
-            // 如果網址沒有，才回去找 localStorage (防重新整理掉紀錄)
             if (!familyID) {
                 familyID = localStorage.getItem('savedFamilyID');
             }
@@ -200,8 +198,6 @@
 
             if (familyID) {
                 document.getElementById('family-id-input').value = familyID;
-                
-                // 如果是從網址傳過來的，或是之前設定了自動監控，就直接連線啟動！
                 if (urlParams.has('familyID') || isAutoMonitorOn) {
                     localStorage.setItem('savedFamilyID', familyID); 
                     localStorage.setItem('autoMonitor', 'true');     
@@ -305,14 +301,29 @@
             const tbody = document.getElementById('log-table-body');
             tbody.innerHTML = ""; 
             
+            // 🌟 資料預處理：套用與前端相同的微小雜訊過濾器 (低於 20% 歸零)
+            let sanitizedRecords = records.map(record => {
+                let rec = { ...record };
+                let report = {};
+                try { report = typeof rec.report === 'string' ? JSON.parse(rec.report) : rec.report; } catch(e) { report = { riskScore: 0, reason: "解析失敗" }; }
+                
+                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score) || 0;
+                if (score < 20) {
+                    report.riskScore = 0;
+                    report.reason = "✅ 系統未發現明顯惡意特徵，安全放行。";
+                    if(report.scamDNA) report.scamDNA = [];
+                } else {
+                    report.riskScore = score;
+                }
+                rec.report = report;
+                return rec;
+            });
+            
             let safeCount = 0, dangerCount = 0, labels = [], scores = [];
-            let chartRecords = [...records].reverse();
+            let chartRecords = [...sanitizedRecords].reverse();
 
             chartRecords.forEach(record => {
-                let report = {};
-                try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } catch(e) {}
-                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score) || 0;
-                
+                let score = record.report.riskScore;
                 if (score >= window.CONFIG.RISK_THRESHOLD_HIGH) dangerCount++; else safeCount++;
                 labels.push(record.timestamp.split(' ')[1]);
                 scores.push(score);
@@ -322,19 +333,18 @@
             const safeEl = document.getElementById('stat-safe');
             const dangerEl = document.getElementById('stat-danger');
 
-            if (parseInt(totalEl.innerText) !== records.length) animateValue(totalEl, parseInt(totalEl.innerText), records.length, 1000);
+            if (parseInt(totalEl.innerText) !== sanitizedRecords.length) animateValue(totalEl, parseInt(totalEl.innerText), sanitizedRecords.length, 1000);
             if (parseInt(safeEl.innerText) !== safeCount) animateValue(safeEl, parseInt(safeEl.innerText), safeCount, 1000);
             if (parseInt(dangerEl.innerText) !== dangerCount) animateValue(dangerEl, parseInt(dangerEl.innerText), dangerCount, 1000);
 
             drawRatioChart(safeCount, dangerCount);
             drawTrendChart(labels, scores);
 
-            records.forEach((record, index) => {
-                let report = {};
-                try { report = typeof record.report === 'string' ? JSON.parse(record.report) : record.report; } catch(e) { report = { riskScore: 0, reason: "解析失敗" }; }
+            sanitizedRecords.forEach((record, index) => {
+                let report = record.report;
+                let score = report.riskScore;
                 
-                let score = parseInt(report.riskScore || report.RiskScore || report.risk_score) || 0;
-                let dna = report.scamDNA ? `[${report.scamDNA.join(', ')}] ` : "";
+                let dna = (report.scamDNA && report.scamDNA.length > 0) ? `[${report.scamDNA.join(', ')}] ` : "";
                 let reason = dna + (report.reason || "系統記錄此特徵");
                 
                 let riskClass = score >= window.CONFIG.RISK_THRESHOLD_HIGH ? 'risk-high' : (score >= window.CONFIG.RISK_THRESHOLD_MEDIUM ? 'risk-warn' : 'risk-safe');
