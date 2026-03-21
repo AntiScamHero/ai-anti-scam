@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>⚠️ AI 防詐盾牌 - 網頁已攔截</title>
+    <style>
+        /* 深色模式背景與排版 */
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        .alert-icon { font-size: 80px; margin-bottom: 20px; animation: pulse 1.5s infinite alternate; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.1); opacity: 1; } }
+
+        .warning-badge {
+            background-color: #FFCC00; color: #000000; padding: 15px 30px;
+            border-radius: 8px; font-size: 24px; font-weight: 900; margin-bottom: 40px;
+            box-shadow: 0 4px 15px rgba(255, 204, 0, 0.3); letter-spacing: 1px;
+        }
+
+        /* 橘色撥打電話按鈕 */
+        .call-btn {
+            background: linear-gradient(135deg, #FF9900 0%, #FF8800 100%);
+            color: #ffffff; padding: 20px 50px; border-radius: 50px;
+            font-size: 28px; font-weight: bold; border: none; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; gap: 15px;
+            box-shadow: 0 0 30px rgba(255, 153, 0, 0.6); transition: all 0.3s ease;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3); text-decoration: none; margin-bottom: 30px;
+        }
+        .call-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 0 40px rgba(255, 153, 0, 0.8); }
+
+        .action-buttons { display: flex; gap: 20px; margin-top: 20px; }
+        .btn-safe {
+            background-color: #1e8e3e; color: white; padding: 12px 30px;
+            border-radius: 6px; font-size: 18px; font-weight: bold; border: none;
+            cursor: pointer; transition: 0.2s;
+        }
+        .btn-safe:hover { background-color: #166b2e; }
+
+        .btn-danger {
+            background-color: transparent; color: #8b949e; padding: 12px 20px;
+            border-radius: 6px; font-size: 14px; border: 1px solid #30363d;
+            cursor: pointer; text-decoration: underline;
+        }
+        .btn-danger:hover { color: #ff4444; border-color: #ff4444; }
+
+        .url-display {
+            margin-top: 40px; font-family: monospace; color: #8b949e;
+            background: #161b22; padding: 10px 20px; border-radius: 6px;
+            word-break: break-all; max-width: 80%;
+        }
+        
+        #dna-box { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+        .dna-tag { background-color: #ff4444; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; font-weight: bold; }
+
+        /* 🔥 新增：自訂彈出視窗的樣式 */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); display: none; /* 預設隱藏 */
+            align-items: center; justify-content: center; z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: #222222; padding: 40px 50px; border-radius: 16px;
+            text-align: center; border: 2px solid #FF9900;
+            box-shadow: 0 10px 40px rgba(255, 153, 0, 0.3); max-width: 400px;
+        }
+        .modal-content h2 { margin-top: 0; color: #ffffff; font-size: 24px;}
+        .modal-number {
+            font-size: 48px; font-weight: bold; color: #FF9900;
+            margin: 20px 0; letter-spacing: 2px;
+            background: #111; padding: 10px 20px; border-radius: 8px;
+            user-select: all; /* 允許長輩反白複製號碼 */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="alert-icon">🛑</div>
+    <div class="warning-badge" id="reason-box">偵測到危險特徵，已強制攔截！</div>
+    <div id="dna-box"></div>
+    
+    <a href="tel:165" class="call-btn" id="call-btn">
+        📞 撥打 165 反詐騙專線
+    </a>
+
+    <div class="action-buttons">
+        <button class="btn-safe" id="manual-leave-btn">離開此網頁 (安全)</button>
+    </div>
+
+    <button class="btn-danger" id="bypass-btn" style="margin-top: 20px;">強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button>
+    <button class="btn-danger" id="report-false-btn" style="margin-top: 10px; border: none;">這不是詐騙，回報誤判</button>
+
+    <div class="url-display">攔截網址：<span id="target-url">載入中...</span></div>
+
+    <div id="desktop-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>📱 請使用您的手機撥打</h2>
+            <div class="modal-number" id="modal-phone-number">165</div>
+            <p style="color: #cccccc; font-size: 16px; margin-bottom: 30px;">
+                為確保安全，請直接拿起您的手機，輸入上方號碼與家人或 165 確認。
+            </p>
+            <button class="btn-safe" id="close-modal-btn" style="width: 100%;">我知道了</button>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="blocked.js"></script>
+</body>
+</html>

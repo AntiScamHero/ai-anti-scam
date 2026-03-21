@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>歡迎使用 AI 防詐盾牌</title>
+    <style>
+        body {
+            margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0d1117; color: #c9d1d9; display: flex; justify-content: center; align-items: center; min-height: 100vh;
+        }
+        .container {
+            max-width: 800px; background: #161b22; padding: 40px; border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #30363d; text-align: center;
+        }
+        .header-icon { font-size: 60px; margin-bottom: 10px; animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        h1 { color: #58a6ff; font-size: 32px; letter-spacing: 2px; margin-bottom: 10px; }
+        p.subtitle { color: #8b949e; font-size: 18px; margin-bottom: 40px; }
+        
+        .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: left; }
+        .step-card { background: #21262d; padding: 25px; border-radius: 10px; border: 1px solid #30363d; transition: 0.3s; }
+        .step-card:hover { border-color: #58a6ff; transform: translateY(-5px); }
+        .step-num { display: inline-block; background: #58a6ff; color: #0d1117; width: 30px; height: 30px; text-align: center; line-height: 30px; border-radius: 50%; font-weight: bold; margin-bottom: 15px; }
+        .step-card h3 { color: #c9d1d9; margin: 0 0 10px 0; font-size: 18px; }
+        .step-card p { color: #8b949e; font-size: 14px; line-height: 1.6; margin: 0; }
+        
+        .cta-btn {
+            display: inline-block; margin-top: 40px; padding: 12px 30px; background: #238636; color: white;
+            text-decoration: none; font-size: 18px; font-weight: bold; border-radius: 8px; transition: 0.3s;
+        }
+        .cta-btn:hover { background: #2ea043; transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header-icon">🛡️</div>
+        <h1>安裝成功！歡迎加入 AI 防護網</h1>
+        <p class="subtitle">您的瀏覽器現在已受到軍規級 AI 大腦的保護。</p>
+
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-num">1</div>
+                <h3>綁定家庭群組</h3>
+                <p>點擊瀏覽器右上角的「拼圖圖示」打開盾牌選單。請輸入子女為您建立的「邀請碼」，即可啟動雲端連線與 LINE 警報功能。</p>
+            </div>
+            
+            <div class="step-card">
+                <div class="step-num">2</div>
+                <h3>文字狙擊鏡</h3>
+                <p>在網頁上看到「保證獲利、加賴領取」等可疑文字時，將其反白並點擊「滑鼠右鍵」，交給 AI 為您拆解詐騙話術。</p>
+            </div>
+            
+            <div class="step-card">
+                <div class="step-num">3</div>
+                <h3>視覺透視眼</h3>
+                <p>遇到不明的對帳單截圖、中獎畫面或 QR Code，直接對著圖片點擊「滑鼠右鍵」，AI 視覺神經將為您看透真相。</p>
+            </div>
+        </div>
+
+        <a href="https://www.google.com" class="cta-btn">我了解了，開始安全上網</a>
+    </div>
+
+</body>
+</html>

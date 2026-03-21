@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "AI 防詐盾牌",
+  "version": "3.1",
+  "description": "具備全網攔截、視覺分析、主動語音警報與深色模式支援的 AI 資安助手。",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "notifications",
+    "storage",
+    "scripting",
+    "contextMenus",
+    "tts",
+    "clipboardRead"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "blocked.html",
+        "config.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "config.js",
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
