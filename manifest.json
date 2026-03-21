@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI 防詐盾牌",
-  "version": "3.0",
+  "version": "3.1",
   "description": "具備全網攔截、視覺分析、主動語音警報與深色模式支援的 AI 資安助手。",
   "permissions": [
     "activeTab",
@@ -10,7 +10,8 @@
     "storage",
     "scripting",
     "contextMenus",
-    "tts"
+    "tts",
+    "clipboardRead"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",

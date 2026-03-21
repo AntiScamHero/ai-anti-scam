@@ -1,22 +1,34 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (完整極速安全防護版 - 完全展開版)
+ * AI 防詐盾牌 - 核心控制邏輯 (完整展開版 + 人性化視覺回饋)
  */
 
 let currentUserID = "";
 let currentFamilyID = "none";
 let pollingInterval = null;
 
-// 🟢 友善長輩：一打開介面自動讀取剪貼簿的邀請碼
+// 🟢 人性化友善長輩：一打開介面自動讀取剪貼簿的邀請碼，並給予強烈視覺提示
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const text = await navigator.clipboard.readText();
         const match = text.match(/aishield:([A-Z0-9]{6})/i);
         if (match && match[1]) {
             const inviteInput = document.getElementById('invite_input');
+            const btnJoin = document.getElementById('btn_join_family');
+            
+            // 只有在「尚未綁定」(輸入框還在) 的情況下，才觸發視覺魔法
             if (inviteInput && inviteInput.style.display !== 'none') {
                 inviteInput.value = match[1].toUpperCase();
-                inviteInput.style.backgroundColor = '#e8f0fe';
-                setTimeout(() => { inviteInput.style.backgroundColor = ''; }, 1000);
+                // 加上明顯的視覺變化
+                inviteInput.style.border = "2px solid #1a73e8";
+                inviteInput.style.backgroundColor = "#e8f0fe";
+                
+                if (btnJoin) {
+                    btnJoin.innerText = "🚀 發現代碼！點我立即綁定";
+                    btnJoin.style.background = "linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%)";
+                    btnJoin.style.color = "white";
+                    btnJoin.style.fontWeight = "bold";
+                    btnJoin.style.boxShadow = "0 4px 15px rgba(26, 115, 232, 0.5)";
+                }
             }
         }
     } catch (e) {
