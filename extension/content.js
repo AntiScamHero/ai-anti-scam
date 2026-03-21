@@ -1,28 +1,24 @@
 /**
  * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版)
- * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制
+ * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 動態防禦
  */
 
 // ==========================================
 // 🚀 競賽級優化：多層次快取防線 (Multi-layer Cache Defense)
 // ==========================================
-// 目的：避免重複掃描相同的網頁內容，極大化節省 CPU 資源與後端 API 成本。
 const scannedCache = new Set();
 
-// 高效字串雜湊函數 (DJB2 演算法變體)
 function hashString(str) {
     let hash = 5381;
     for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) + hash) + str.charCodeAt(i); /* hash * 33 + c */
+        hash = ((hash << 5) + hash) + str.charCodeAt(i);
     }
-    return hash.toString(16); // 轉為 16 進位字串節省記憶體
+    return hash.toString(16);
 }
 
-// 🟢 新增：智慧型高風險段落萃取 (防止惡意文字藏在長網頁最下方被截斷)
 function extractHighRiskText(text, maxLength = 4000) {
     if (text.length <= maxLength) return text;
     
-    // 尋找高風險特徵詞的索引位置
     const riskKeywords = ["保證獲利", "加賴", "飆股", "解凍", "中獎", "登入", "身分證", "帳號", "密碼"];
     let snippets = [];
     let lastIndex = 0;
@@ -30,7 +26,6 @@ function extractHighRiskText(text, maxLength = 4000) {
     for (let kw of riskKeywords) {
         let idx = text.indexOf(kw, lastIndex);
         if (idx !== -1) {
-            // 抓取關鍵字前後 250 字元的上下文
             let start = Math.max(0, idx - 250);
             let end = Math.min(text.length, idx + 250);
             snippets.push(text.substring(start, end));
@@ -39,11 +34,10 @@ function extractHighRiskText(text, maxLength = 4000) {
     }
 
     let finalStr = snippets.join("\n...\n");
-    // 如果都沒關鍵字，就回傳頭尾段落
     if (finalStr.length === 0) {
         return text.substring(0, 2000) + "\n...\n" + text.substring(text.length - 2000);
     }
-    return finalStr.substring(0, maxLength); // 最終防護截斷
+    return finalStr.substring(0, maxLength);
 }
 
 // ==========================================
@@ -58,7 +52,6 @@ class BehaviorAnalyzer {
                     if (node.nodeType === 1) { 
                         const text = node.innerText || '';
                         const style = window.getComputedStyle(node);
-                        // 攔截試圖用浮動視窗強制索取個資的惡意行為
                         if ((style.position === 'fixed' || style.position === 'absolute') && 
                             (text.includes('信用卡') || text.includes('身分證字號') || text.includes('銀行帳號'))) {
                             triggerSafeBlock("惡意行為：網頁試圖強制索取機密個資");
@@ -76,7 +69,6 @@ class BehaviorAnalyzer {
 // ==========================================
 const badDomains = ["testsafebrowsing.appspot.com", "fake-scam-delivery.com", "win-free-iphone-now.net", "lucky-verify-login.net"];
 
-// 連結掃描器：針對已知惡意網域進行本地端光速攔截
 const linkObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -93,12 +85,10 @@ const linkObserver = new IntersectionObserver((entries, observer) => {
     });
 });
 
-// 圖片掃描器：結合後端 Vision AI 進行多模態偵測
 const imageObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
             const img = entry.target;
-            // 排除過小的 icon 或 data URI 圖片，節省資源
             if (img.src && !img.src.startsWith('data:') && img.width > 50 && img.height > 50) {
                 try {
                     chrome.runtime.sendMessage({ action: "scanImageInBackground", imageUrl: img.src, pageUrl: window.location.href });
@@ -126,7 +116,6 @@ function observeElements() {
 const scamKeywords = ["保證獲利", "加賴領取", "穩賺不賠", "飆股", "破解程式", "名額有限", "內部消息", "無風險投資", "斷手斷腳", "不准報警"];
 let hasTriggeredBlock = false; 
 
-// 本地端極速個資脫敏 (Edge Computing 概念展示)
 function maskSensitiveData(text) {
     if (!text) return "";
     return text
@@ -136,15 +125,12 @@ function maskSensitiveData(text) {
         .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
 }
 
-// 觸發安全攔截屏障
 function triggerSafeBlock(reason) {
     if (hasTriggeredBlock) return;
-    // 檢查是否有臨時白名單 (免死金牌)
     if (sessionStorage.getItem('temp_whitelist_' + window.location.href)) return;
 
     hasTriggeredBlock = true;
     
-    // 建立全螢幕紅色阻擋遮罩
     const shield = document.createElement('div');
     shield.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:#ff2a2a; color:white; display:flex; align-items:center; justify-content:center; font-size:45px; font-weight:bold; z-index:2147483647; font-family:sans-serif;";
     shield.innerText = "🚨 詐騙威脅攔截中...";
@@ -152,15 +138,11 @@ function triggerSafeBlock(reason) {
     if (document.body) document.body.style.display = 'none'; 
 
     try {
-        // 通知 Background.js 進行跳轉與記錄
         chrome.runtime.sendMessage({ action: "triggerBlock", reason: reason });
-        
-        // 雙重保險：如果背景程式 1 秒後沒反應，前端自己強制跳轉
         setTimeout(() => {
             window.location.replace(chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reason) + "&original_url=" + encodeURIComponent(window.location.href));
         }, 1000);
     } catch (error) {
-        // 容錯機制：若無法通訊，本地強制跳轉至警告頁面
         try {
             window.location.replace(chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reason) + "&original_url=" + encodeURIComponent(window.location.href));
         } catch (e) {
@@ -169,31 +151,26 @@ function triggerSafeBlock(reason) {
     }
 }
 
-// 核心掃描器 (已加入效能優化與 iframe 掃描)
 function scanScamWords() {
     if (hasTriggeredBlock) return;
     const textContent = document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
     
-    // 🟢 抓取 Iframe 中的 src 進行檢查 (防止跨域隱藏)
     let iframeUrls = Array.from(document.querySelectorAll('iframe')).map(f => f.src).filter(src => src);
     let iframeText = iframeUrls.length > 0 ? `\n[隱藏的Iframe網址]: ${iframeUrls.join(', ')}` : "";
 
     const cleanText = textContent.trim();
     
-    // 效能優化 1：過濾極短無意義文本
     if (cleanText.length < 50 && iframeUrls.length === 0) {
         observeElements(); 
         return;
     }
 
-    // 效能優化 2：Hash 快取比對
     const textHash = hashString(cleanText);
     if (scannedCache.has(textHash)) {
         observeElements();
         return; 
     }
     
-    // 將新內容加入快取
     scannedCache.add(textHash);
     
     if (scannedCache.size > 50) {
@@ -201,21 +178,16 @@ function scanScamWords() {
         for (let i = 0; i < 25; i++) scannedCache.delete(cacheIterator.next().value);
     }
 
-    // 🟢 套用智慧型萃取，防止截斷
     const smartText = extractHighRiskText(cleanText) + iframeText;
-    
-    // 進行本地個資脫敏
     const safeText = maskSensitiveData(smartText); 
 
-    // 關鍵字速查防線
     for (let keyword of scamKeywords) {
         if (safeText.includes(keyword)) {
             triggerSafeBlock(`偵測到危險字彙：${keyword}`);
-            return; // 觸發攔截後直接中斷後續操作
+            return; 
         }
     }
     
-    // 啟動 DOM 觀察者
     observeElements(); 
 }
 
@@ -225,25 +197,21 @@ function scanScamWords() {
 let scanCount = 0;
 let lastActivityTime = Date.now();
 
-// 監測使用者活動
 document.addEventListener('mousemove', () => { lastActivityTime = Date.now(); }, { passive: true });
 document.addEventListener('keydown', () => { lastActivityTime = Date.now(); }, { passive: true });
 
 function scheduleIdleScan() {
-    // 效能優化 3：閒置休眠模式 (超過設定時間無操作即暫停掃描)
     if (Date.now() - lastActivityTime > (window.CONFIG?.INACTIVITY_TIMEOUT_MS || 300000)) {
         setTimeout(scheduleIdleScan, 5000); 
         return;
     }
     
-    // 效能優化 4：API 頻率限制 (Rate Limiting)
     if (scanCount >= (window.CONFIG?.MAX_SCANS_PER_MINUTE || 10)) {
         setTimeout(() => { scanCount = 0; scheduleIdleScan(); }, 60000);
         return;
     }
     scanCount++;
 
-    // 效能優化 5：利用 requestIdleCallback 讓出主執行緒，確保網頁捲動不卡頓
     if (window.requestIdleCallback) {
         requestIdleCallback(() => { 
             scanScamWords(); 
@@ -258,21 +226,71 @@ function scheduleIdleScan() {
 }
 
 // ==========================================
+// 🛡️ 升級功能 1：動態 DOM 變化監測 (防繞過)
+// ==========================================
+let lastDynamicScanTime = Date.now();
+const dynamicObserver = new MutationObserver((mutations) => {
+    if (Date.now() - lastDynamicScanTime < 5000) return; 
+    
+    let significantChange = false;
+    mutations.forEach((mutation) => {
+        if (mutation.addedNodes.length > 0 && mutation.target.innerText && mutation.target.innerText.length > 100) {
+            significantChange = true;
+        }
+    });
+
+    if (significantChange) {
+        lastDynamicScanTime = Date.now();
+        console.log("🛡️ AI 防詐盾牌：偵測到網頁內容大幅改變，啟動二次掃描...");
+        scanScamWords(); 
+    }
+});
+
+// ==========================================
+// 🃏 升級功能 2：反制模式 - 一鍵注入幽默假資料
+// ==========================================
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "inject_fake_data") {
+        const inputs = document.querySelectorAll('input[type="text"], input[type="tel"], input[type="email"]');
+        let injectedCount = 0;
+        
+        inputs.forEach(input => {
+            const name = input.name ? input.name.toLowerCase() : '';
+            const placeholder = input.placeholder ? input.placeholder.toLowerCase() : '';
+            
+            if (name.includes('name') || placeholder.includes('姓名')) {
+                input.value = "王大明 (防詐測試員)";
+                injectedCount++;
+            } else if (name.includes('phone') || name.includes('tel') || placeholder.includes('電話') || placeholder.includes('手機')) {
+                input.value = "0987987987"; 
+                injectedCount++;
+            } else if (name.includes('email') || placeholder.includes('信箱')) {
+                input.value = "scammer_hunter@police.gov.tw";
+                injectedCount++;
+            }
+        });
+        
+        alert(`🛡️ 已成功為您注入 ${injectedCount} 筆反制假資料！`);
+        sendResponse({status: "success"});
+    }
+});
+
+// ==========================================
 // 🛡️ 啟動邏輯：系統判定與免死金牌
 // ==========================================
 if (window.self === window.top) {
-    // 判斷是否為系統自家的安全頁面
     const isSystemPage = window.location.protocol === 'chrome-extension:' ||
                          window.location.href.includes('dashboard.html') ||
                          window.location.href.includes('blocked.html') ||
+                         window.location.href.includes('simulator.html') || // 🟢 新增：給演練戰情室免死金牌
                          window.location.hostname === 'localhost' ||
                          window.location.hostname === '127.0.0.1';
 
-    // 只有在「不是」系統頁面的時候，才啟動自動掃描機制
     if (!isSystemPage) {
         new BehaviorAnalyzer(); 
+        if (document.body) dynamicObserver.observe(document.body, { childList: true, subtree: true });
         scheduleIdleScan();
-        console.log("🛡️ AI 防詐盾牌：防護系統已上線 (啟用多層快取防禦)");
+        console.log("🛡️ AI 防詐盾牌：防護系統已上線 (啟用多層快取與動態防禦)");
     } else {
         console.log("🛡️ AI 防詐盾牌：已偵測到友軍系統頁面 (戰情室)，已關閉自動掃描以防誤傷！");
     }

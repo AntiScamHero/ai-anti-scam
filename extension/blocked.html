@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>⚠️ AI 防詐盾牌 - 網頁已攔截</title>
     <style>
-        /* 深色模式背景與排版 */
         body {
             background-color: #121212;
             color: #ffffff;
@@ -13,9 +12,11 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         .alert-icon { font-size: 80px; margin-bottom: 20px; animation: pulse 1.5s infinite alternate; }
@@ -23,22 +24,21 @@
 
         .warning-badge {
             background-color: #FFCC00; color: #000000; padding: 15px 30px;
-            border-radius: 8px; font-size: 24px; font-weight: 900; margin-bottom: 40px;
+            border-radius: 8px; font-size: 24px; font-weight: 900; margin-bottom: 20px;
             box-shadow: 0 4px 15px rgba(255, 204, 0, 0.3); letter-spacing: 1px;
         }
 
-        /* 橘色撥打電話按鈕 */
         .call-btn {
             background: linear-gradient(135deg, #FF9900 0%, #FF8800 100%);
-            color: #ffffff; padding: 20px 50px; border-radius: 50px;
-            font-size: 28px; font-weight: bold; border: none; cursor: pointer;
+            color: #ffffff; padding: 15px 40px; border-radius: 50px;
+            font-size: 24px; font-weight: bold; border: none; cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center; gap: 15px;
             box-shadow: 0 0 30px rgba(255, 153, 0, 0.6); transition: all 0.3s ease;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.3); text-decoration: none; margin-bottom: 30px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3); text-decoration: none; margin-bottom: 20px;
         }
         .call-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 0 40px rgba(255, 153, 0, 0.8); }
 
-        .action-buttons { display: flex; gap: 20px; margin-top: 20px; }
+        .action-buttons { display: flex; gap: 20px; margin-top: 10px; }
         .btn-safe {
             background-color: #1e8e3e; color: white; padding: 12px 30px;
             border-radius: 6px; font-size: 18px; font-weight: bold; border: none;
@@ -54,7 +54,7 @@
         .btn-danger:hover { color: #ff4444; border-color: #ff4444; }
 
         .url-display {
-            margin-top: 40px; font-family: monospace; color: #8b949e;
+            margin-top: 30px; font-family: monospace; color: #8b949e;
             background: #161b22; padding: 10px 20px; border-radius: 6px;
             word-break: break-all; max-width: 80%;
         }
@@ -62,10 +62,9 @@
         #dna-box { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
         .dna-tag { background-color: #ff4444; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; font-weight: bold; }
 
-        /* 🔥 新增：自訂彈出視窗的樣式 */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.85); display: none; /* 預設隱藏 */
+            background: rgba(0, 0, 0, 0.85); display: none;
             align-items: center; justify-content: center; z-index: 1000;
             backdrop-filter: blur(5px);
         }
@@ -79,7 +78,24 @@
             font-size: 48px; font-weight: bold; color: #FF9900;
             margin: 20px 0; letter-spacing: 2px;
             background: #111; padding: 10px 20px; border-radius: 8px;
-            user-select: all; /* 允許長輩反白複製號碼 */
+            user-select: all; 
+        }
+
+        #cooldown-box {
+            margin-top: 20px; padding: 20px; background: #2c2c2c; 
+            border-radius: 10px; color: #ffcc00; text-align: left; 
+            border: 1px solid #555; max-width: 500px; width: 90%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        #cooldown-box label {
+            display: block; margin-bottom: 15px; cursor: pointer; font-size: 16px; color: #ddd;
+        }
+        
+        @keyframes flash { 0% { border-color: #ffc107; box-shadow: 0 0 10px #ffc107; } 50% { border-color: #ff4444; box-shadow: 0 0 20px #ff4444; } 100% { border-color: #ffc107; box-shadow: 0 0 10px #ffc107; } }
+        #family-broadcast {
+            display: none; margin-top: 20px; padding: 20px; background: #ffeeba; 
+            border: 3px solid #ffc107; border-radius: 10px; animation: flash 1s infinite;
+            max-width: 500px; width: 90%;
         }
     </style>
 </head>
@@ -89,9 +105,24 @@
     <div class="warning-badge" id="reason-box">偵測到危險特徵，已強制攔截！</div>
     <div id="dna-box"></div>
     
+    <div id="family-broadcast">
+        <h2 style="color: #d32f2f; margin: 0; margin-bottom: 10px;">👨‍👩‍👧 來自家人的緊急通知！</h2>
+        <p id="broadcast-message" style="font-size: 1.2em; font-weight: bold; color: #333; margin: 0;">「馬上停止動作！我現在打給你！」</p>
+    </div>
+
     <a href="tel:165" class="call-btn" id="call-btn">
         📞 撥打 165 反詐騙專線
     </a>
+
+    <div id="cooldown-box">
+        <h3 style="margin-top: 0; color: #ffcc00;">🛑 點擊離開前，請先回想一下：</h3>
+        <label><input type="checkbox" class="soul-question"> 對方是否承諾您「保證獲利」或「穩賺不賠」？</label>
+        <label><input type="checkbox" class="soul-question"> 是否要求您將資金轉入「個人帳戶」而非公司專戶？</label>
+        <label><input type="checkbox" class="soul-question"> 是否教您在銀行匯款時，對行員說謊（如裝潢款、借親友）？</label>
+        <button id="wake-up-btn" style="margin-top: 15px; width: 100%; padding: 12px; background: #dc3545; color: white; border: none; border-radius: 5px; display: none; font-size: 16px; font-weight: bold; cursor: pointer;">
+            我明白了，這是詐騙，立即關閉網頁
+        </button>
+    </div>
 
     <div class="action-buttons">
         <button class="btn-safe" id="manual-leave-btn">離開此網頁 (安全)</button>
@@ -114,6 +145,7 @@
     </div>
 
     <script src="config.js"></script>
+    <script src="socket.io.min.js"></script>
     <script src="blocked.js"></script>
 </body>
 </html>

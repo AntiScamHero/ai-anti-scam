@@ -17,6 +17,7 @@
             --safe-green: #00C851;
             --danger-red: #FF4444;
             --brand-blue: #33b5e5;
+            --sim-purple: #9933cc;
         }
 
         body { margin: 0; padding: 25px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-dark); color: var(--text-main); }
@@ -39,6 +40,20 @@
         .btn-manual { background: var(--border-color); color: white; }
         .btn-manual:hover { background: #4b5563; }
         button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* 新增：演練戰情室按鈕樣式 */
+        .btn-simulator {
+            background: linear-gradient(135deg, #aa66cc 0%, #9933cc 100%);
+            color: white; text-decoration: none; padding: 12px 25px;
+            border-radius: 8px; font-size: 18px; font-weight: bold;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            box-shadow: 0 0 15px rgba(153, 51, 204, 0.3); transition: all 0.3s ease;
+            letter-spacing: 1px;
+        }
+        .btn-simulator:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 0 25px rgba(153, 51, 204, 0.7);
+        }
 
         .status-badge { padding: 12px 20px; border-radius: 30px; font-size: 16px; font-weight: 900; background: var(--border-color); color: var(--text-sub); transition: 0.3s; display: flex; align-items: center; gap: 10px; }
         .status-connected { background: rgba(0, 200, 81, 0.15); color: var(--safe-green); border: 2px solid var(--safe-green); box-shadow: 0 0 20px rgba(0, 200, 81, 0.3); }
@@ -93,7 +108,9 @@
         
         <div style="flex-grow: 1;"></div>
         
-        <div id="connection-status" class="status-badge">🔴 尚未連線 / 閒置中</div>
+        <a href="simulator.html" target="_blank" class="btn-simulator">🎮 防詐實戰演練</a>
+        
+        <div id="connection-status" class="status-badge" style="margin-left: 15px;">🔴 尚未連線 / 閒置中</div>
     </div>
 
     <div id="emergency-banner">

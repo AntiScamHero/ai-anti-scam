@@ -57,21 +57,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
         if (isMobile) {
-            // 手機版：保留 tel 連結，直接用手機打
             callBtn.href = `tel:${number}`;
-            callBtn.onclick = null; // 清除點擊事件
+            callBtn.onclick = null; 
         } else {
-            // 電腦版：移除 href，改為觸發我們的自訂彈出視窗
             callBtn.removeAttribute('href');
             callBtn.onclick = (e) => {
-                e.preventDefault(); // 阻止任何預設跳轉
-                modalPhoneNumber.innerText = number; // 把號碼塞進視窗裡
-                desktopModal.style.display = 'flex'; // 顯示視窗
+                e.preventDefault(); 
+                modalPhoneNumber.innerText = number; 
+                desktopModal.style.display = 'flex'; 
             };
         }
     }
 
-    // 4. 【核心功能】：跨世代語音守護
+    // 取得聯絡資訊
     try {
         const storage = await chrome.storage.local.get(['familyID']);
         const familyID = storage.familyID || 'none';
@@ -94,7 +92,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         setupCallAction("165", "📞 撥打 165 反詐騙專線");
     }
 
-    // 5. 安全離開邏輯
+    // 安全離開邏輯
     const leaveBtn = document.getElementById('manual-leave-btn');
     if (leaveBtn) {
         leaveBtn.addEventListener('click', () => {
@@ -102,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // 6. 30 秒強制冷靜期
+    // 強制冷靜期
     const bypassBtn = document.getElementById('bypass-btn');
     if (bypassBtn) {
         bypassBtn.disabled = true;
@@ -132,7 +130,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     }
 
-    // 7. 誤判回報邏輯
+    // 誤判回報邏輯
     const reportBtn = document.getElementById('report-false-btn');
     if (reportBtn) {
         reportBtn.addEventListener('click', async (e) => {
@@ -152,4 +150,44 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
     }
+
+    // 🧠 新增：靈魂拷問邏輯
+    const checkboxes = document.querySelectorAll('.soul-question');
+    const wakeUpBtn = document.getElementById('wake-up-btn');
+    
+    if (checkboxes.length > 0 && wakeUpBtn) {
+        checkboxes.forEach(box => {
+            box.addEventListener('change', () => {
+                const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+                wakeUpBtn.style.display = anyChecked ? 'block' : 'none';
+            });
+        });
+
+        wakeUpBtn.addEventListener('click', () => {
+            window.close();
+        });
+    }
+
+    // 📡 新增：WebSocket 接收家人推播
+    chrome.storage.local.get(['familyID'], function(result) {
+        const familyID = result.familyID || 'none';
+        if (familyID !== 'none' && typeof io !== 'undefined') {
+            try {
+                const socketUrl = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE_URL) ? CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+                const socket = io(socketUrl);
+                socket.emit('join_family_room', { familyID: familyID });
+                
+                socket.on('family_urgent_broadcast', (data) => {
+                    const broadcastEl = document.getElementById('family-broadcast');
+                    const msgEl = document.getElementById('broadcast-message');
+                    if (broadcastEl && msgEl) {
+                        broadcastEl.style.display = 'block';
+                        msgEl.innerText = `「${data.message}」`;
+                        const audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+                        audio.play().catch(e => console.log("音效播放被瀏覽器阻擋", e));
+                    }
+                });
+            } catch(e) { console.error("WebSocket 連線失敗", e); }
+        }
+    });
 });

@@ -11,33 +11,29 @@ import random
 import string
 import threading
 import re
-import warnings  # 🟢 引入警告控制模組
+import warnings  
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
-# 🛑 隱藏 Python 3.14 與 LINE SDK 產生的 Pydantic V1 相容性警告
 warnings.filterwarnings("ignore", message=".*Pydantic V1.*")
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
-
-# 🟢 引入 Flask-Limiter 防護惡意刷爆 API
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 import firebase_admin
 from firebase_admin import credentials, db 
 
-# 🟢 LINE Bot v3 新版 SDK 引入
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, PushMessageRequest, TextMessage
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
-# 導入資安與 AI 模組
 from security import mask_sensitive_data, is_genuine_white_listed, check_165_blacklist, TRUSTED_DOMAINS
 from ai_service import analyze_risk_with_ai
+from openai import AzureOpenAI
 
 os.environ["PYTHONUTF8"] = "1"
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -52,7 +48,6 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# 👑 啟動 API 限流器 (Rate Limiter)，使用輕量級記憶體儲存
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -60,19 +55,16 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# 👑 初始化 WebSocket
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 def get_tw_time():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
 
-# 🟢 LINE Bot v3 初始化設定
 configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 LINE_USER_ID = os.getenv("LINE_USER_ID")
 
-# Firebase 初始化
-KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "/etc/secrets/serviceAccountKey.json")
+KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "serviceAccountKey.json")
 firebase_initialized = False
 try:
     if os.path.exists(KEY_PATH) and not firebase_admin._apps:
@@ -84,8 +76,6 @@ try:
 except Exception as e:
     print(f"⚠️ Firebase 啟動失敗：{repr(e)}", flush=True)
 
-
-# 🌟 【第三階段核心】：AI 心理防詐關心語錄生成器
 def get_dynamic_advice(scam_dna_list):
     dna_str = ",".join(scam_dna_list) if isinstance(scam_dna_list, list) else str(scam_dna_list)
     
@@ -102,7 +92,6 @@ def get_dynamic_advice(scam_dna_list):
     else:
         return "『剛剛上網有沒有遇到什麼奇怪的畫面，或是要求輸入密碼的網頁呀？』"
 
-# 👑 LINE 動態守護者推播 (升級版)
 def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=None):
     if not firebase_initialized or family_id == 'none': 
         return
@@ -122,7 +111,6 @@ def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=Non
                 target_line_id = user_node.get('line_id')
         
         if target_line_id:
-            # 💖 情感升級：溫柔介入與心理陪伴指南
             dna_tags = "、".join(scam_dna)
             care_message = get_dynamic_advice(scam_dna)
             
@@ -138,7 +126,6 @@ def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=Non
                 f"🔗 攔截網址：{url[:40]}..."
             )
             
-            # 🟢 使用 v3 推播寫法
             with ApiClient(configuration) as api_client:
                 line_bot_api = MessagingApi(api_client)
                 line_bot_api.push_message(
@@ -150,7 +137,6 @@ def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=Non
     except Exception as e:
         print(f"LINE 動態推播失敗: {e}", flush=True)
 
-
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({
@@ -159,7 +145,6 @@ def health_check():
         "time": get_tw_time()
     })
 
-# 🟢 對核心掃描端點加上嚴格的獨立頻率限制 (每分鐘最多 15 次)
 @app.route('/scan', methods=['POST'])
 @limiter.limit("15 per minute")
 def scan_url():
@@ -184,14 +169,12 @@ def scan_url():
     web_text = mask_sensitive_data(raw_text)
     is_white_listed = is_genuine_white_listed(target_url)
 
-    # 🛡️ 防線 1：官方信任網域
     if is_white_listed and not is_urgent:
         return jsonify({
             "riskScore": 0, "riskLevel": "安全無虞", "scamDNA": ["無"], "reason": "官方信任網域", 
             "advice": "正常存取即可", "masked_text": web_text
         })
 
-    # 🛡️ 防線 2：子網域釣魚與 165 黑名單攔截
     check_list = [target_url]
     if "http" in raw_text.lower() or "www." in raw_text.lower() or ".net" in raw_text.lower() or ".com" in raw_text.lower():
         extracted_urls = re.findall(r'(?:https?://|www\.)[^\s]+', raw_text)
@@ -218,7 +201,6 @@ def scan_url():
             except: 
                 pass
 
-    # 🛡️ 防線 3：啟發式規避特徵掃描
     evasion_patterns = [
         (r'在我車上|綁架|斷手斷腳|不准報警|不准報案', '暴力威脅與綁架勒索', '恐懼訴求'),
         (r'中[•\.\-\*\_\s]+獎|中[•\.\-\*\_\s]+奖', '特殊符號切割規避', '規避查緝'),
@@ -233,7 +215,6 @@ def scan_url():
             report_dict = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": [dna_tag], "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
-    # ⚡ 快取檢查
     safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:120] if target_url else "no_url"
     if firebase_initialized and target_url and not image_url and not is_urgent and not is_white_listed:
         try:
@@ -244,7 +225,6 @@ def scan_url():
         except: 
             pass
 
-    # 緊急強制通報
     if is_urgent:
         def handle_urgent():
             with app.app_context(): 
@@ -259,7 +239,6 @@ def scan_url():
         socketio.start_background_task(handle_urgent) 
         return jsonify({"status": "success"})
 
-    # 🛡️ 防線 4：呼叫 AI 模組
     jailbreak_keywords = ['忽略', 'ignore', 'instruction', 'system prompt', '繞過', 'bypass', '系統指示']
     is_jailbreak_attempt = any(k in raw_text.lower() for k in jailbreak_keywords)
 
@@ -295,9 +274,6 @@ def scan_url():
 
     return jsonify({**report_dict, "report": report_str, "masked_text": web_text})
 
-# ==========================================
-# WebSocket 房間管理
-# ==========================================
 @socketio.on('join_family_room')
 def handle_join_family_room(data):
     family_id = data.get('familyID')
@@ -305,9 +281,6 @@ def handle_join_family_room(data):
         join_room(family_id)
         print(f"💻 戰情室已連線並加入房間: {family_id}", flush=True)
 
-# ==========================================
-# 🟢 LINE Bot 戰情室邏輯
-# ==========================================
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers.get('X-Line-Signature', '')
@@ -354,9 +327,77 @@ def handle_message(event):
         except Exception as e: 
             print(f"LINE Bot 處理錯誤: {e}", flush=True)
 
+@app.route('/api/send_family_broadcast', methods=['POST'])
+def send_family_broadcast():
+    data = request.json
+    family_id = data.get('familyID')
+    message = data.get('message', '親友提醒：請暫停一切動作，確認網頁安全！')
+    
+    if not family_id or family_id == 'none':
+        return jsonify({"status": "error", "message": "無效的家庭 ID"}), 400
+        
+    socketio.emit('family_urgent_broadcast', {'message': message}, room=family_id)
+    return jsonify({"status": "success", "message": "已成功發送親情廣播！"})
+
 # ==========================================
-# 👨‍👩‍👧 完整家庭與紀錄 API
+# 🧠 戰情室專用 2：防詐沉浸式模擬器 (真正的 Azure AI 連線版)
 # ==========================================
+@app.route('/api/simulate_scam', methods=['POST'])
+def simulate_scam():
+    data = request.json or {}
+    user_message = data.get('message', '')
+    chat_history = data.get('history', []) 
+    scenario_type = data.get('scenario', 'investment')
+    
+    api_key = os.getenv("AZURE_API_KEY")
+    endpoint = os.getenv("AZURE_ENDPOINT")
+    model_name = os.getenv("AZURE_MODEL_NAME", "model-router")
+    
+    if not api_key or not endpoint:
+        return jsonify({"reply": "系統錯誤：尚未設定 AI 金鑰，無法啟動模擬。"})
+
+    try:
+        client = AzureOpenAI(
+            api_key=api_key,
+            api_version="2024-12-01-preview", 
+            azure_endpoint=endpoint
+        )
+        
+        # 🎭 精簡版：定義多種詐騙情境劇本，減少 Token 消耗
+        scenarios = {
+            'investment': "扮演假投顧助理，推銷李蜀芳老師飆股，要求匯款12.8萬。若對方拒絕3次，回覆：【演練成功】並結束。",
+            'ecommerce': "扮演假網購客服，稱訂單設成連續扣款，引導操作ATM解除。若對方拒絕操作ATM，回覆：【演練成功】並結束。",
+            'romance': "扮演跨國軍醫，稱高價包裹卡在海關，要求代墊保證金。若對方點破沒見面談錢是詐騙，回覆：【演練成功】並結束。"
+        }
+
+        system_prompt = scenarios.get(scenario_type, scenarios['investment'])
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # 限制歷史對話長度，避免把 Token 額度吃光 (只取最後 6 句)
+        recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
+        for msg in recent_history:
+            messages.append({"role": msg['role'], "content": msg['content']})
+            
+        messages.append({"role": "user", "content": user_message})
+
+        # 🎯 終極解法：移除 max_tokens 參數，讓 Azure 使用預設值
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            temperature=0.7
+        )
+        
+        ai_reply = response.choices[0].message.content
+        
+        if not ai_reply:
+            finish_reason = response.choices[0].finish_reason
+            ai_reply = f"⚠️ 系統提示：Azure AI 連線成功，但伺服器回傳了空白訊息。（內部狀態碼：{finish_reason}）"
+
+        return jsonify({"reply": ai_reply})
+
+    except Exception as e:
+        return jsonify({"reply": f"連線異常，演練暫停。錯誤資訊：{str(e)}"})
+
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_fp():
     if firebase_initialized: 
@@ -432,9 +473,6 @@ def clear_alerts():
             
     return jsonify({"status": "success"})
 
-# ==========================================
-# 📞 緊急聯絡人：動態聯防 API 
-# ==========================================
 @app.route('/api/set_contact', methods=['POST'])
 def set_contact():
     data = request.json
@@ -466,7 +504,6 @@ def get_contact():
         print(f"取得聯絡人失敗: {e}", flush=True)
         
     return jsonify({"status": "fail", "contact": "tel:165"})
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
