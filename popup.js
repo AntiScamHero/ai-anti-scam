@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (完整極速安全防護版)
+ * AI 防詐盾牌 - 核心控制邏輯 (完整極速安全防護版 - 完全展開版)
  */
 
 let currentUserID = "";
@@ -89,6 +89,7 @@ if (scanBtnElement) {
         const dimSection = document.getElementById('dimensions-section');
         const kwSection = document.getElementById('keyword-section');
 
+        // 初始化畫面狀態 (已展開)
         if (appBody) appBody.className = "";
         if (headerTitle) headerTitle.innerText = "🛡️ 深度分析中...";
         if (scanBtn) {
@@ -175,12 +176,15 @@ if (scanBtnElement) {
                     reportData.advice = "請安心瀏覽！";
                 }
 
-                // 🌟 新增：微小雜訊過濾器 (解決 15% 但顯示安全的矛盾感)
-                if (score < 20) {
+                // 🌟 核心修改：嚴格的防驚嚇濾鏡 (低於 50 分強制歸零並改寫文字)
+                if (score < 50) {
                     score = 0; 
                     reportData.riskLevel = "安全無虞";
-                    reportData.reason = "✅ 經深度特徵比對，此為正規立案網站。未發現任何隱藏陷阱或釣魚語法。";
-                    reportData.advice = "無潛在威脅，請放心進行瀏覽或購物！";
+                    reportData.reason = "✅ 系統未發現明顯惡意特徵，屬於一般正常網頁。";
+                    reportData.advice = "無潛在威脅，請放心瀏覽！";
+                    // 清除後端可能傳來的錯誤標籤
+                    if(reportData.dimensions) reportData.dimensions = {}; 
+                    if(reportData.highlight_keywords) reportData.highlight_keywords = [];
                 }
 
                 // 🟢 安全更新：使用 textContent 防禦潛在 XSS 攻擊
@@ -280,7 +284,7 @@ if (scanBtnElement) {
                     document.getElementById('report-reason').innerHTML = `
                         ${titleHtml}<br>${descHtml}
                         <br><br>
-                        <button id="retry-btn" style="background:#5f6368; padding:8px; width:auto; font-size:14px; box-shadow:none;">🔄 重新掃描</button>
+                        <button id="retry-btn" style="background:#5f6368; padding:8px; width:auto; font-size:14px; box-shadow:none; color:white; border:none; border-radius:4px; cursor:pointer;">🔄 重新掃描</button>
                     `;
                 }
                 if (kwSection) kwSection.style.display = 'none';
@@ -315,6 +319,11 @@ function resetBtn(btn) {
 const btnCreateFamily = document.getElementById('btn_create_family');
 if (btnCreateFamily) {
     btnCreateFamily.addEventListener('click', async () => {
+        // 🌟 核心修改：加入防呆確認視窗
+        if (!confirm("⚠️ 確定要建立一個『全新』的家庭防護群組嗎？\n\n(若您只是想加入別人的群組，請按取消，並在下方輸入對方的 6 碼代號)")) {
+            return; // 使用者按取消就停止動作
+        }
+
         const btn = document.getElementById('btn_create_family');
         btn.innerText = "建立中...";
         try {
@@ -478,11 +487,11 @@ async function fetchFamilyAlerts(familyID) {
                 try { r = JSON.parse(item.report); } catch(e) { r = { riskLevel: "紀錄" }; }
                 let time = item.timestamp ? item.timestamp.split(' ')[1] : ''; 
                 
-                // 這裡也加上簡單的顯示防護
+                // 這裡也加上簡單的顯示防護 (< 50 分強制顯示安全)
                 let score = parseInt(r.riskScore || r.RiskScore || r.risk_score) || 0;
-                let reasonText = (score < 20) ? "安全放行" : (r.reason ? r.reason.substring(0, 20) : "安全掃描");
+                let reasonText = (score < 50) ? "安全放行" : (r.reason ? r.reason.substring(0, 20) : "安全掃描");
                 reasonText = reasonText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                let riskText = (score < 20) ? "安全無虞" : (r.riskLevel || "未知");
+                let riskText = (score < 50) ? "安全無虞" : (r.riskLevel || "未知");
                 
                 html += `
                     <div class="alert-item">
