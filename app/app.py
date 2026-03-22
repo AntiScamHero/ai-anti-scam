@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 warnings.filterwarnings("ignore", message=".*Pydantic V1.*")
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 from flask_limiter import Limiter
@@ -32,7 +32,7 @@ from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMe
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 from security import mask_sensitive_data, is_genuine_white_listed, check_165_blacklist, TRUSTED_DOMAINS
-from ai_service import analyze_risk_with_ai
+from ai_service import analyze_risk_with_ai, stream_scam_simulation
 from openai import AzureOpenAI
 
 os.environ["PYTHONUTF8"] = "1"
@@ -339,9 +339,6 @@ def send_family_broadcast():
     socketio.emit('family_urgent_broadcast', {'message': message}, room=family_id)
     return jsonify({"status": "success", "message": "已成功發送親情廣播！"})
 
-# ==========================================
-# 🧠 戰情室專用 2：防詐沉浸式模擬器 (真正的 Azure AI 連線版)
-# ==========================================
 @app.route('/api/simulate_scam', methods=['POST'])
 def simulate_scam():
     data = request.json or {}
@@ -349,54 +346,15 @@ def simulate_scam():
     chat_history = data.get('history', []) 
     scenario_type = data.get('scenario', 'investment')
     
-    api_key = os.getenv("AZURE_API_KEY")
-    endpoint = os.getenv("AZURE_ENDPOINT")
-    model_name = os.getenv("AZURE_MODEL_NAME", "model-router")
-    
-    if not api_key or not endpoint:
-        return jsonify({"reply": "系統錯誤：尚未設定 AI 金鑰，無法啟動模擬。"})
+    def generate():
+        try:
+            for text_chunk in stream_scam_simulation(chat_history, scenario_type, user_message):
+                yield f"data: {json.dumps({'text': text_chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-    try:
-        client = AzureOpenAI(
-            api_key=api_key,
-            api_version="2024-12-01-preview", 
-            azure_endpoint=endpoint
-        )
-        
-        # 🎭 精簡版：定義多種詐騙情境劇本，減少 Token 消耗
-        scenarios = {
-            'investment': "扮演假投顧助理，推銷李蜀芳老師飆股，要求匯款12.8萬。若對方拒絕3次，回覆：【演練成功】並結束。",
-            'ecommerce': "扮演假網購客服，稱訂單設成連續扣款，引導操作ATM解除。若對方拒絕操作ATM，回覆：【演練成功】並結束。",
-            'romance': "扮演跨國軍醫，稱高價包裹卡在海關，要求代墊保證金。若對方點破沒見面談錢是詐騙，回覆：【演練成功】並結束。"
-        }
-
-        system_prompt = scenarios.get(scenario_type, scenarios['investment'])
-        messages = [{"role": "system", "content": system_prompt}]
-        
-        # 限制歷史對話長度，避免把 Token 額度吃光 (只取最後 6 句)
-        recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
-        for msg in recent_history:
-            messages.append({"role": msg['role'], "content": msg['content']})
-            
-        messages.append({"role": "user", "content": user_message})
-
-        # 🎯 終極解法：移除 max_tokens 參數，讓 Azure 使用預設值
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            temperature=0.7
-        )
-        
-        ai_reply = response.choices[0].message.content
-        
-        if not ai_reply:
-            finish_reason = response.choices[0].finish_reason
-            ai_reply = f"⚠️ 系統提示：Azure AI 連線成功，但伺服器回傳了空白訊息。（內部狀態碼：{finish_reason}）"
-
-        return jsonify({"reply": ai_reply})
-
-    except Exception as e:
-        return jsonify({"reply": f"連線異常，演練暫停。錯誤資訊：{str(e)}"})
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_fp():
@@ -472,6 +430,41 @@ def clear_alerts():
             ref.update(updates)
             
     return jsonify({"status": "success"})
+
+# ==========================================
+# 🪄 戰情室專用 3：上帝模式 (一鍵清空 Demo 數據)
+# ==========================================
+@app.route('/api/reset_demo', methods=['POST'])
+def reset_demo():
+    data = request.json or {}
+    family_id = data.get('familyID', 'demo_family') # 預設清除 demo_family 的數據
+    
+    if not firebase_initialized:
+        return jsonify({"status": "error", "message": "Firebase 未連線"})
+        
+    try:
+        # 1. 清除該家庭的所有掃描歷史紀錄
+        ref = db.reference('scan_history')
+        all_rec = ref.get() or {}
+        
+        # 處理 Firebase 回傳格式 (dict 或 list)
+        if isinstance(all_rec, list):
+            all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
+            
+        updates = {}
+        for key, val in all_rec.items():
+            if isinstance(val, dict) and val.get('familyID') == family_id:
+                updates[key] = None # 設定為 None 即代表刪除
+                
+        if updates: 
+            ref.update(updates)
+            
+        # 2. 透過 Socket.IO 廣播給所有開著戰情室的前端，強制他們重新整理畫面
+        socketio.emit('demo_reset_triggered', {'message': '系統已洗白'}, room=family_id)
+        
+        return jsonify({"status": "success", "message": "✨ 神蹟降臨：Demo 狀態已完美重置！"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/api/set_contact', methods=['POST'])
 def set_contact():

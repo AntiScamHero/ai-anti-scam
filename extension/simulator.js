@@ -38,29 +38,61 @@ document.addEventListener('DOMContentLoaded', () => {
         userInput.value = '';
         chatHistory.push({ role: "user", content: text });
 
-        const loadingDiv = document.createElement('div');
-        loadingDiv.classList.add('message', 'bot-msg');
-        loadingDiv.innerText = "對方正在輸入中...";
-        chatBox.appendChild(loadingDiv);
+        // 建立一個空的 AI 對話氣泡，準備用來展現串流打字效果
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message', 'bot-msg');
+        msgDiv.innerText = "對方正在輸入中...";
+        chatBox.appendChild(msgDiv);
         chatBox.scrollTop = chatBox.scrollHeight;
 
         const currentScenario = scenarioSelector.value;
 
         try {
-            const response = await fetch('http://127.0.0.1:5000/api/simulate_scam', {
+            const response = await fetch('[http://127.0.0.1:5000/api/simulate_scam](http://127.0.0.1:5000/api/simulate_scam)', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: text, history: chatHistory, scenario: currentScenario }) 
             });
-            const data = await response.json();
             
-            chatBox.removeChild(loadingDiv);
-            appendMessage('bot', data.reply);
-            chatHistory.push({ role: "assistant", content: data.reply });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let aiReply = "";
+            
+            // 清空準備開始打字
+            msgDiv.innerText = ""; 
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split("\n\n");
+
+                for (let line of lines) {
+                    if (line.startsWith("data: ")) {
+                        const dataStr = line.replace("data: ", "");
+                        if (dataStr === "[DONE]") {
+                            break;
+                        }
+                        try {
+                            const parsed = JSON.parse(dataStr);
+                            if (parsed.text) {
+                                aiReply += parsed.text;
+                                // 漸現效果更新畫面
+                                msgDiv.innerText = aiReply; 
+                                chatBox.scrollTop = chatBox.scrollHeight;
+                            }
+                        } catch (e) {
+                            console.error("解析串流資料發生錯誤:", e);
+                        }
+                    }
+                }
+            }
+
+            chatHistory.push({ role: "assistant", content: aiReply });
 
         } catch (error) {
-            chatBox.removeChild(loadingDiv);
-            appendMessage('bot', "⚠️ 無法連線至防詐演練伺服器，請確認後端是否已啟動。");
+            msgDiv.innerText = "⚠️ 無法連線至防詐演練伺服器，請確認後端是否已啟動。";
             console.error(error);
         }
     }

@@ -1,6 +1,6 @@
 /**
  * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版)
- * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 動態防禦
+ * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 動態防禦 + 浮動警告視窗
  */
 
 // ==========================================
@@ -276,13 +276,70 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // ==========================================
+// ⚠️ 升級功能 3：接收背景警告指令 (浮動警告視窗)
+// ==========================================
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+    if (request.action === "show_alert") {
+        console.log("⚠️ 收到警告指令，顯示浮動視窗");
+        if (document.getElementById("ai-fraud-alert-box")) return;
+
+        let alertDiv = document.createElement("div");
+        alertDiv.id = "ai-fraud-alert-box";
+        alertDiv.style.position = "fixed";
+        alertDiv.style.bottom = "20px";
+        alertDiv.style.right = "20px";
+        alertDiv.style.backgroundColor = "#ff4d4f";
+        alertDiv.style.color = "white";
+        alertDiv.style.padding = "15px 20px";
+        alertDiv.style.borderRadius = "8px";
+        alertDiv.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
+        alertDiv.style.zIndex = "999999";
+        alertDiv.style.fontFamily = "sans-serif";
+        alertDiv.style.fontSize = "16px";
+        alertDiv.style.fontWeight = "bold";
+        alertDiv.style.maxWidth = "300px";
+
+        let title = document.createElement("div");
+        title.innerText = "⚠️ AI 防詐盾牌警告";
+        title.style.fontSize = "18px";
+        title.style.marginBottom = "8px";
+
+        let content = document.createElement("div");
+        let riskScore = request.data.riskScore !== undefined ? request.data.riskScore : "未知";
+        let reason = request.data.reason || "系統偵測到潛在風險";
+        content.innerText = `此網頁存在中度風險 (${riskScore}分)，疑似包含詐騙特徵，請小心操作！\n原因：${reason}`;
+        content.style.fontSize = "14px";
+        content.style.lineHeight = "1.4";
+
+        let closeBtn = document.createElement("button");
+        closeBtn.innerText = "我知道了";
+        closeBtn.style.marginTop = "10px";
+        closeBtn.style.padding = "5px 10px";
+        closeBtn.style.border = "none";
+        closeBtn.style.borderRadius = "4px";
+        closeBtn.style.backgroundColor = "white";
+        closeBtn.style.color = "#ff4d4f";
+        closeBtn.style.cursor = "pointer";
+        closeBtn.style.fontWeight = "bold";
+        closeBtn.style.width = "100%";
+
+        closeBtn.onclick = function() { alertDiv.remove(); };
+
+        alertDiv.appendChild(title);
+        alertDiv.appendChild(content);
+        alertDiv.appendChild(closeBtn);
+        document.body.appendChild(alertDiv);
+    }
+});
+
+// ==========================================
 // 🛡️ 啟動邏輯：系統判定與免死金牌
 // ==========================================
 if (window.self === window.top) {
     const isSystemPage = window.location.protocol === 'chrome-extension:' ||
                          window.location.href.includes('dashboard.html') ||
                          window.location.href.includes('blocked.html') ||
-                         window.location.href.includes('simulator.html') || // 🟢 新增：給演練戰情室免死金牌
+                         window.location.href.includes('simulator.html') || 
                          window.location.hostname === 'localhost' ||
                          window.location.hostname === '127.0.0.1';
 

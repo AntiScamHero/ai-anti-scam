@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理)
+ * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理 + 中風險浮動警告)
  */
 importScripts('config.js');
 
@@ -50,16 +50,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             let score = parseInt(reportData.riskScore) || 0; 
             chrome.notifications.clear("scanning");
             
-            // 💡 核心修復：如果手動掃描發現分數超過 70 分，直接觸發強制跳轉與語音廣播！
+            // 💡 核心修復：高風險強制攔截，中風險(>=60)發送浮動警告！
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                 if (tab && tab.id) {
                     chrome.tabs.update(tab.id, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reportData.reason) + "&original_url=" + encodeURIComponent(tab.url) });
                     chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
                     
-                    // 強制後端觸發緊急推播到 LINE
                     fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ url: tab.url, text: `【手動掃描攔截】${reportData.reason}`, image_url: "", userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: true })
+                    });
+                }
+            } else if (score >= 60) {
+                // 發送指令給 content.js 顯示浮動警告視窗
+                if (tab && tab.id) {
+                    chrome.tabs.sendMessage(tab.id, { action: "show_alert", data: reportData }).catch(err => {
+                        console.log("無法傳送中度風險警告訊息:", err);
                     });
                 }
             } else {
@@ -94,8 +100,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 body: JSON.stringify({ url: request.pageUrl, text: "背景圖片自動分析", image_url: request.imageUrl, userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: false })
             }).then(res => res.json()).then(data => {
                 let reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
-                if (parseInt(reportData.riskScore) >= CONFIG.RISK_THRESHOLD_HIGH) {
+                let score = parseInt(reportData.riskScore) || 0;
+                
+                if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                     chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: "🚨 圖片含有詐騙風險！", message: reportData.reason });
+                } else if (score >= 60 && sender.tab && sender.tab.id) {
+                    // 若背景圖片分析為中風險，同樣在原網頁觸發浮動警告
+                    chrome.tabs.sendMessage(sender.tab.id, { action: "show_alert", data: reportData }).catch(() => {});
                 }
             }).catch(() => {});
         });

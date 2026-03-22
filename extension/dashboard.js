@@ -70,13 +70,27 @@ function initSocket(familyID) {
             document.getElementById('connection-status').innerText = `⚠️ 連線中斷，重試中...`;
         });
 
+        // 🚨 升級重點：結合圖表更新與高風險紅色脈衝特效
         socket.on('new_scan_result', (data) => {
+            console.log("收到新掃描數據:", data);
             fetchLogs(familyID, true); 
+            
+            // 如果分數大於等於 80，觸發戰情室紅色警報！
+            if (data.riskScore >= 80) {
+                triggerRedAlert(data.reason);
+            }
         });
 
         socket.on('emergency_alert', (data) => {
             showEmergencyBanner(data.url, data.reason);
         });
+
+        // 🪄 監聽神蹟重置廣播
+        socket.on('demo_reset_triggered', function() {
+            console.log("🔄 收到神蹟重置指令，畫面即將重新載入...");
+            window.location.reload();
+        });
+
     } else {
         socket.emit('join_family_room', { familyID: familyID });
     }
@@ -138,6 +152,11 @@ async function fetchLogs(familyID, isRealtimeUpdate = false) {
 
         if (data.data && data.data.length > 0) {
             updateDashboard(data.data, isRealtimeUpdate);
+        } else {
+            // 如果清空了，要重置儀表板
+            if(isRealtimeUpdate === false && data.data && data.data.length === 0){
+                updateDashboard([], false);
+            }
         }
     } catch (err) {
         console.error("API 連線失敗", err);
@@ -150,6 +169,16 @@ function updateDashboard(records, isRealtimeUpdate) {
     const tbody = document.getElementById('log-table-body');
     tbody.innerHTML = ""; 
     
+    // 如果沒有資料（通常是被上帝模式清空後），直接歸零
+    if (records.length === 0) {
+        document.getElementById('stat-total').innerText = "0";
+        document.getElementById('stat-safe').innerText = "0";
+        document.getElementById('stat-danger').innerText = "0";
+        drawRatioChart(0, 0);
+        drawTrendChart([], []);
+        return;
+    }
+
     // 🌟 戰情室也套用 50 分過濾器
     let sanitizedRecords = records.map(record => {
         let rec = { ...record };
@@ -285,4 +314,80 @@ function drawTrendChart(labels, data) {
             plugins: { legend: { display: false } }
         }
     });
+}
+
+function triggerRedAlert(reason) {
+    // 畫面邊框閃爍紅光
+    document.body.style.transition = "box-shadow 0.2s";
+    document.body.style.boxShadow = "inset 0 0 100px rgba(255, 0, 0, 0.8)";
+    
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); 
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        setTimeout(() => oscillator.stop(), 200); 
+    } catch(e) { console.log("音效播放被阻擋"); }
+
+    setTimeout(() => {
+        document.body.style.boxShadow = "none";
+    }, 500);
+}
+
+// ==========================================
+// 🪄 隱藏版彩蛋：上帝模式觸發器 (連按標題 5 次觸發)
+// ==========================================
+let secretClickCount = 0;
+let clickTimer = null;
+
+// 監聽畫面上所有 h1 標籤，如果沒有 h1 則預設監聽 body
+const dashboardTitle = document.querySelector('h1') || document.body; 
+
+dashboardTitle.addEventListener('click', () => {
+    secretClickCount++;
+    clearTimeout(clickTimer);
+    
+    // 如果連續點擊 5 次
+    if (secretClickCount >= 5) {
+        secretClickCount = 0;
+        if (confirm("⚠️ 【上帝模式】確定要啟動神蹟重置，清空所有 Demo 數據嗎？")) {
+            triggerDemoReset();
+        }
+    }
+    
+    // 1秒內沒連按就歸零
+    clickTimer = setTimeout(() => { secretClickCount = 0; }, 1000); 
+});
+
+async function triggerDemoReset() {
+    try {
+        // 讀取設定的 URL
+        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+        
+        // 取得當前的 familyID，若無則預設為 demo_family
+        const familyID = document.getElementById('family-id-input')?.value || localStorage.getItem('savedFamilyID') || "demo_family"; 
+
+        const res = await fetch(`${apiUrl}/api/reset_demo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ familyID: familyID })
+        });
+        
+        const data = await res.json();
+        if (data.status === 'success') {
+            alert(data.message);
+            // 本地重整
+            window.location.reload(); 
+        } else {
+            alert("重置發生錯誤：" + data.message);
+        }
+    } catch (e) {
+        console.error("重置失敗:", e);
+        alert("重置失敗，請檢查後端連線。");
+    }
 }

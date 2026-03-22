@@ -210,3 +210,47 @@ def fallback_analysis(target_url, web_text, image_url, error_msg):
         "reason": f"[備用防線攔截] 發現隱藏特徵或惡意圖片！",
         "advice": "系統偵測到高度風險，為保護您的安全已強制攔截。"
     }
+
+# ==========================================
+# 🌟 全新擴充：專為「沉浸式模擬器」打造的 SSE 串流生成器
+# ==========================================
+def stream_scam_simulation(chat_history, scenario_type, user_message):
+    api_key = os.getenv("AZURE_API_KEY")
+    endpoint = os.getenv("AZURE_ENDPOINT")
+    model_name = os.getenv("AZURE_MODEL_NAME", "gpt-4o-mini")
+
+    if not api_key or not endpoint:
+        yield "系統錯誤：尚未設定 AI 金鑰，無法啟動模擬。"
+        return
+
+    client = AzureOpenAI(api_key=api_key, api_version="2024-12-01-preview", azure_endpoint=endpoint)
+    
+    # 高擬真劇本：展現你對社會詐騙現象的深度觀察
+    scenarios = {
+        'investment': "你是一個極度狡猾的台股詐騙車手，假冒『李蜀芳老師』的助理。目標：誘騙受害者匯款『12.8萬』加入 VIP 佈局飆股。話術：『主力正在洗盤』、『申購保證中籤』。如果對方質疑，用專業術語壓制他；如果對方拒絕匯款達3次，請回覆：【🎉 演練成功：您已成功識破假投顧話術，守住荷包！】並停止對話。",
+        'romance': "扮演在敘利亞當軍醫的華裔將軍，稱有高達200萬美金的退休金包裹卡在海關，急需對方代墊『15萬台幣』清關費。不斷使用『親愛的』、『老婆』進行情緒勒索。拒絕3次則回覆演練成功。",
+        'ecommerce': "扮演假網購客服，稱訂單因為員工疏失被設為『批發商連續扣款』，要求對方馬上打開網銀或去 ATM 操作『解除分期付款』。製造極高的急迫感。"
+    }
+
+    system_prompt = scenarios.get(scenario_type, scenarios['investment'])
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # 放入歷史紀錄 (限制前 6 句避免 Token 爆掉)
+    for msg in chat_history[-6:]:
+        messages.append({"role": msg.get('role', 'user'), "content": msg.get('content', '')})
+        
+    messages.append({"role": "user", "content": user_message})
+
+    # 啟用 stream=True 進行字節串流
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            temperature=0.8,
+            stream=True
+        )
+        for chunk in response:
+            if len(chunk.choices) > 0 and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+    except Exception as e:
+        yield f"API 呼叫失敗：{str(e)}"
