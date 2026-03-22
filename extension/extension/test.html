@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>終極測試</title>
+</head>
+<body>
+    <h1>恭喜中獎！保證獲利，請加賴領取飆股明牌！</h1>
+    
+    <p>請點擊此官方連結登入：https://www.yahoo.com.lucky-verify-login.net</p>
+    
+    <p>若不配合指示，不准報警，否則斷手斷腳！</p>
+
+    <script src="config.js"></script>
+
+    <script>
+        // 等待網頁載入完成後執行
+        window.onload = function() {
+            console.log("網頁載入完成，準備啟動 AI 防詐盾牌掃描...");
+
+            // 取得網頁上的所有文字內容與當前網址
+            const pageText = document.body.innerText;
+            const currentUrl = window.location.href;
+
+            // 準備要傳給 app.py /scan 的資料格式
+            const requestData = {
+                url: currentUrl,
+                text: pageText,
+                userID: "test_user_001", // 測試用 ID
+                familyID: "none",
+                is_urgent: false
+            };
+
+            // 呼叫設定檔中的 API 網址
+            fetch(CONFIG.API_BASE_URL + '/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("🛡️ 後端掃描結果：", data);
+                
+                // 如果風險分數過高，直接跳出警告視窗
+                if (data.riskScore && data.riskScore >= CONFIG.RISK_THRESHOLD_HIGH) {
+                    alert(`🚨 AI 防詐盾牌警告 🚨\n\n風險等級：${data.riskLevel}\n風險分數：${data.riskScore}\n原因：${data.reason}\n建議：${data.advice}`);
+                } else if (data.riskScore > 0) {
+                    console.warn(`⚠️ 發現中度風險：${data.reason}`);
+                } else {
+                    console.log("✅ 網頁安全無虞");
+                }
+            })
+            .catch(error => {
+                console.error("❌ 無法連線到防詐伺服器：", error);
+            });
+        };
+    </script>
+</body>
+</html>
