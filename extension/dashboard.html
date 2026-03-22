@@ -90,6 +90,9 @@
         .risk-high { color: var(--danger-red); font-weight: 900; }
         .risk-safe { color: var(--safe-green); font-weight: bold;}
         .risk-warn { color: #FFBB33; font-weight: bold;}
+
+        /* 清除紀錄按鈕 Hover 效果 */
+        #btn-clear-logs:hover { background-color: #ff4d4f !important; color: white !important; }
     </style>
 </head>
 <body>
@@ -146,7 +149,13 @@
         </div>
     </div>
 
-    <div class="chart-title" style="margin-top:30px; border-bottom:none;">📜 詳細掃描紀錄 (即時更新)</div>
+    <div class="chart-title" style="margin-top:30px; border-bottom:none;">
+        <span>📜 詳細掃描紀錄 (即時更新)</span>
+        <button id="btn-clear-logs" style="background-color: transparent; color: #ff4d4f; border: 1px solid #ff4d4f; padding: 6px 15px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s;">
+            🗑️ 清空所有紀錄
+        </button>
+    </div>
+
     <table>
         <thead>
             <tr>

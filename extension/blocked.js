@@ -2,18 +2,19 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const dataString = urlParams.get('data');
-    const targetUrl = urlParams.get('url') || urlParams.get('original_url');
+    const targetUrl = urlParams.get('url') || urlParams.get('original_url') || '';
     
-    let riskScore = "--";
+    // 預設為前端極速攔截的分數與特徵
+    let riskScore = "99"; 
     let reason = "系統偵測到高風險異常行為。";
     let advice = "請勿輸入任何個人資料或密碼。";
     let scamDNA = [];
 
-    // 1. 智慧解碼 (支援 JSON 資料結構，同時相容舊版直接傳參數)
+    // 1. 智慧解碼 (支援 JSON 資料結構，同時相容前端直接傳字串)
     if (dataString) {
         try {
             const data = JSON.parse(decodeURIComponent(dataString));
-            riskScore = data.riskScore || "--";
+            riskScore = data.riskScore || riskScore;
             reason = data.reason || reason;
             advice = data.advice || advice;
             scamDNA = data.scamDNA || [];
@@ -23,7 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         reason = urlParams.get('reason') || reason;
         const dnaString = urlParams.get('scamDNA') || "";
-        scamDNA = dnaString ? dnaString.split(',') : ["未知套路"];
+        scamDNA = dnaString ? dnaString.split(',') : ["前端極速攔截"];
     }
 
     // 2. 渲染 UI 畫面
@@ -36,40 +37,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     const adviceEl = document.getElementById('advice');
     if(adviceEl) adviceEl.innerText = "💡 專家建議：" + advice;
 
-    const tagsContainer = document.getElementById('tags-container');
-    if (tagsContainer && scamDNA.length > 0) {
+    // 渲染標籤
+    const targetDnaBox = document.getElementById('dna-box') || document.getElementById('tags-container');
+    if (targetDnaBox && scamDNA.length > 0) {
         scamDNA.forEach(tagText => {
             let cleanedDna = tagText.replace(/[\[\]"]/g, '').trim(); 
             if (cleanedDna !== "") {
                 const span = document.createElement('span');
-                span.className = 'tag';
+                span.className = 'dna-tag';
                 span.innerText = "#" + cleanedDna;
-                tagsContainer.appendChild(span);
+                span.style.cssText = "background-color: #ff4444; color: white; padding: 5px 10px; border-radius: 4px; font-size: 14px; font-weight: bold; margin: 0 5px;";
+                targetDnaBox.appendChild(span);
             }
         });
     }
 
-    const originalUrlEl = document.getElementById('original-url');
-    if (originalUrlEl && targetUrl) {
-        originalUrlEl.innerText = "原網址: " + decodeURIComponent(targetUrl);
+    // 渲染被攔截的網址
+    const targetUrlEl = document.getElementById('target-url');
+    if (targetUrlEl && targetUrl) {
+        targetUrlEl.innerText = decodeURIComponent(targetUrl);
     }
 
-    // 3. 安全關閉分頁邏輯
-    const closeBtn = document.getElementById('close-btn');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            try {
-                if (chrome && chrome.tabs) {
-                    chrome.tabs.getCurrent(function(tab) {
-                        if (tab) { chrome.tabs.remove(tab.id); } 
-                        else { window.location.replace("https://www.google.com"); }
-                    });
-                } else {
-                    window.location.replace("https://www.google.com");
-                }
-            } catch(e) { window.location.replace("https://www.google.com"); }
-        });
+    // 3. 🟢 升級：單純跳轉到安全網頁 (Google) + 倒數自動跳離
+    const safeLeaveAction = () => {
+        // 不再使用關閉分頁，而是強制取代當前網址為安全網頁
+        window.location.replace("https://www.google.com.tw");
+    };
+
+    let autoLeaveInterval = null;
+
+    // 取消自動跳離的函數 (當使用者有意識地進行其他操作時觸發)
+    const stopAutoLeave = () => {
+        if (autoLeaveInterval) {
+            clearInterval(autoLeaveInterval);
+            const manualLeaveBtn = document.getElementById('manual-leave-btn');
+            if (manualLeaveBtn) manualLeaveBtn.innerText = "點此離開危險網頁 (回到 Google)";
+        }
+    };
+
+    // 綁定「離開此網頁」按鈕並啟動自動倒數
+    const manualLeaveBtn = document.getElementById('manual-leave-btn');
+    if (manualLeaveBtn) {
+        manualLeaveBtn.addEventListener('click', safeLeaveAction);
+        
+        // 🚀 設定 15 秒後自動跳轉
+        let autoLeaveTimer = 15;
+        manualLeaveBtn.innerText = `離開此網頁 (${autoLeaveTimer} 秒後自動跳離)`;
+        
+        autoLeaveInterval = setInterval(() => {
+            autoLeaveTimer--;
+            if (autoLeaveTimer > 0) {
+                manualLeaveBtn.innerText = `離開此網頁 (${autoLeaveTimer} 秒後自動跳離)`;
+            } else {
+                clearInterval(autoLeaveInterval);
+                manualLeaveBtn.innerText = "正在自動為您跳轉至安全網頁...";
+                safeLeaveAction();
+            }
+        }, 1000);
     }
+
+    // 相容舊版按鈕
+    const closeBtn = document.getElementById('close-btn');
+    if (closeBtn) closeBtn.addEventListener('click', safeLeaveAction);
 
     // 4. 緊急聯絡人 / 165 撥號模組
     const desktopModal = document.getElementById('desktop-modal');
@@ -95,6 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             callBtn.removeAttribute('href');
             callBtn.onclick = (e) => {
                 e.preventDefault(); 
+                stopAutoLeave(); // 點擊打電話時，暫停自動跳離
                 if(modalPhoneNumber) modalPhoneNumber.innerText = number; 
                 if(desktopModal) desktopModal.style.display = 'flex'; 
             };
@@ -105,7 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (typeof chrome !== 'undefined' && chrome.storage) {
             const storage = await chrome.storage.local.get(['familyID']);
             const familyID = storage.familyID || 'none';
-            const apiUrl = (typeof window.CONFIG !== 'undefined') ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+            const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
             
             const response = await fetch(`${apiUrl}/api/get_contact`, {
                 method: 'POST',
@@ -132,6 +162,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (bypassBtn) {
         bypassBtn.disabled = true;
         let timeLeft = 30;
+        
+        // 監聽點擊事件，如果使用者試圖點擊冷靜期按鈕，就暫停自動跳離
+        bypassBtn.addEventListener('mousedown', stopAutoLeave);
+
         const timer = setInterval(() => {
             timeLeft--;
             bypassBtn.innerText = `強制冷靜期... 請先深呼吸 (剩餘 ${timeLeft} 秒)`;
@@ -151,7 +185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 sessionStorage.setItem('temp_whitelist_' + decodeURIComponent(targetUrl), 'true');
                 window.location.replace(decodeURIComponent(targetUrl));
             } else {
-                alert("無法取得原始網址，請手動返回或關閉分頁。");
+                alert("無法取得原始網址，請手動返回或跳轉。");
             }
         });
     }
@@ -161,9 +195,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (reportBtn) {
         reportBtn.addEventListener('click', async (e) => {
             e.preventDefault();
+            stopAutoLeave(); // 點擊回報誤判時，暫停自動跳離
             reportBtn.innerText = "⏳ 傳送中...";
             try {
-                const apiUrl = (typeof window.CONFIG !== 'undefined') ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+                const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
                 await fetch(`${apiUrl}/api/report_false_positive`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -185,16 +220,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (checkboxes.length > 0 && wakeUpBtn) {
         checkboxes.forEach(box => {
             box.addEventListener('change', () => {
+                stopAutoLeave(); // 開始勾選問題時，代表有意識操作，暫停自動跳離
                 const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
                 wakeUpBtn.style.display = anyChecked ? 'block' : 'none';
             });
         });
 
-        wakeUpBtn.addEventListener('click', () => {
-            const closeBtn = document.getElementById('close-btn');
-            if(closeBtn) closeBtn.click();
-            else window.location.replace("https://www.google.com");
-        });
+        wakeUpBtn.addEventListener('click', safeLeaveAction);
     }
 
     // 8. WebSocket 接收家人推播

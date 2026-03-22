@@ -154,7 +154,7 @@ if (scanBtnElement) {
 
             // ⚠️ 建立 10 秒強制逾時機制
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); 
+            const timeoutId = setTimeout(() => controller.abort(), 3000); 
 
             try {
                 const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';

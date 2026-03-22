@@ -345,14 +345,12 @@ function triggerRedAlert(reason) {
 let secretClickCount = 0;
 let clickTimer = null;
 
-// 監聽畫面上所有 h1 標籤，如果沒有 h1 則預設監聽 body
 const dashboardTitle = document.querySelector('h1') || document.body; 
 
 dashboardTitle.addEventListener('click', () => {
     secretClickCount++;
     clearTimeout(clickTimer);
     
-    // 如果連續點擊 5 次
     if (secretClickCount >= 5) {
         secretClickCount = 0;
         if (confirm("⚠️ 【上帝模式】確定要啟動神蹟重置，清空所有 Demo 數據嗎？")) {
@@ -360,16 +358,12 @@ dashboardTitle.addEventListener('click', () => {
         }
     }
     
-    // 1秒內沒連按就歸零
     clickTimer = setTimeout(() => { secretClickCount = 0; }, 1000); 
 });
 
 async function triggerDemoReset() {
     try {
-        // 讀取設定的 URL
         const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
-        
-        // 取得當前的 familyID，若無則預設為 demo_family
         const familyID = document.getElementById('family-id-input')?.value || localStorage.getItem('savedFamilyID') || "demo_family"; 
 
         const res = await fetch(`${apiUrl}/api/reset_demo`, {
@@ -381,7 +375,6 @@ async function triggerDemoReset() {
         const data = await res.json();
         if (data.status === 'success') {
             alert(data.message);
-            // 本地重整
             window.location.reload(); 
         } else {
             alert("重置發生錯誤：" + data.message);
@@ -391,3 +384,52 @@ async function triggerDemoReset() {
         alert("重置失敗，請檢查後端連線。");
     }
 }
+
+// ==========================================
+// 🗑️ 實用功能：一鍵清空掃描紀錄
+// ==========================================
+document.getElementById('btn-clear-logs')?.addEventListener('click', async () => {
+    // 取得當前的家庭 ID
+    const familyID = document.getElementById('family-id-input').value.trim().toUpperCase() || localStorage.getItem('savedFamilyID');
+    
+    if (!familyID) {
+        return alert("⚠️ 請先輸入或連線家庭代碼！");
+    }
+
+    // 防呆確認，避免誤觸
+    if (!confirm("⚠️ 確定要清空所有的掃描紀錄嗎？\n此動作將會同步刪除雲端資料庫中的紀錄，且無法復原。")) {
+        return;
+    }
+
+    const btn = document.getElementById('btn-clear-logs');
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ 清理中...";
+    btn.disabled = true;
+
+    try {
+        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+        
+        // 呼叫我們在 app.py 寫好的清除 API
+        const res = await fetch(`${apiUrl}/api/clear_alerts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ familyID: familyID })
+        });
+        
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            alert("✅ 紀錄已成功清空！");
+            // 重新抓取資料 (自動讓前端的圖表和表格完美歸零)
+            fetchLogs(familyID, false);
+        } else {
+            alert("❌ 清除失敗：" + data.message);
+        }
+    } catch (err) {
+        console.error("清除紀錄失敗:", err);
+        alert("❌ 網路連線異常，無法清除紀錄。");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+});
