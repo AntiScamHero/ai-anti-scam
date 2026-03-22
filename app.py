@@ -175,7 +175,7 @@ def scan_url():
     if len(target_url) > 2000: target_url = target_url[:2000]
     
     raw_text = data.get('text') or ''
-    if len(raw_text) > 5000: raw_text = raw_text[:5000]
+    if len(raw_text) >2500: raw_text = raw_text[:2500]
     
     image_url = data.get('image_url') or ''
     if len(image_url) > 2000: image_url = image_url[:2000]
