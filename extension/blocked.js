@@ -60,13 +60,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 3. 🟢 升級：單純跳轉到安全網頁 (Google) + 倒數自動跳離
     const safeLeaveAction = () => {
-        // 不再使用關閉分頁，而是強制取代當前網址為安全網頁
         window.location.replace("https://www.google.com.tw");
     };
 
     let autoLeaveInterval = null;
 
-    // 取消自動跳離的函數 (當使用者有意識地進行其他操作時觸發)
     const stopAutoLeave = () => {
         if (autoLeaveInterval) {
             clearInterval(autoLeaveInterval);
@@ -75,12 +73,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    // 綁定「離開此網頁」按鈕並啟動自動倒數
     const manualLeaveBtn = document.getElementById('manual-leave-btn');
     if (manualLeaveBtn) {
         manualLeaveBtn.addEventListener('click', safeLeaveAction);
         
-        // 🚀 設定 15 秒後自動跳轉
         let autoLeaveTimer = 15;
         manualLeaveBtn.innerText = `離開此網頁 (${autoLeaveTimer} 秒後自動跳離)`;
         
@@ -96,7 +92,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 1000);
     }
 
-    // 相容舊版按鈕
     const closeBtn = document.getElementById('close-btn');
     if (closeBtn) closeBtn.addEventListener('click', safeLeaveAction);
 
@@ -124,18 +119,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             callBtn.removeAttribute('href');
             callBtn.onclick = (e) => {
                 e.preventDefault(); 
-                stopAutoLeave(); // 點擊打電話時，暫停自動跳離
+                stopAutoLeave(); 
                 if(modalPhoneNumber) modalPhoneNumber.innerText = number; 
                 if(desktopModal) desktopModal.style.display = 'flex'; 
             };
         }
     }
 
+    // 🚀 關鍵修改：確保 `fetch` 使用 Render 網址
     try {
         if (typeof chrome !== 'undefined' && chrome.storage) {
             const storage = await chrome.storage.local.get(['familyID']);
             const familyID = storage.familyID || 'none';
-            const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+            
+            // 優先使用全域設定 (如果有)，沒有的話預設為你的 Render 網址，不再是 127.0.0.1
+            const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) 
+                ? window.CONFIG.API_BASE_URL 
+                : 'https://ai-anti-scam.onrender.com';
             
             const response = await fetch(`${apiUrl}/api/get_contact`, {
                 method: 'POST',
@@ -163,7 +163,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         bypassBtn.disabled = true;
         let timeLeft = 30;
         
-        // 監聽點擊事件，如果使用者試圖點擊冷靜期按鈕，就暫停自動跳離
         bypassBtn.addEventListener('mousedown', stopAutoLeave);
 
         const timer = setInterval(() => {
@@ -195,10 +194,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (reportBtn) {
         reportBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            stopAutoLeave(); // 點擊回報誤判時，暫停自動跳離
+            stopAutoLeave(); 
             reportBtn.innerText = "⏳ 傳送中...";
             try {
-                const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+                // 🚀 關鍵修改：確保 `fetch` 使用 Render 網址
+                const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) 
+                    ? window.CONFIG.API_BASE_URL 
+                    : 'https://ai-anti-scam.onrender.com';
+                    
                 await fetch(`${apiUrl}/api/report_false_positive`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -220,7 +223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (checkboxes.length > 0 && wakeUpBtn) {
         checkboxes.forEach(box => {
             box.addEventListener('change', () => {
-                stopAutoLeave(); // 開始勾選問題時，代表有意識操作，暫停自動跳離
+                stopAutoLeave(); 
                 const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
                 wakeUpBtn.style.display = anyChecked ? 'block' : 'none';
             });
@@ -235,7 +238,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const familyID = result.familyID || 'none';
             if (familyID !== 'none' && typeof io !== 'undefined') {
                 try {
-                    const socketUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+                    // 🚀 關鍵修改：確保 WebSocket 使用 Render 網址
+                    const socketUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) 
+                        ? window.CONFIG.API_BASE_URL 
+                        : 'https://ai-anti-scam.onrender.com';
+                        
                     const socket = io(socketUrl);
                     socket.emit('join_family_room', { familyID: familyID });
                     
