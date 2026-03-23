@@ -1,7 +1,8 @@
 // dashboard.js - 戰情室專用邏輯
 
 window.CONFIG = window.CONFIG || {
-    API_BASE_URL: "http://127.0.0.1:5000",
+    // 🚀 已將備用網址從 127.0.0.1 改為 Render 正式網址
+    API_BASE_URL: "https://ai-anti-scam.onrender.com",
     RISK_THRESHOLD_HIGH: 70,
     RISK_THRESHOLD_MEDIUM: 40
 };
@@ -363,7 +364,8 @@ dashboardTitle.addEventListener('click', () => {
 
 async function triggerDemoReset() {
     try {
-        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+        // 🚀 已將備用網址從 127.0.0.1 改為 Render 正式網址
+        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
         const familyID = document.getElementById('family-id-input')?.value || localStorage.getItem('savedFamilyID') || "demo_family"; 
 
         const res = await fetch(`${apiUrl}/api/reset_demo`, {
@@ -407,7 +409,8 @@ document.getElementById('btn-clear-logs')?.addEventListener('click', async () =>
     btn.disabled = true;
 
     try {
-        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'http://127.0.0.1:5000';
+        // 🚀 已將備用網址從 127.0.0.1 改為 Render 正式網址
+        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
         
         // 呼叫我們在 app.py 寫好的清除 API
         const res = await fetch(`${apiUrl}/api/clear_alerts`, {
