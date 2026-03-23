@@ -153,6 +153,24 @@ function triggerSafeBlock(reason) {
 
 function scanScamWords() {
     if (hasTriggeredBlock) return;
+    
+    // 🚀 升級：前端免死金牌 (知名網站白名單)
+    // 這些可信網站即使出現「飆股」等字眼也不會被前端死板攔截，而是交由後端 AI 分析
+    const frontendWhitelist = [
+        "yahoo.com", 
+        "yahoo.com.tw",
+        "tw.stock.yahoo.com",
+        "google.com", 
+        "msn.com", 
+        "pchome.com.tw", 
+        "cnyes.com", 
+        "github.com", 
+        "render.com"
+    ];
+    
+    const currentHost = window.location.hostname;
+    const isWhitelisted = frontendWhitelist.some(domain => currentHost.includes(domain));
+
     const textContent = document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
     
     let iframeUrls = Array.from(document.querySelectorAll('iframe')).map(f => f.src).filter(src => src);
@@ -160,7 +178,8 @@ function scanScamWords() {
 
     const cleanText = textContent.trim();
     
-    if (cleanText.length < 50 && iframeUrls.length === 0) {
+    // 如果在白名單內，或文字太少，跳過前端死板攔截，只啟用圖片與連結檢查
+    if ((cleanText.length < 50 && iframeUrls.length === 0) || isWhitelisted) {
         observeElements(); 
         return;
     }
