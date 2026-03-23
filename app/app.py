@@ -12,6 +12,7 @@ import string
 import threading
 import re
 import warnings  
+import requests # 🚀 新增：用來呼叫 Google API
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -80,6 +81,35 @@ def handle_exception(e):
 
 def get_tw_time():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
+
+# 🚀 升級：Google Safe Browsing 威脅情資大腦
+def check_google_safe_browsing(url):
+    api_key = os.getenv("GOOGLE_SAFE_BROWSING_API_KEY")
+    if not api_key or not url:
+        return False
+    
+    endpoint = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
+    payload = {
+        "client": {
+            "clientId": "ai-anti-fraud-shield",
+            "clientVersion": "1.0.0"
+        },
+        "threatInfo": {
+            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": url}]
+        }
+    }
+    try:
+        response = requests.post(endpoint, json=payload, timeout=3)
+        if response.status_code == 200:
+            data = response.json()
+            if "matches" in data:
+                return True # Google 認證的惡意網站
+    except Exception as e:
+        print(f"⚠️ Google API 檢查超時或失敗: {e}", flush=True)
+    return False
 
 configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
@@ -218,10 +248,17 @@ def scan_url():
         parse_u = u if u.startswith('http') else 'http://' + u
         
         if not is_genuine_white_listed(parse_u):
+            # 1. 台灣 165 黑名單檢查
             if check_165_blacklist(parse_u):
                 report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
+            # 2. 🚀 新增：Google 國際級黑名單檢查
+            if check_google_safe_browsing(parse_u):
+                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["Google黑名單警示"], "reason": "🚨 Google 官方安全大腦攔截：此為高風險惡意/釣魚網站！", "advice": "請立即關閉網頁！"}
+                return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
+            
+            # 3. 偽裝官方網域檢查
             try:
                 host = urlparse(parse_u.lower().strip()).hostname or ""
                 for domain in TRUSTED_DOMAINS:
@@ -251,8 +288,15 @@ def scan_url():
     ]
     
     for pattern, reason, dna_tag in evasion_patterns:
-        # 新增對 image_url 的正則判斷，解決模組 8 圖片測試失敗
-        if re.search(pattern, raw_text, re.IGNORECASE) or (image_url and re.search(pattern, image_url, re.IGNORECASE)):
+        # 🚀 升級：修復 Base64 圖片誤報與 502 當機問題
+        is_bad_text = re.search(pattern, raw_text, re.IGNORECASE)
+        is_bad_image_url = False
+        
+        # 只有當圖片網址不是 Base64 (data:image) 時，才進行正則比對，避免榨乾 CPU 資源
+        if image_url and not image_url.startswith('data:image'):
+            is_bad_image_url = re.search(pattern, image_url, re.IGNORECASE)
+
+        if is_bad_text or is_bad_image_url:
             report_dict = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": [dna_tag], "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
