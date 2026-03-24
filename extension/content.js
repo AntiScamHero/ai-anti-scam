@@ -1,6 +1,6 @@
 /**
- * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版)
- * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 動態防禦 + 浮動警告視窗
+ * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版 + 證據保全快門)
+ * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 動態防禦 + 浮動警告視窗 + 自動蒐證快門
  */
 
 // ==========================================
@@ -125,23 +125,62 @@ function maskSensitiveData(text) {
         .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
 }
 
-function triggerSafeBlock(reason) {
+// ==========================================
+// 🚨 升級重點：觸發蒐證攔截視窗 (異步截圖處理邏輯)
+// ==========================================
+async function triggerSafeBlock(reason, reportData = null) {
     if (hasTriggeredBlock) return;
     if (sessionStorage.getItem('temp_whitelist_' + window.location.href)) return;
 
     hasTriggeredBlock = true;
-    
-    const shield = document.createElement('div');
-    shield.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:#ff2a2a; color:white; display:flex; align-items:center; justify-content:center; font-size:45px; font-weight:bold; z-index:2147483647; font-family:sans-serif;";
-    shield.innerText = "🚨 詐騙威脅攔截中...";
-    document.documentElement.appendChild(shield);
-    if (document.body) document.body.style.display = 'none'; 
 
+    console.log("🛡️ AI 防詐盾牌：觸發蒐證攔截，正在按下證據快門...", reason);
+
+    // 1. 🟢 視覺：立即顯示簡單蒐證遮罩，凍結使用者操作
+    const shield = document.createElement('div');
+    shield.id = 'scam-shield-overlay';
+    shield.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:30px; font-weight:bold; z-index:2147483647; font-family:sans-serif; backdrop-filter:blur(5px);";
+    shield.innerHTML = `
+        <div style="font-size:60px; margin-bottom:20px;">🛡️</div>
+        <div style="margin-bottom:15px;">AI 防詐盾牌攔截中</div>
+        <div style="font-size:18px; color:#ffdddd; font-weight:normal;">[正在自動蒐證詐騙快照並上傳雲端，請稍候...]</div>
+        <div style="margin-top:20px; font-size:14px; color:#aaa; font-weight:normal;">(證據將作為家人求證或 165 檢舉之用)</div>
+    `;
+    document.documentElement.appendChild(shield);
+    if (document.body) document.body.style.display = 'none';
+
+    // 2. 🟢 動作：通知背景程式按快門 (此為 async 請求)
     try {
-        chrome.runtime.sendMessage({ action: "triggerBlock", reason: reason });
-        setTimeout(() => {
-            window.location.replace(chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reason) + "&original_url=" + encodeURIComponent(window.location.href));
-        }, 1000);
+        const timestamp = new Date().toISOString(); 
+        let familyID = 'none';
+        try {
+            const storage = await chrome.storage.local.get(['familyID']);
+            if (storage.familyID) familyID = storage.familyID;
+        } catch (e) {}
+
+        console.log("📸 向 background.js 發送快門指令...");
+        
+        // 設定一個 3 秒的超時機制，避免背景程式卡住導致畫面無法跳轉
+        const sendPromise = chrome.runtime.sendMessage({ 
+            action: "captureScamTabWithEvidence", 
+            url: window.location.href, 
+            reason: reason, 
+            timestamp: timestamp, 
+            familyID: familyID 
+        });
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({status: "timeout"}), 3000));
+        
+        const response = await Promise.race([sendPromise, timeoutPromise]);
+        console.log("✅ 證據上傳回應:", response);
+
+    } catch (error) {
+        console.error("❌ 自動蒐證快門失敗:", error);
+    }
+
+    // 3. 🟢 跳轉：蒐證完成 (或超時後)，正式跳轉到 blocked.html 進行警報
+    const dataToSend = reportData ? JSON.stringify(reportData) : JSON.stringify({ riskScore: "99", reason: reason, advice: "請勿輸入任何資料。" });
+    try {
+        window.location.replace(chrome.runtime.getURL("blocked.html") + "?data=" + encodeURIComponent(dataToSend) + "&url=" + encodeURIComponent(window.location.href));
     } catch (error) {
         try {
             window.location.replace(chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reason) + "&original_url=" + encodeURIComponent(window.location.href));
@@ -154,8 +193,7 @@ function triggerSafeBlock(reason) {
 function scanScamWords() {
     if (hasTriggeredBlock) return;
     
-    // 🚀 升級：前端免死金牌 (知名網站白名單)
-    // 這些可信網站即使出現「飆股」等字眼也不會被前端死板攔截，而是交由後端 AI 分析
+    // 前端免死金牌 (知名網站白名單)
     const frontendWhitelist = [
         "yahoo.com", 
         "yahoo.com.tw",

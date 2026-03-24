@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理 + 中風險浮動警告)
+ * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理 + 中風險浮動警告 + 自動蒐證快門)
  */
 importScripts('config.js');
 
@@ -78,6 +78,58 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // ==========================================
+    // 🚨 升級重點：接收蒐證快門指令 (異步處理邏輯)
+    // ==========================================
+    if (request.action === "captureScamTabWithEvidence") {
+        const { url, reason, timestamp, familyID } = request;
+        const tabId = sender.tab ? sender.tab.id : null;
+        
+        if (!tabId) {
+            console.error("❌ 無法取得來源標籤頁 ID，取消快門。");
+            sendResponse({status: "fail", message: "No tabId"});
+            return true;
+        }
+
+        console.log(`📸 正在對標籤頁 ${tabId} 按下證據快門... URL: ${url.substring(0, 40)}`);
+
+        // 🏆 競賽亮点：使用異步方式完成「截圖 -> 上傳 -> 回應」全流程
+        (async () => {
+            try {
+                // 1. 🟢 按下快門：使用 Chrome 核心 API 擷取畫面 (JPEG 30% 大幅壓縮)
+                const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 30 });
+                console.log("✅ 證據快照擷取完成 (Base64)");
+
+                // 2. 🟢 上傳雲端：將圖片 POST 到 Render 後端
+                const apiUrl = `${CONFIG.API_BASE_URL}/api/submit_evidence`;
+                console.log(`⏳ 正在上傳證據到雲端: ${apiUrl}`);
+
+                const fetchResponse = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: url,
+                        timestamp: timestamp,
+                        familyID: familyID,
+                        screenshot_base64: dataUrl,
+                        reported_reason: reason
+                    })
+                });
+                
+                const data = await fetchResponse.json();
+                console.log("✅ 雲端上傳證據回應:", data);
+
+                sendResponse({status: "success", backendResponse: data});
+
+            } catch (error) {
+                console.error("❌ 背景程式蒐證失敗:", error);
+                sendResponse({status: "error", details: error.toString()});
+            }
+        })();
+
+        return true; // 智能：必須回傳 true，告訴 Chrome 此訊息是異步處理的
+    }
+
     if (request.action === "triggerBlock") {
         if (sender.tab && sender.tab.id) {
             const originalUrl = sender.tab.url ? sender.tab.url : "";

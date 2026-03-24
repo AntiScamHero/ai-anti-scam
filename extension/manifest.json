@@ -22,7 +22,11 @@
     {
       "resources": [
         "blocked.html",
-        "config.js"
+        "config.js",
+        "voice.js",
+        "blocked.js",
+        "socket.io.min.js",
+        "hero.png"
       ],
       "matches": [
         "<all_urls>"

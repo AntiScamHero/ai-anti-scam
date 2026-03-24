@@ -1,7 +1,6 @@
-// dashboard.js - 戰情室專用邏輯
+// dashboard.js - 戰情室專用邏輯 (蒐證視圖升級版)
 
 window.CONFIG = window.CONFIG || {
-    // 🚀 已將備用網址從 127.0.0.1 改為 Render 正式網址
     API_BASE_URL: "https://ai-anti-scam.onrender.com",
     RISK_THRESHOLD_HIGH: 70,
     RISK_THRESHOLD_MEDIUM: 40
@@ -13,6 +12,31 @@ let socket = null;
 let ratioChartInstance = null;
 let trendChartInstance = null;
 let isFetching = false;
+
+// ==========================================
+// 📸 升級：UI 輔助 - 顯示證據快照的彈窗
+// ==========================================
+function showEvidenceModal(imageUrl, reason) {
+    if (document.getElementById("ai-evidence-modal")) document.getElementById("ai-evidence-modal").remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'ai-evidence-modal';
+    modal.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.9); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2147483647; font-family:sans-serif; backdrop-filter:blur(10px);";
+    
+    modal.innerHTML = `
+        <div style="position:relative; width:90%; max-width:1200px; display:flex; flex-direction:column; align-items:center;">
+            <button id="close-evidence-modal" style="position:absolute; top:-20px; right:-20px; background:white; color:black; border:none; border-radius:50%; width:40px; height:40px; font-size:25px; cursor:pointer; font-weight:bold;">×</button>
+            <div style="font-size:24px; font-weight:bold; color:#ff4d4f; margin-bottom:15px; text-align:center;">💞【AI 防詐盾牌 - 攔截證據保全快照】💞</div>
+            <div style="color:#aaa; margin-bottom:20px; text-align:center;">證據原因：${reason}</div>
+            <img src="${imageUrl}" alt="詐騙網頁證據" style="width:100%; max-height:80vh; border:4px solid #ff4d4f; border-radius:8px; box-shadow:0 0 30px rgba(255,0,0,0.5); object-fit:contain; background:#222;">
+            <div style="margin-top:20px; color:#ff4d4f; font-size:14px;">(⚠️ 此圖片為 JPEG 自動壓縮快照，用作鑑識與 165 檢舉之用)</div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.querySelector('#close-evidence-modal').onclick = function() { modal.remove(); };
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
 
 function animateValue(obj, start, end, duration) {
     let startTimestamp = null;
@@ -71,12 +95,10 @@ function initSocket(familyID) {
             document.getElementById('connection-status').innerText = `⚠️ 連線中斷，重試中...`;
         });
 
-        // 🚨 升級重點：結合圖表更新與高風險紅色脈衝特效
         socket.on('new_scan_result', (data) => {
             console.log("收到新掃描數據:", data);
             fetchLogs(familyID, true); 
             
-            // 如果分數大於等於 80，觸發戰情室紅色警報！
             if (data.riskScore >= 80) {
                 triggerRedAlert(data.reason);
             }
@@ -84,6 +106,18 @@ function initSocket(familyID) {
 
         socket.on('emergency_alert', (data) => {
             showEmergencyBanner(data.url, data.reason);
+        });
+
+        // 🟢 升級：監聽新的證據入庫廣播
+        socket.on('new_evidence_submitted', function(data) {
+            console.log("✅ 雲端收到新的蒐證快照:", data);
+            document.getElementById('emergency-detail').innerText = `✅ 已成功保全證據：${data.url.substring(0,30)}... (可於下方報表查看)`;
+            document.getElementById('emergency-banner').style.display = "block";
+            document.getElementById('emergency-banner').style.backgroundColor = "#34c759"; // 綠色提示
+            setTimeout(() => { 
+                document.getElementById('emergency-banner').style.display = "none";
+                document.getElementById('emergency-banner').style.backgroundColor = "#ff4d4f"; // 變回紅色
+            }, 5000);
         });
 
         // 🪄 監聽神蹟重置廣播
@@ -154,7 +188,6 @@ async function fetchLogs(familyID, isRealtimeUpdate = false) {
         if (data.data && data.data.length > 0) {
             updateDashboard(data.data, isRealtimeUpdate);
         } else {
-            // 如果清空了，要重置儀表板
             if(isRealtimeUpdate === false && data.data && data.data.length === 0){
                 updateDashboard([], false);
             }
@@ -170,7 +203,6 @@ function updateDashboard(records, isRealtimeUpdate) {
     const tbody = document.getElementById('log-table-body');
     tbody.innerHTML = ""; 
     
-    // 如果沒有資料（通常是被上帝模式清空後），直接歸零
     if (records.length === 0) {
         document.getElementById('stat-total').innerText = "0";
         document.getElementById('stat-safe').innerText = "0";
@@ -180,14 +212,12 @@ function updateDashboard(records, isRealtimeUpdate) {
         return;
     }
 
-    // 🌟 戰情室也套用 50 分過濾器
     let sanitizedRecords = records.map(record => {
         let rec = { ...record };
         let report = {};
         try { report = typeof rec.report === 'string' ? JSON.parse(rec.report) : rec.report; } catch(e) { report = { riskScore: 0, reason: "解析失敗" }; }
         
         let score = parseInt(report.riskScore || report.RiskScore || report.risk_score) || 0;
-        // 強制套用 50 分以下安全濾鏡
         if (score < 50) {
             report.riskScore = 0;
             report.reason = "✅ 系統未發現明顯惡意特徵，安全放行。";
@@ -247,7 +277,18 @@ function updateDashboard(records, isRealtimeUpdate) {
 
         let tdReason = document.createElement('td');
         tdReason.style.cssText = "max-width:350px; line-height: 1.5; color:#c9d1d9;";
-        tdReason.textContent = reason;
+        
+        // ==========================================
+        // 🚨 升級重點：增加上帝模式蒐證視圖按鈕
+        // ==========================================
+        if (score >= window.CONFIG.RISK_THRESHOLD_HIGH) {
+            tdReason.innerHTML = `
+                ${reason}<br>
+                <button class="view-evidence-btn risk-high" style="margin-top:8px; padding: 5px 10px; border: 1px solid #ff4d4f; border-radius: 4px; background: rgba(255,0,0,0.1); color: #ff4d4f; cursor:pointer; font-size:12px; font-weight:bold; transition: 0.2s;">🔎 查看上帝蒐證快照</button>
+            `;
+        } else {
+            tdReason.textContent = reason;
+        }
 
         let tdStatus = document.createElement('td');
         tdStatus.className = riskClass;
@@ -257,6 +298,57 @@ function updateDashboard(records, isRealtimeUpdate) {
         tbody.appendChild(tr);
     });
 }
+
+// ==========================================
+// 🚨 升級重點：處理「查看上帝模式蒐證快照」點擊
+// ==========================================
+document.getElementById('log-table-body').addEventListener('click', async (e) => {
+    if (e.target.classList.contains('view-evidence-btn')) {
+        const tr = e.target.closest('tr');
+        const url = tr.cells[1].innerText;
+        const timestamp = tr.cells[0].innerText; // 時分秒
+        const reason = tr.cells[3].innerText.replace('🔎 查看上帝蒐證快照', '').trim();
+        
+        const btn = e.target;
+        btn.innerText = "⏳ 證據提取中...";
+        btn.style.opacity = "0.5";
+        btn.style.pointerEvents = "none";
+
+        try {
+            const apiUrl = `${CONFIG.API_BASE_URL}/api/get_evidence`;
+            const familyID = document.getElementById('family-id-input')?.value || localStorage.getItem('savedFamilyID') || "demo_family";
+            
+            // 去後端找對應時間點的快照
+            const res = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: url,
+                    familyID: familyID,
+                    timestamp: timestamp 
+                })
+            });
+            
+            if (!res.ok) throw new Error("證據提取失敗");
+            const data = await res.json();
+            
+            if (data.status === 'success' && data.screenshot_base64) {
+                // 叫出彈跳視窗！
+                showEvidenceModal(data.screenshot_base64, reason);
+            } else {
+                alert("❌ 雲端鑑識失敗：照片尚未上傳完成，或是存檔已被移除 (請稍等幾秒或檢查是否已被清空)。");
+            }
+
+        } catch (error) {
+            console.error("提取蒐證快照失敗:", error);
+            alert("❌ 提取蒐證快照失敗，請確認後端網路連線。");
+        } finally {
+            btn.innerText = "🔎 查看上帝蒐證快照";
+            btn.style.opacity = "1";
+            btn.style.pointerEvents = "auto";
+        }
+    }
+});
 
 function drawRatioChart(safe, danger) {
     const ctx = document.getElementById('ratioChart').getContext('2d');
@@ -318,7 +410,6 @@ function drawTrendChart(labels, data) {
 }
 
 function triggerRedAlert(reason) {
-    // 畫面邊框閃爍紅光
     document.body.style.transition = "box-shadow 0.2s";
     document.body.style.boxShadow = "inset 0 0 100px rgba(255, 0, 0, 0.8)";
     
@@ -335,17 +426,12 @@ function triggerRedAlert(reason) {
         setTimeout(() => oscillator.stop(), 200); 
     } catch(e) { console.log("音效播放被阻擋"); }
 
-    setTimeout(() => {
-        document.body.style.boxShadow = "none";
-    }, 500);
+    setTimeout(() => { document.body.style.boxShadow = "none"; }, 500);
 }
 
-// ==========================================
-// 🪄 隱藏版彩蛋：上帝模式觸發器 (連按標題 5 次觸發)
-// ==========================================
+// 🪄 上帝模式觸發器
 let secretClickCount = 0;
 let clickTimer = null;
-
 const dashboardTitle = document.querySelector('h1') || document.body; 
 
 dashboardTitle.addEventListener('click', () => {
@@ -364,7 +450,6 @@ dashboardTitle.addEventListener('click', () => {
 
 async function triggerDemoReset() {
     try {
-        // 🚀 已將備用網址從 127.0.0.1 改為 Render 正式網址
         const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
         const familyID = document.getElementById('family-id-input')?.value || localStorage.getItem('savedFamilyID') || "demo_family"; 
 
@@ -387,21 +472,12 @@ async function triggerDemoReset() {
     }
 }
 
-// ==========================================
-// 🗑️ 實用功能：一鍵清空掃描紀錄
-// ==========================================
+// 🗑️ 一鍵清空掃描紀錄
 document.getElementById('btn-clear-logs')?.addEventListener('click', async () => {
-    // 取得當前的家庭 ID
     const familyID = document.getElementById('family-id-input').value.trim().toUpperCase() || localStorage.getItem('savedFamilyID');
-    
-    if (!familyID) {
-        return alert("⚠️ 請先輸入或連線家庭代碼！");
-    }
+    if (!familyID) return alert("⚠️ 請先輸入或連線家庭代碼！");
 
-    // 防呆確認，避免誤觸
-    if (!confirm("⚠️ 確定要清空所有的掃描紀錄嗎？\n此動作將會同步刪除雲端資料庫中的紀錄，且無法復原。")) {
-        return;
-    }
+    if (!confirm("⚠️ 確定要清空所有的掃描紀錄與截圖證據嗎？\n此動作無法復原。")) return;
 
     const btn = document.getElementById('btn-clear-logs');
     const originalText = btn.innerText;
@@ -409,10 +485,8 @@ document.getElementById('btn-clear-logs')?.addEventListener('click', async () =>
     btn.disabled = true;
 
     try {
-        // 🚀 已將備用網址從 127.0.0.1 改為 Render 正式網址
         const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
         
-        // 呼叫我們在 app.py 寫好的清除 API
         const res = await fetch(`${apiUrl}/api/clear_alerts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -422,8 +496,7 @@ document.getElementById('btn-clear-logs')?.addEventListener('click', async () =>
         const data = await res.json();
         
         if (data.status === 'success') {
-            alert("✅ 紀錄已成功清空！");
-            // 重新抓取資料 (自動讓前端的圖表和表格完美歸零)
+            alert("✅ 紀錄與證據已成功清空！");
             fetchLogs(familyID, false);
         } else {
             alert("❌ 清除失敗：" + data.message);
