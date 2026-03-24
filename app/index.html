@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>防詐系統測試</title>
+    <style>
+        /* --- 模擬詐騙網頁的背景 --- */
+        body { font-family: sans-serif; padding: 20px; background-color: #fce4e4; }
+        .fake-scam-page { text-align: center; margin-top: 50px; }
+        .fake-scam-page h1 { color: #d32f2f; }
+        
+        /* 🛑 核心防護罩設定 (預設隱藏 display: none) */
+        #anti-fraud-modal {
+            display: none; /* 一開始是隱藏的 */
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.85); /* 半透明黑色背景，讓後方網頁變暗 */
+            z-index: 9999; /* 確保在最上層，蓋住所有東西 */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        /* 🤖 機器人與對話框的容器 (加入從下方彈出的動畫) */
+        .hero-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            /* 帶有彈性的滑出效果，看起來比較活潑 */
+            animation: slideUp 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+        }
+
+        /* 💬 對話氣泡 */
+        .speech-bubble {
+            background: #fff;
+            border: 4px solid #1a365d;
+            border-radius: 20px;
+            padding: 20px 30px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a365d;
+            text-align: center;
+            max-width: 80%;
+            margin-bottom: -15px; /* 讓氣泡跟機器人靠近一點 */
+            position: relative;
+            z-index: 2;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        /* 小尾巴 (對話氣泡的尖角) */
+        .speech-bubble::after {
+            content: ''; position: absolute; bottom: -15px; right: 30%;
+            border-width: 15px 15px 0; border-style: solid;
+            border-color: #1a365d transparent transparent transparent;
+        }
+
+        /* 🤖 機器人圖片 */
+        .robot-img {
+            width: 320px; /* 大小可以自己調整 */
+            max-width: 80vw;
+            z-index: 1;
+        }
+
+        /* ✅ 離開按鈕 */
+        .safe-exit-btn {
+            margin-top: 20px;
+            background-color: #28a745; /* 安全的綠色 */
+            color: white;
+            border: 3px solid #fff;
+            border-radius: 50px;
+            padding: 15px 40px;
+            font-size: 22px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.5);
+            transition: transform 0.2s;
+        }
+        .safe-exit-btn:hover { transform: scale(1.05); }
+
+        /* 動畫定義 */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { 
+            from { transform: translateY(100px) scale(0.8); opacity: 0; } 
+            to { transform: translateY(0) scale(1); opacity: 1; } 
+        }
+    </style>
+</head>
+<body>
+
+    <div class="fake-scam-page">
+        <h1>📉 飆股群組 保證獲利！</h1>
+        <h2>未知套路 穩賺不賠</h2>
+        <p>點擊下方按鈕立刻加入，明天馬上賺 1 萬！</p>
+        <button onclick="checkRisk(100)" style="padding:15px 30px; font-size:20px; color:white; background-color:red; border:none; border-radius:10px; cursor:pointer;">
+            點我匯款加入
+        </button>
+    </div>
+
+    <div id="anti-fraud-modal">
+        <div class="hero-container">
+            <div class="speech-bubble">
+                各位老老少少！<br>這騙人的啦！千萬毋通點進去喔！
+            </div>
+            
+            <img src="hero.png" alt="AI 防詐英雄" class="robot-img">
+            
+            <button class="safe-exit-btn" onclick="closeModal()">
+                ✔ 離開此網頁 (安全)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 模擬你們前端呼叫 app.py 後收到的 riskScore
+        function checkRisk(riskScore) {
+            if (riskScore >= 75) {
+                // ⚠️ 如果風險分數大於等於 75，就把防護罩顯示出來 (display 改成 flex)
+                document.getElementById('anti-fraud-modal').style.display = 'flex';
+            }
+        }
+
+        // 點擊綠色的安全離開按鈕後執行
+        function closeModal() {
+            // 在實際你們的系統中，這裡可以直接寫：
+            // window.location.href = 'https://你們的安全首頁.com';
+            
+            // 這裡為了測試方便，只是先把防護罩關掉
+            document.getElementById('anti-fraud-modal').style.display = 'none';
+            alert("已成功帶您離開危險網頁！");
+        }
+    </script>
+</body>
+</html>

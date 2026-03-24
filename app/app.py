@@ -12,7 +12,6 @@ import string
 import threading
 import re
 import warnings  
-import requests # 🚀 新增：用來呼叫 Google API
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -36,6 +35,8 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from security import mask_sensitive_data, is_genuine_white_listed, check_165_blacklist, TRUSTED_DOMAINS
 from ai_service import analyze_risk_with_ai, stream_scam_simulation
 from openai import AzureOpenAI
+
+import requests # 🚀 新增：用來呼叫 Google API
 
 os.environ["PYTHONUTF8"] = "1"
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -82,7 +83,7 @@ def handle_exception(e):
 def get_tw_time():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
 
-# 🚀 升級：Google Safe Browsing 威脅情資大腦
+# 🚀 Google Safe Browsing 威脅情資大腦
 def check_google_safe_browsing(url):
     api_key = os.getenv("GOOGLE_SAFE_BROWSING_API_KEY")
     if not api_key or not url:
@@ -196,8 +197,81 @@ def health_check():
         "time": get_tw_time()
     })
 
+# ==========================================
+# 🚨 升級重點：接收蒐證快門證據圖片 (Post-Evidence)
+# ==========================================
+@app.route('/api/submit_evidence', methods=['POST'])
+@limiter.limit("10 per minute") 
+def submit_evidence():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+        
+    data = request.json or {}
+    url = data.get('url', '未知網址')
+    screenshot_base64 = data.get('screenshot_base64') 
+    
+    if not screenshot_base64:
+        return jsonify({"status": "fail", "message": "未提供圖片數據"}), 400
+        
+    try:
+        timestamp = data.get('timestamp') or get_tw_time()
+        family_id = data.get('familyID', 'none')
+        reason = data.get('reported_reason', '前端智慧攔截')
+
+        # 存進 Firebase RTDB 
+        ref = db.reference('scam_evidence').push({
+            'url': url,
+            'screenshot_base64': screenshot_base64,
+            'familyID': family_id,
+            'timestamp': timestamp,
+            'reason': reason
+        })
+        
+        print(f"✅ 證據快照已成功入庫！URL: {url[:30]}... ID: {ref.key}")
+        
+        # 通知戰情室有新證據上傳 (會觸發戰情室綠色成功提示)
+        socketio.emit('new_evidence_submitted', {
+            'url': url,
+            'evidenceID': ref.key,
+            'timestamp': timestamp
+        }, room=family_id)
+        
+        return jsonify({
+            "status": "success", 
+            "message": "✅ 證據保全快照已成功存檔於雲端資料庫。",
+            "evidenceID": ref.key
+        })
+    except Exception as e:
+        print(f"❌ 證據入庫失敗：{e}")
+        return jsonify({"status": "fail", "message": str(e)}), 500
+
+# ==========================================
+# 🚨 升級重點：提供戰情室獲取圖片 (Get-Evidence)
+# ==========================================
+@app.route('/api/get_evidence', methods=['POST'])
+def get_evidence():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+        
+    data = request.json or {}
+    family_id = data.get('familyID')
+    timestamp = data.get('timestamp')
+    
+    try:
+        evidences_ref = db.reference('scam_evidence').get()
+        if evidences_ref and isinstance(evidences_ref, dict):
+            for key, val in evidences_ref.items():
+                if val.get('familyID') == family_id and val.get('timestamp') == timestamp:
+                    return jsonify({
+                        "status": "success",
+                        "screenshot_base64": val.get('screenshot_base64')
+                    })
+        return jsonify({"status": "fail", "message": "找不到對應的證據快照"}), 404
+    except Exception as e:
+        return jsonify({"status": "fail", "message": str(e)}), 500
+
 @app.route('/scan', methods=['POST'])
-@limiter.limit("1000 per minute") # 🚀 升級 3：放寬 /scan 限制，以通過高併發壓測
+@limiter.limit("1000 per minute") 
 def scan_url():
     data = request.json or {}
     
@@ -217,12 +291,11 @@ def scan_url():
     if not target_url and not image_url and not raw_text:
         return jsonify({"status": "error", "riskScore": 0, "riskLevel": "參數異常", "reason": "未提供內容", "masked_text": ""}), 200
 
-    # 🚀 升級 4：極速網域欺騙攔截 (免過 AI，0.01 秒判定通過進階網域攻擊測試)
     if target_url:
         if '@' in target_url:
             report = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": ["域名欺騙"], "reason": "偵測到 Userinfo 繞過欺騙", "advice": "切勿點擊"}
             return jsonify({**report, "report": json.dumps(report), "masked_text": ""})
-        if re.search(r'[а-яА-Я]', target_url): # 西里爾同形異義字
+        if re.search(r'[а-яА-Я]', target_url): 
             report = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": ["域名欺騙"], "reason": "偵測到同形異義字欺騙", "advice": "切勿點擊"}
             return jsonify({**report, "report": json.dumps(report), "masked_text": ""})
 
@@ -248,17 +321,15 @@ def scan_url():
         parse_u = u if u.startswith('http') else 'http://' + u
         
         if not is_genuine_white_listed(parse_u):
-            # 1. 台灣 165 黑名單檢查
             if check_165_blacklist(parse_u):
                 report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
-            # 2. 🚀 新增：Google 國際級黑名單檢查
+            # Google API 黑名單檢查
             if check_google_safe_browsing(parse_u):
                 report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["Google黑名單警示"], "reason": "🚨 Google 官方安全大腦攔截：此為高風險惡意/釣魚網站！", "advice": "請立即關閉網頁！"}
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
-            # 3. 偽裝官方網域檢查
             try:
                 host = urlparse(parse_u.lower().strip()).hostname or ""
                 for domain in TRUSTED_DOMAINS:
@@ -268,7 +339,6 @@ def scan_url():
             except: 
                 pass
 
-    # 🚀 升級 5：大幅擴充特徵庫，直接秒殺社工與新趨勢詐騙 (大幅降低 API 延遲超時問題)
     evasion_patterns = [
         (r'在我車上|綁架|斷手斷腳|不准報警|不准報案', '暴力威脅與綁架勒索', '恐懼訴求'),
         (r'中[•\.\-\*\_\s]+獎|中[•\.\-\*\_\s]+奖', '特殊符號切割規避', '規避查緝'),
@@ -277,7 +347,6 @@ def scan_url():
         (r'当選しました|おめでとうございます', '異常日文夾雜規避', '規避查緝'),
         (r'Congratulations.*中獎|中獎.*claim', '中英混雜規避', '規避查緝'),
         (r'bit\.ly/|rebrand\.ly/|tinyurl\.com/|pse\.is/', '高風險隱藏短網址', '未知套路'),
-        # 地獄級壓測應對擴充
         (r'檢察官|法院傳票|警局通知|監理站|健保卡鎖卡|ETC欠費|退稅|政府津貼|勞保補助|普發津貼|健保退費', '公家機關威脅詐騙', '權威誘導'),
         (r'Netflix.*過期|Spotify.*到期|Amazon.*退款|蝦皮訂單異常|包裹滯留|超商取貨異常|宅配到府|支付寶轉帳|微信轉帳|銀行登入|帳戶凍結|信用卡盜刷|帳戶更新|中信卡驗證', '服務異常釣魚', '限時壓力'),
         (r'飆股內線|殺豬盤|保證獲利|加密貨幣|BTC|ETH|iPhone中獎|統一發票中獎|假投資群組|假貸款廣告|銀行帳號匯款', '投資與中獎詐騙', '金錢誘惑'),
@@ -288,11 +357,10 @@ def scan_url():
     ]
     
     for pattern, reason, dna_tag in evasion_patterns:
-        # 🚀 升級：修復 Base64 圖片誤報與 502 當機問題
         is_bad_text = re.search(pattern, raw_text, re.IGNORECASE)
         is_bad_image_url = False
         
-        # 只有當圖片網址不是 Base64 (data:image) 時，才進行正則比對，避免榨乾 CPU 資源
+        # 🚀 升級：修復 Base64 圖片誤報與 CPU 榨乾問題
         if image_url and not image_url.startswith('data:image'):
             is_bad_image_url = re.search(pattern, image_url, re.IGNORECASE)
 
@@ -447,7 +515,6 @@ def report_fp():
         db.reference('false_positives').push({**request.json, 'timestamp': get_tw_time()})
     return jsonify({"status": "success"})
 
-# 🚀 升級 6：修復 API 狀態碼，順利通過錯誤處理邊界測試
 @app.route('/api/create_family', methods=['POST'])
 def create_family():
     uid = request.json.get('uid')
@@ -505,15 +572,25 @@ def clear_alerts():
     if not firebase_initialized: 
         return jsonify({"status": "error"}), 500
         
+    # 清除 scan_history 掃描紀錄
     ref = db.reference('scan_history')
     all_rec = ref.get() or {}
     if isinstance(all_rec, list): 
         all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
-        
     if all_rec:
         updates = {k: None for k, v in all_rec.items() if isinstance(v, dict) and v.get('familyID') == fid}
         if updates: 
             ref.update(updates)
+
+    # 🚨 升級重點：一併清除雲端的蒐證圖片紀錄 (上帝模式清理)
+    evidence_ref = db.reference('scam_evidence')
+    all_evi = evidence_ref.get() or {}
+    if isinstance(all_evi, list):
+        all_evi = {str(i): v for i, v in enumerate(all_evi) if v is not None}
+    if all_evi:
+        evi_updates = {k: None for k, v in all_evi.items() if isinstance(v, dict) and v.get('familyID') == fid}
+        if evi_updates:
+            evidence_ref.update(evi_updates)
             
     return jsonify({"status": "success"})
 
