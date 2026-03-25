@@ -1,6 +1,6 @@
 # 🟢 確保 Eventlet 在最一開始就接管系統執行緒，避免背景任務打架
-import eventlet
-eventlet.monkey_patch()
+#import eventlet
+#eventlet.monkey_patch()
 
 import sys
 import io
