@@ -29,9 +29,6 @@
         .btn-165 { background-color: transparent; color: #dddddd; border: 1px solid #555555; padding: 12px 25px; border-radius: 25px; font-size: 18px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.3s; }
         .btn-165:hover { background-color: #333; border-color: #888; color: white; }
         
-        .checkbox-label { display: flex; align-items: flex-start; margin-bottom: 15px; font-size: 16px; color: #cccccc; cursor: pointer; line-height: 1.5; }
-        .checkbox-label input { margin-right: 12px; margin-top: 4px; transform: scale(1.2); }
-        
         .btn-safe { background-color: #28a745; color: white; padding: 18px 30px; border-radius: 30px; font-size: 22px; font-weight: bold; border: none; cursor: pointer; width: 100%; margin-top: 15px; transition: 0.3s; box-shadow: 0 5px 20px rgba(40, 167, 69, 0.4); }
         .btn-safe:hover { background-color: #218838; transform: translateY(-3px); }
         .btn-text { background: none; border: none; color: #888888; font-size: 16px; text-decoration: underline; cursor: pointer; width: 100%; margin-top: 20px; transition: 0.3s; }
@@ -64,9 +61,9 @@
         </div>
 
         <div class="right-col">
-            <div class="danger-tag">未知套路</div>
+            <div class="danger-tag">威脅攔截成功</div>
             <div class="risk-score-display">危險指數：<span id="score">--</span> 分</div>
-            <div class="warning-subtitle">偵測到危險特徵，已強制攔截！</div>
+            <div class="warning-subtitle">已為您啟動防詐防護網！</div>
             
             <div id="reason-box"></div><div id="dna-box"></div><div id="tags-container"></div><div id="advice"></div>
 
@@ -76,17 +73,15 @@
                 <a href="tel:165" class="btn-165" id="call-btn">📞 撥打 165 反詐騙專線</a>
             </div>
 
-            <div class="info-box" id="cooldown-box">
-                <div class="box-title">點擊離開前請先回想一下：</div>
-                <label class="checkbox-label"><input type="checkbox" class="soul-question"> 為什麼這詐騙網頁的危險被發現嗎？</label>
-                <label class="checkbox-label"><input type="checkbox" class="soul-question"> 這是詐騙請安全面關卡不錯聽嗎？</label>
-                <label class="checkbox-label"><input type="checkbox" class="soul-question"> 請停下來防詐騙點擊詐騙問題嗎？</label>
+            <div class="info-box" id="education-box" style="background-color: rgba(20, 40, 70, 0.8); border-color: #4a90e2;">
+                <div class="box-title" style="color: #4adcff; font-weight: bold; font-size: 20px;">💡 防詐小學堂</div>
+                <div id="dynamic-tip" style="font-size: 18px; color: #e0f7fa; line-height: 1.6; margin-bottom: 20px; font-weight: 500;">
+                    正在為您分析詐騙手法...
+                </div>
                 
-                <button id="wake-up-btn" style="display: none;">我明白了，這是詐騙，立即關閉網頁</button>
-                <button class="btn-safe" id="manual-leave-btn">離開此網頁 (安全關閉)</button>
-                <button class="btn-safe" id="close-btn" style="display: none;">關閉分頁</button> 
-                <button class="btn-text" id="report-false-btn">這不是詐騙，回報誤判</button>
+                <button class="btn-safe" id="manual-leave-btn">聽從建議，安全離開此網頁</button>
                 <button class="btn-text" id="bypass-btn">強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button>
+                <button class="btn-text" id="report-false-btn" style="margin-top: 10px;">這不是詐騙，回報系統誤判</button>
             </div>
         </div>
     </div>

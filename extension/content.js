@@ -1,5 +1,5 @@
 /**
- * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版 + 證據保全快門)
+ * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版 + 證據保全快門 + 友善防詐字卡)
  * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 動態防禦 + 浮動警告視窗 + 自動蒐證快門
  */
 
@@ -126,7 +126,7 @@ function maskSensitiveData(text) {
 }
 
 // ==========================================
-// 🚨 升級重點：觸發蒐證攔截視窗 (異步截圖處理邏輯)
+// 🚨 升級重點：觸發蒐證攔截視窗 (異步截圖處理邏輯 + 防詐小常識字卡)
 // ==========================================
 async function triggerSafeBlock(reason, reportData = null) {
     if (hasTriggeredBlock) return;
@@ -136,15 +136,36 @@ async function triggerSafeBlock(reason, reportData = null) {
 
     console.log("🛡️ AI 防詐盾牌：觸發蒐證攔截，正在按下證據快門...", reason);
 
-    // 1. 🟢 視覺：立即顯示簡單蒐證遮罩，凍結使用者操作
+    // 💡 隨機防詐小常識資料庫
+    const antiFraudTips = [
+        "💡 【防詐小常識】ATM 只能轉出錢，絕對沒有「解除分期付款」的功能喔！",
+        "💡 【防詐小常識】警察或檢察官「絕對不會」加你的 LINE 辦案，也不會要你匯款。",
+        "💡 【防詐小常識】穩賺不賠的投資？那他為什麼不自己賺就好？小心假投資真詐財！",
+        "💡 【防詐小常識】收到未知包裹簡訊？千萬別點擊短網址，當心手機中毒！",
+        "💡 【防詐小常識】網友教你買虛擬貨幣？素未謀面的「乾哥哥/乾妹妹」談錢必有詐！",
+        "💡 【防詐小常識】網購賣家說「條碼刷錯變成批發商」？這是最經典的詐騙台詞！",
+        "💡 【防詐小常識】健保卡不會被無故鎖卡，接到語音電話說健保卡違規，請直接掛斷。"
+    ];
+    // 隨機抽出一條常識
+    const randomTip = antiFraudTips[Math.floor(Math.random() * antiFraudTips.length)];
+
+    // 1. 🟢 視覺：改為柔和的「防詐字卡」過場畫面
     const shield = document.createElement('div');
     shield.id = 'scam-shield-overlay';
-    shield.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:30px; font-weight:bold; z-index:2147483647; font-family:sans-serif; backdrop-filter:blur(5px);";
+    shield.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(20, 30, 48, 0.95); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2147483647; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; backdrop-filter:blur(8px);";
+    
     shield.innerHTML = `
-        <div style="font-size:60px; margin-bottom:20px;">🛡️</div>
-        <div style="margin-bottom:15px;">AI 防詐盾牌攔截中</div>
-        <div style="font-size:18px; color:#ffdddd; font-weight:normal;">[正在自動蒐證詐騙快照並上傳雲端，請稍候...]</div>
-        <div style="margin-top:20px; font-size:14px; color:#aaa; font-weight:normal;">(證據將作為家人求證或 165 檢舉之用)</div>
+        <div style="background: rgba(255, 255, 255, 0.1); border: 2px solid #4a90e2; border-radius: 15px; padding: 40px; max-width: 600px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div style="font-size:50px; margin-bottom:20px;">📚</div>
+            <div style="font-size:22px; line-height: 1.6; font-weight: bold; margin-bottom:30px; color: #e0f7fa;">
+                ${randomTip}
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; color: #888; font-size: 15px;">
+                <div style="width: 20px; height: 20px; border: 3px solid #4a90e2; border-top: 3px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                系統正在為您阻擋風險網頁並準備安全畫面...
+            </div>
+        </div>
+        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     `;
     document.documentElement.appendChild(shield);
     if (document.body) document.body.style.display = 'none';
@@ -160,7 +181,7 @@ async function triggerSafeBlock(reason, reportData = null) {
 
         console.log("📸 向 background.js 發送快門指令...");
         
-        // 設定一個 3 秒的超時機制，避免背景程式卡住導致畫面無法跳轉
+        // 任務 A：發送截圖指令給背景程式
         const sendPromise = chrome.runtime.sendMessage({ 
             action: "captureScamTabWithEvidence", 
             url: window.location.href, 
@@ -168,10 +189,22 @@ async function triggerSafeBlock(reason, reportData = null) {
             timestamp: timestamp, 
             familyID: familyID 
         });
-        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({status: "timeout"}), 3000));
+
+        // 任務 B：⏳ 強制畫面停留至少 2.5 秒 (讓使用者能讀完字卡)
+        const minDisplayPromise = new Promise(resolve => setTimeout(resolve, 2500));
         
-        const response = await Promise.race([sendPromise, timeoutPromise]);
-        console.log("✅ 證據上傳回應:", response);
+        // 任務 C：設定 4 秒絕對超時 (避免網路卡死永遠不跳轉)
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({status: "timeout"}), 4000));
+        
+        // 🚨 完美轉場邏輯：
+        // 必須等「截圖完成」與「2.5秒強制停留」都達成 (Promise.all)
+        // 但如果超過 4 秒都不理我，就強制觸發跳轉 (Promise.race)
+        await Promise.race([
+            Promise.all([sendPromise, minDisplayPromise]),
+            timeoutPromise
+        ]);
+
+        console.log("✅ 準備跳轉至警告頁面");
 
     } catch (error) {
         console.error("❌ 自動蒐證快門失敗:", error);

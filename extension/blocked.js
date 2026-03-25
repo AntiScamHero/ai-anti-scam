@@ -58,7 +58,42 @@ document.addEventListener('DOMContentLoaded', async () => {
         targetUrlEl.innerText = decodeURIComponent(targetUrl);
     }
 
-    // 3. 🟢 升級：單純跳轉到安全網頁 (Google) + 倒數自動跳離
+    // ==========================================
+    // 🚨 升級重點：動態情境防詐字卡配對系統
+    // ==========================================
+    const tipsDB = {
+        "金錢誘惑": "股市群組常有自稱「名師」帶盤，若對方要求匯出資金到個人帳戶，或推薦不知名投資平台，100% 是詐騙！投資理財請尋求合法管道。",
+        "投資": "穩賺不賠的投資？那他為什麼不自己賺就好？高報酬必定伴隨高風險，看到「保證獲利」四個字絕對是詐騙！",
+        "限時壓力": "網購平台或銀行「絕對不會」打電話要求您去 ATM 或使用網銀操作「解除分期付款」、「升級 VIP」或「取消訂單」。",
+        "權威誘導": "警察、檢察官或健保局「絕對不會」加您的 LINE 辦案，也不會要求您匯款或派人面交收取「監管資金」。",
+        "親情勒索": "收到親友傳 LINE 說急需借錢？現在 AI 聲音和臉部造假技術氾濫（Deepfake），匯款前請務必「打電話」與本人確認！",
+        "沉沒成本": "對方說要先繳「保證金」、「稅金」、「手續費」或「解凍金」才能把錢領出來？這是詐騙無底洞，千萬別再匯出任何一毛錢！",
+        "釣魚": "收到包裹異常、水電費未繳的簡訊？請勿點擊不明短網址，更「絕對不能」在裡面輸入信用卡號或帳號密碼。",
+        "交友": "從未見面的網友突然說要寄送貴重禮物或跨國包裹給您，但卡在海關需要代墊「清關費」？這是典型的跨國交友詐騙！",
+        "黑名單": "此網站已被 165 警政署通報為危險網站。詐騙集團常會假冒知名品牌外觀，請直接關閉網頁以策安全。",
+        "default": "網路資訊真真假假，遇到要求匯款、索取密碼或身分證件的情境，請務必冷靜求證，切勿衝動行事！"
+    };
+
+    // 將 DNA 與攔截原因合併，作為配對字串
+    const searchString = (scamDNA.join(',') + reason).toLowerCase();
+    let matchedTip = tipsDB["default"];
+
+    // 尋找最符合當前情境的防詐常識
+    for (const [key, tip] of Object.entries(tipsDB)) {
+        if (key !== "default" && searchString.includes(key.toLowerCase())) {
+            matchedTip = tip;
+            break; 
+        }
+    }
+
+    // 將文案塞入 HTML
+    const dynamicTipEl = document.getElementById('dynamic-tip');
+    if (dynamicTipEl) {
+        dynamicTipEl.innerText = matchedTip;
+    }
+
+
+    // 3. 🟢 單純跳轉到安全網頁 (Google) + 倒數自動跳離
     const safeLeaveAction = () => {
         window.location.replace("https://www.google.com.tw");
     };
@@ -69,7 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (autoLeaveInterval) {
             clearInterval(autoLeaveInterval);
             const manualLeaveBtn = document.getElementById('manual-leave-btn');
-            if (manualLeaveBtn) manualLeaveBtn.innerText = "點此離開危險網頁 (回到 Google)";
+            if (manualLeaveBtn) manualLeaveBtn.innerText = "聽從建議，安全離開此網頁";
         }
     };
 
@@ -78,12 +113,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         manualLeaveBtn.addEventListener('click', safeLeaveAction);
         
         let autoLeaveTimer = 15;
-        manualLeaveBtn.innerText = `離開此網頁 (${autoLeaveTimer} 秒後自動跳離)`;
+        manualLeaveBtn.innerText = `安全離開 (${autoLeaveTimer} 秒後自動跳離)`;
         
         autoLeaveInterval = setInterval(() => {
             autoLeaveTimer--;
             if (autoLeaveTimer > 0) {
-                manualLeaveBtn.innerText = `離開此網頁 (${autoLeaveTimer} 秒後自動跳離)`;
+                manualLeaveBtn.innerText = `安全離開 (${autoLeaveTimer} 秒後自動跳離)`;
             } else {
                 clearInterval(autoLeaveInterval);
                 manualLeaveBtn.innerText = "正在自動為您跳轉至安全網頁...";
@@ -91,9 +126,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }, 1000);
     }
-
-    const closeBtn = document.getElementById('close-btn');
-    if (closeBtn) closeBtn.addEventListener('click', safeLeaveAction);
 
     // 4. 緊急聯絡人 / 165 撥號模組
     const desktopModal = document.getElementById('desktop-modal');
@@ -126,13 +158,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 🚀 關鍵修改：確保 `fetch` 使用 Render 網址
     try {
         if (typeof chrome !== 'undefined' && chrome.storage) {
             const storage = await chrome.storage.local.get(['familyID']);
             const familyID = storage.familyID || 'none';
             
-            // 優先使用全域設定 (如果有)，沒有的話預設為你的 Render 網址，不再是 127.0.0.1
             const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) 
                 ? window.CONFIG.API_BASE_URL 
                 : 'https://ai-anti-scam.onrender.com';
@@ -172,7 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (timeLeft <= 0) {
                 clearInterval(timer);
                 bypassBtn.disabled = false;
-                bypassBtn.innerText = "我已與家人確認，仍要繼續前往 (極不建議)";
+                bypassBtn.innerText = "我已了解風險，堅持前往危險網頁 (極不建議)";
                 bypassBtn.style.color = "#ff4444";
             }
         }, 1000);
@@ -197,7 +227,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             stopAutoLeave(); 
             reportBtn.innerText = "⏳ 傳送中...";
             try {
-                // 🚀 關鍵修改：確保 `fetch` 使用 Render 網址
                 const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) 
                     ? window.CONFIG.API_BASE_URL 
                     : 'https://ai-anti-scam.onrender.com';
@@ -216,29 +245,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // 7. 靈魂拷問邏輯 (打斷被洗腦狀態)
-    const checkboxes = document.querySelectorAll('.soul-question');
-    const wakeUpBtn = document.getElementById('wake-up-btn');
-    
-    if (checkboxes.length > 0 && wakeUpBtn) {
-        checkboxes.forEach(box => {
-            box.addEventListener('change', () => {
-                stopAutoLeave(); 
-                const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
-                wakeUpBtn.style.display = anyChecked ? 'block' : 'none';
-            });
-        });
-
-        wakeUpBtn.addEventListener('click', safeLeaveAction);
-    }
-
-    // 8. WebSocket 接收家人推播
+    // 7. WebSocket 接收家人推播
     if (typeof chrome !== 'undefined' && chrome.storage) {
         chrome.storage.local.get(['familyID'], function(result) {
             const familyID = result.familyID || 'none';
             if (familyID !== 'none' && typeof io !== 'undefined') {
                 try {
-                    // 🚀 關鍵修改：確保 WebSocket 使用 Render 網址
                     const socketUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) 
                         ? window.CONFIG.API_BASE_URL 
                         : 'https://ai-anti-scam.onrender.com';
