@@ -78,6 +78,7 @@ def handle_http_exception(e):
 
 @app.errorhandler(Exception)
 def handle_exception(e):
+    print(f"❌ [全域錯誤攔截] {e}", flush=True)
     return jsonify({"status": "error", "message": "伺服器內部錯誤", "details": str(e)}), 500
 
 def get_tw_time():
@@ -123,10 +124,13 @@ try:
         cred = credentials.Certificate(KEY_PATH)
         firebase_admin.initialize_app(cred, {'databaseURL': 'https://antifraud-ai-94d72-default-rtdb.asia-southeast1.firebasedatabase.app'})
         firebase_initialized = True
+        print("✅ Firebase 初始化成功！", flush=True)
     elif firebase_admin._apps:
         firebase_initialized = True
+    else:
+        print("⚠️ 找不到 serviceAccountKey.json，Firebase 啟動失敗", flush=True)
 except Exception as e:
-    print(f"⚠️ Firebase 啟動失敗：{repr(e)}", flush=True)
+    print(f"⚠️ Firebase 啟動異常：{repr(e)}", flush=True)
 
 def get_dynamic_advice(scam_dna_list):
     dna_str = ",".join(scam_dna_list) if isinstance(scam_dna_list, list) else str(scam_dna_list)
@@ -227,7 +231,7 @@ def submit_evidence():
             'reason': reason
         })
         
-        print(f"✅ 證據快照已成功入庫！URL: {url[:30]}... ID: {ref.key}")
+        print(f"✅ 證據快照已成功入庫！URL: {url[:30]}... ID: {ref.key}", flush=True)
         
         # 通知戰情室有新證據上傳 (會觸發戰情室綠色成功提示)
         socketio.emit('new_evidence_submitted', {
@@ -242,7 +246,7 @@ def submit_evidence():
             "evidenceID": ref.key
         })
     except Exception as e:
-        print(f"❌ 證據入庫失敗：{e}")
+        print(f"❌ 證據入庫失敗：{e}", flush=True)
         return jsonify({"status": "fail", "message": str(e)}), 500
 
 # ==========================================
@@ -375,8 +379,8 @@ def scan_url():
             if cached:
                 c_data = json.loads(cached) if isinstance(cached, str) else cached
                 return jsonify({**c_data, "report": json.dumps(c_data, ensure_ascii=False), "masked_text": web_text})
-        except: 
-            pass
+        except Exception as e: 
+            print(f"⚠️ 讀取快取失敗: {e}", flush=True)
 
     if is_urgent:
         def handle_urgent():
@@ -403,12 +407,14 @@ def scan_url():
         def background_tasks():
             with app.app_context(): 
                 timestamp = get_tw_time()
-                
-                db.reference('scan_history').push({
-                    'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp
-                })
-                if target_url:
-                    db.reference(f'url_cache/{safe_url_key}').set(report_str)
+                try:
+                    db.reference('scan_history').push({
+                        'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp
+                    })
+                    if target_url:
+                        db.reference(f'url_cache/{safe_url_key}').set(report_str)
+                except Exception as e:
+                    print(f"⚠️ 寫入掃描紀錄失敗: {e}", flush=True)
                 
                 socketio.emit('new_scan_result', {
                     'url': target_url, 'riskScore': score, 'reason': report_dict.get('reason'), 'timestamp': timestamp
@@ -512,9 +518,16 @@ def simulate_scam():
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_fp():
     if firebase_initialized: 
-        db.reference('false_positives').push({**request.json, 'timestamp': get_tw_time()})
+        try:
+            db.reference('false_positives').push({**request.json, 'timestamp': get_tw_time()})
+        except Exception as e:
+            print(f"⚠️ 誤判回報寫入失敗: {e}", flush=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
     return jsonify({"status": "success"})
 
+# ==========================================
+# 🚨 關鍵修復：建立家庭 (加入 try...except 與詳細 Log)
+# ==========================================
 @app.route('/api/create_family', methods=['POST'])
 def create_family():
     uid = request.json.get('uid')
@@ -522,13 +535,39 @@ def create_family():
         return jsonify({"status": "error", "msg": "Invalid UID"}), 400
     
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    if firebase_initialized:
-        db.reference(f'families/{code}').set({'guardianUID': uid, 'familyID': code, 'createdAt': get_tw_time()})
-        db.reference(f'users/{uid}').update({'role': 'guardian', 'familyID': code})
-        return jsonify({"status": "success", "inviteCode": code})
-        
-    return jsonify({"status": "error"}), 500
+    print(f"👉 [Debug] 準備建立家庭，代碼: {code}, 守護者UID: {uid}", flush=True)
 
+    if firebase_initialized:
+        try:
+            print("⏳ [Debug] 正在寫入 Firebase families...", flush=True)
+            db.reference(f'families/{code}').set({
+                'guardianUID': uid, 
+                'familyID': code, 
+                'createdAt': get_tw_time()
+            })
+            
+            print("⏳ [Debug] 正在更新 Firebase users...", flush=True)
+            db.reference(f'users/{uid}').update({
+                'role': 'guardian', 
+                'familyID': code
+            })
+            
+            print("✅ [Debug] Firebase 寫入成功！準備回傳給前端...", flush=True)
+            return jsonify({"status": "success", "inviteCode": code})
+            
+        except Exception as e:
+            print(f"❌ [Debug] 建立家庭寫入 Firebase 發生嚴重錯誤: {e}", flush=True)
+            return jsonify({
+                "status": "error", 
+                "message": f"資料庫寫入失敗，請檢查後端日誌: {str(e)}"
+            }), 500
+            
+    print("❌ [Debug] Firebase 初始化未成功，無法建立家庭", flush=True)
+    return jsonify({"status": "error", "message": "Firebase 未連線"}), 500
+
+# ==========================================
+# 🚨 關鍵修復：加入家庭 (加入 try...except 與詳細 Log)
+# ==========================================
 @app.route('/api/join_family', methods=['POST'])
 def join_family():
     data = request.json
@@ -537,13 +576,38 @@ def join_family():
     
     if not code or len(code) != 6 or not code.isalnum(): 
         return jsonify({"status": "fail", "message": "無效的邀請碼格式"}), 400
-        
-    if firebase_initialized and db.reference(f'families/{code}').get():
-        db.reference(f'families/{code}/memberUIDs/{uid}').set(True)
-        db.reference(f'users/{uid}').update({'role': 'member', 'familyID': code})
-        return jsonify({"status": "success"})
-        
-    return jsonify({"status": "fail", "message": "無效的邀請碼"}), 400
+
+    print(f"👉 [Debug] 準備加入家庭，代碼: {code}, 申請人UID: {uid}", flush=True)
+
+    if firebase_initialized:
+        try:
+            print("⏳ [Debug] 正在查詢 Firebase 驗證家庭是否存在...", flush=True)
+            family_node = db.reference(f'families/{code}').get()
+            
+            if family_node:
+                print("⏳ [Debug] 正在寫入 Firebase 成員名單...", flush=True)
+                db.reference(f'families/{code}/memberUIDs/{uid}').set(True)
+                
+                print("⏳ [Debug] 正在更新 Firebase users...", flush=True)
+                db.reference(f'users/{uid}').update({
+                    'role': 'member', 
+                    'familyID': code
+                })
+                print("✅ [Debug] Firebase 加入成功！準備回傳給前端...", flush=True)
+                return jsonify({"status": "success"})
+            else:
+                print("❌ [Debug] 找不到此家庭代碼", flush=True)
+                return jsonify({"status": "fail", "message": "無效的邀請碼"}), 400
+                
+        except Exception as e:
+            print(f"❌ [Debug] 加入家庭讀寫 Firebase 發生嚴重錯誤: {e}", flush=True)
+            return jsonify({
+                "status": "error", 
+                "message": f"資料庫讀寫失敗，請檢查後端日誌: {str(e)}"
+            }), 500
+
+    print("❌ [Debug] Firebase 初始化未成功，無法加入家庭", flush=True)
+    return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
 
 @app.route('/api/get_alerts', methods=['POST'])
 def get_alerts():
@@ -554,14 +618,18 @@ def get_alerts():
     if not firebase_initialized: 
         return jsonify({"status": "fail", "data": []}), 500
         
-    all_rec = db.reference('scan_history').get() or {}
-    if isinstance(all_rec, list): 
-        all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
+    try:
+        all_rec = db.reference('scan_history').get() or {}
+        if isinstance(all_rec, list): 
+            all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
+            
+        result = [v for v in all_rec.values() if isinstance(v, dict) and v.get('familyID') == fid]
+        result.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
         
-    result = [v for v in all_rec.values() if isinstance(v, dict) and v.get('familyID') == fid]
-    result.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-    
-    return jsonify({"status": "success", "data": result[:20]})
+        return jsonify({"status": "success", "data": result[:20]})
+    except Exception as e:
+        print(f"❌ [Debug] 獲取戰情室警告失敗: {e}", flush=True)
+        return jsonify({"status": "fail", "data": []}), 500
 
 @app.route('/api/clear_alerts', methods=['POST'])
 def clear_alerts():
@@ -572,27 +640,31 @@ def clear_alerts():
     if not firebase_initialized: 
         return jsonify({"status": "error"}), 500
         
-    # 清除 scan_history 掃描紀錄
-    ref = db.reference('scan_history')
-    all_rec = ref.get() or {}
-    if isinstance(all_rec, list): 
-        all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
-    if all_rec:
-        updates = {k: None for k, v in all_rec.items() if isinstance(v, dict) and v.get('familyID') == fid}
-        if updates: 
-            ref.update(updates)
+    try:
+        # 清除 scan_history 掃描紀錄
+        ref = db.reference('scan_history')
+        all_rec = ref.get() or {}
+        if isinstance(all_rec, list): 
+            all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
+        if all_rec:
+            updates = {k: None for k, v in all_rec.items() if isinstance(v, dict) and v.get('familyID') == fid}
+            if updates: 
+                ref.update(updates)
 
-    # 🚨 升級重點：一併清除雲端的蒐證圖片紀錄 (上帝模式清理)
-    evidence_ref = db.reference('scam_evidence')
-    all_evi = evidence_ref.get() or {}
-    if isinstance(all_evi, list):
-        all_evi = {str(i): v for i, v in enumerate(all_evi) if v is not None}
-    if all_evi:
-        evi_updates = {k: None for k, v in all_evi.items() if isinstance(v, dict) and v.get('familyID') == fid}
-        if evi_updates:
-            evidence_ref.update(evi_updates)
-            
-    return jsonify({"status": "success"})
+        # 🚨 升級重點：一併清除雲端的蒐證圖片紀錄 (上帝模式清理)
+        evidence_ref = db.reference('scam_evidence')
+        all_evi = evidence_ref.get() or {}
+        if isinstance(all_evi, list):
+            all_evi = {str(i): v for i, v in enumerate(all_evi) if v is not None}
+        if all_evi:
+            evi_updates = {k: None for k, v in all_evi.items() if isinstance(v, dict) and v.get('familyID') == fid}
+            if evi_updates:
+                evidence_ref.update(evi_updates)
+                
+        return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"❌ [Debug] 清除戰情室紀錄失敗: {e}", flush=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/reset_demo', methods=['POST'])
 def reset_demo():
@@ -621,6 +693,7 @@ def reset_demo():
         
         return jsonify({"status": "success", "message": "✨ 神蹟降臨：Demo 狀態已完美重置！"})
     except Exception as e:
+        print(f"❌ [Debug] 洗白展示紀錄失敗: {e}", flush=True)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/set_contact', methods=['POST'])
@@ -630,8 +703,12 @@ def set_contact():
     contact = data.get('contact') 
     
     if firebase_initialized and uid and contact:
-        db.reference(f'users/{uid}').update({'emergency_contact': contact})
-        return jsonify({"status": "success"})
+        try:
+            db.reference(f'users/{uid}').update({'emergency_contact': contact})
+            return jsonify({"status": "success"})
+        except Exception as e:
+            print(f"❌ [Debug] 設定聯絡人失敗: {e}", flush=True)
+            return jsonify({"status": "error", "message": str(e)}), 500
     return jsonify({"status": "error"}), 400
 
 @app.route('/api/get_contact', methods=['POST'])
@@ -651,7 +728,7 @@ def get_contact():
                 if contact:
                     return jsonify({"status": "success", "contact": contact})
     except Exception as e:
-        print(f"取得聯絡人失敗: {e}", flush=True)
+        print(f"❌ [Debug] 取得聯絡人失敗: {e}", flush=True)
         
     return jsonify({"status": "fail", "contact": "tel:165"})
 
