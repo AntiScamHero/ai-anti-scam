@@ -198,9 +198,6 @@ def health_check():
         "time": get_tw_time()
     })
 
-# ==========================================
-# 🚨 升級重點：接收蒐證快門證據圖片 (同步寫入戰情室與觸發 LINE)
-# ==========================================
 @app.route('/api/submit_evidence', methods=['POST'])
 @limiter.limit("10 per minute") 
 def submit_evidence():
@@ -219,7 +216,6 @@ def submit_evidence():
         family_id = data.get('familyID', 'none')
         reason = data.get('reported_reason', '前端智慧攔截')
 
-        # 1. 🟢 存進 Firebase RTDB 圖片證據庫
         ref = db.reference('scam_evidence').push({
             'url': url,
             'screenshot_base64': screenshot_base64,
@@ -228,7 +224,6 @@ def submit_evidence():
             'reason': reason
         })
         
-        # 2. 🟢 【核心修復】：將這次攔截同步寫入「戰情室掃描紀錄」
         report_dict = {
             "riskScore": 99,
             "riskLevel": "極度危險",
@@ -244,7 +239,6 @@ def submit_evidence():
             'timestamp': timestamp
         })
         
-        # 3. 🟢 【核心修復】：觸發 LINE 緊急推播通知！
         if family_id != 'none':
             send_dynamic_line_alert(
                 family_id=family_id, 
@@ -256,7 +250,6 @@ def submit_evidence():
         
         print(f"✅ 證據快照已成功入庫，並觸發 LINE 警報！URL: {url[:30]}... ID: {ref.key}", flush=True)
         
-        # 4. 通知戰情室有新證據上傳與新掃描紀錄
         socketio.emit('new_evidence_submitted', {
             'url': url,
             'evidenceID': ref.key,
@@ -274,6 +267,34 @@ def submit_evidence():
         })
     except Exception as e:
         print(f"❌ 證據入庫失敗：{e}", flush=True)
+        return jsonify({"status": "fail", "message": str(e)}), 500
+
+# ==========================================
+# 🚨 升級重點：高效率的證據提取 API (避免記憶體崩潰)
+# ==========================================
+@app.route('/api/get_evidence', methods=['POST'])
+def get_evidence():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+        
+    data = request.json or {}
+    family_id = data.get('familyID')
+    timestamp = data.get('timestamp')
+    
+    try:
+        # 🚀 效能優化：精準撈取，避免把整個資料庫載入記憶體
+        evidences = db.reference('scam_evidence').order_by_child('timestamp').equal_to(timestamp).get()
+        
+        if evidences and isinstance(evidences, dict):
+            for key, val in evidences.items():
+                if val.get('familyID') == family_id:
+                    return jsonify({
+                        "status": "success",
+                        "screenshot_base64": val.get('screenshot_base64')
+                    })
+        return jsonify({"status": "fail", "message": "找不到對應的證據快照，可能已遭覆蓋或未上傳成功"}), 404
+    except Exception as e:
+        print(f"❌ 提取證據失敗: {e}", flush=True)
         return jsonify({"status": "fail", "message": str(e)}), 500
 
 @app.route('/scan', methods=['POST'])
