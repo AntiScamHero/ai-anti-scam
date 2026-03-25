@@ -1,6 +1,6 @@
 # 🟢 確保 Eventlet 在最一開始就接管系統執行緒，避免背景任務打架
-#import eventlet
-#eventlet.monkey_patch()
+# import eventlet
+# eventlet.monkey_patch()
 
 import sys
 import io
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 warnings.filterwarnings("ignore", message=".*Pydantic V1.*")
 
 from flask import Flask, request, jsonify, Response
-from werkzeug.exceptions import HTTPException # 🚀 新增：用來攔截 HTTP 錯誤
+from werkzeug.exceptions import HTTPException 
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 from flask_limiter import Limiter
@@ -36,7 +36,7 @@ from security import mask_sensitive_data, is_genuine_white_listed, check_165_bla
 from ai_service import analyze_risk_with_ai, stream_scam_simulation
 from openai import AzureOpenAI
 
-import requests # 🚀 新增：用來呼叫 Google API
+import requests 
 
 os.environ["PYTHONUTF8"] = "1"
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -51,7 +51,6 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# 🚀 升級 1：大幅提升限流配額，避免壓測直接被擋死
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -61,7 +60,6 @@ limiter = Limiter(
 
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# 🚀 升級 2：全域錯誤攔截，保證任何錯誤 (包含 429 限流) 都回傳 JSON，防止壓測腳本崩潰
 @app.errorhandler(HTTPException)
 def handle_http_exception(e):
     response = e.get_response()
@@ -84,7 +82,6 @@ def handle_exception(e):
 def get_tw_time():
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
 
-# 🚀 Google Safe Browsing 威脅情資大腦
 def check_google_safe_browsing(url):
     api_key = os.getenv("GOOGLE_SAFE_BROWSING_API_KEY")
     if not api_key or not url:
@@ -108,7 +105,7 @@ def check_google_safe_browsing(url):
         if response.status_code == 200:
             data = response.json()
             if "matches" in data:
-                return True # Google 認證的惡意網站
+                return True 
     except Exception as e:
         print(f"⚠️ Google API 檢查超時或失敗: {e}", flush=True)
     return False
@@ -202,7 +199,7 @@ def health_check():
     })
 
 # ==========================================
-# 🚨 升級重點：接收蒐證快門證據圖片 (Post-Evidence)
+# 🚨 升級重點：接收蒐證快門證據圖片 (同步寫入戰情室與觸發 LINE)
 # ==========================================
 @app.route('/api/submit_evidence', methods=['POST'])
 @limiter.limit("10 per minute") 
@@ -222,7 +219,7 @@ def submit_evidence():
         family_id = data.get('familyID', 'none')
         reason = data.get('reported_reason', '前端智慧攔截')
 
-        # 存進 Firebase RTDB 
+        # 1. 🟢 存進 Firebase RTDB 圖片證據庫
         ref = db.reference('scam_evidence').push({
             'url': url,
             'screenshot_base64': screenshot_base64,
@@ -231,47 +228,52 @@ def submit_evidence():
             'reason': reason
         })
         
-        print(f"✅ 證據快照已成功入庫！URL: {url[:30]}... ID: {ref.key}", flush=True)
+        # 2. 🟢 【核心修復】：將這次攔截同步寫入「戰情室掃描紀錄」
+        report_dict = {
+            "riskScore": 99,
+            "riskLevel": "極度危險",
+            "reason": f"【前端緊急攔截】{reason}",
+            "scamDNA": ["系統強制警示"],
+            "advice": "防詐盾牌已在第一線為您阻擋此危險網頁，並完成證據保全。"
+        }
+        db.reference('scan_history').push({
+            'url': url, 
+            'report': json.dumps(report_dict, ensure_ascii=False), 
+            'userID': 'frontend_intercept', 
+            'familyID': family_id, 
+            'timestamp': timestamp
+        })
         
-        # 通知戰情室有新證據上傳 (會觸發戰情室綠色成功提示)
+        # 3. 🟢 【核心修復】：觸發 LINE 緊急推播通知！
+        if family_id != 'none':
+            send_dynamic_line_alert(
+                family_id=family_id, 
+                url=url, 
+                reason=reason, 
+                risk_score=99, 
+                scam_dna=["系統強制警示"]
+            )
+        
+        print(f"✅ 證據快照已成功入庫，並觸發 LINE 警報！URL: {url[:30]}... ID: {ref.key}", flush=True)
+        
+        # 4. 通知戰情室有新證據上傳與新掃描紀錄
         socketio.emit('new_evidence_submitted', {
             'url': url,
             'evidenceID': ref.key,
             'timestamp': timestamp
         }, room=family_id)
         
+        socketio.emit('new_scan_result', {
+            'url': url, 'riskScore': 99, 'reason': reason, 'timestamp': timestamp
+        }, room=family_id)
+        
         return jsonify({
             "status": "success", 
-            "message": "✅ 證據保全快照已成功存檔於雲端資料庫。",
+            "message": "✅ 證據保全快照已成功存檔，並已通知家人。",
             "evidenceID": ref.key
         })
     except Exception as e:
         print(f"❌ 證據入庫失敗：{e}", flush=True)
-        return jsonify({"status": "fail", "message": str(e)}), 500
-
-# ==========================================
-# 🚨 升級重點：提供戰情室獲取圖片 (Get-Evidence)
-# ==========================================
-@app.route('/api/get_evidence', methods=['POST'])
-def get_evidence():
-    if not firebase_initialized:
-        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
-        
-    data = request.json or {}
-    family_id = data.get('familyID')
-    timestamp = data.get('timestamp')
-    
-    try:
-        evidences_ref = db.reference('scam_evidence').get()
-        if evidences_ref and isinstance(evidences_ref, dict):
-            for key, val in evidences_ref.items():
-                if val.get('familyID') == family_id and val.get('timestamp') == timestamp:
-                    return jsonify({
-                        "status": "success",
-                        "screenshot_base64": val.get('screenshot_base64')
-                    })
-        return jsonify({"status": "fail", "message": "找不到對應的證據快照"}), 404
-    except Exception as e:
         return jsonify({"status": "fail", "message": str(e)}), 500
 
 @app.route('/scan', methods=['POST'])
@@ -329,7 +331,6 @@ def scan_url():
                 report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
-            # Google API 黑名單檢查
             if check_google_safe_browsing(parse_u):
                 report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["Google黑名單警示"], "reason": "🚨 Google 官方安全大腦攔截：此為高風險惡意/釣魚網站！", "advice": "請立即關閉網頁！"}
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
@@ -364,7 +365,6 @@ def scan_url():
         is_bad_text = re.search(pattern, raw_text, re.IGNORECASE)
         is_bad_image_url = False
         
-        # 🚀 升級：修復 Base64 圖片誤報與 CPU 榨乾問題
         if image_url and not image_url.startswith('data:image'):
             is_bad_image_url = re.search(pattern, image_url, re.IGNORECASE)
 
@@ -525,9 +525,6 @@ def report_fp():
             return jsonify({"status": "error", "message": str(e)}), 500
     return jsonify({"status": "success"})
 
-# ==========================================
-# 🚨 關鍵修復：建立家庭 (加入 try...except 與詳細 Log)
-# ==========================================
 @app.route('/api/create_family', methods=['POST'])
 def create_family():
     uid = request.json.get('uid')
@@ -565,9 +562,6 @@ def create_family():
     print("❌ [Debug] Firebase 初始化未成功，無法建立家庭", flush=True)
     return jsonify({"status": "error", "message": "Firebase 未連線"}), 500
 
-# ==========================================
-# 🚨 關鍵修復：加入家庭 (加入 try...except 與詳細 Log)
-# ==========================================
 @app.route('/api/join_family', methods=['POST'])
 def join_family():
     data = request.json
@@ -641,7 +635,6 @@ def clear_alerts():
         return jsonify({"status": "error"}), 500
         
     try:
-        # 清除 scan_history 掃描紀錄
         ref = db.reference('scan_history')
         all_rec = ref.get() or {}
         if isinstance(all_rec, list): 
@@ -651,7 +644,6 @@ def clear_alerts():
             if updates: 
                 ref.update(updates)
 
-        # 🚨 升級重點：一併清除雲端的蒐證圖片紀錄 (上帝模式清理)
         evidence_ref = db.reference('scam_evidence')
         all_evi = evidence_ref.get() or {}
         if isinstance(all_evi, list):
