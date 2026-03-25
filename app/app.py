@@ -212,7 +212,8 @@ def submit_evidence():
         return jsonify({"status": "fail", "message": "未提供圖片數據"}), 400
         
     try:
-        timestamp = data.get('timestamp') or get_tw_time()
+        # 🚀 修正：強制使用後端台灣時間，解決前端 ISO 格式錯亂的問題
+        timestamp = get_tw_time()
         family_id = data.get('familyID', 'none')
         reason = data.get('reported_reason', '前端智慧攔截')
 
@@ -236,7 +237,8 @@ def submit_evidence():
             'report': json.dumps(report_dict, ensure_ascii=False), 
             'userID': 'frontend_intercept', 
             'familyID': family_id, 
-            'timestamp': timestamp
+            'timestamp': timestamp,
+            'evidenceID': ref.key  # 🌟 升級：將快照專屬 ID 綁定到掃描紀錄中！
         })
         
         if family_id != 'none':
@@ -248,7 +250,7 @@ def submit_evidence():
                 scam_dna=["系統強制警示"]
             )
         
-        print(f"✅ 證據快照已成功入庫，並觸發 LINE 警報！URL: {url[:30]}... ID: {ref.key}", flush=True)
+        print(f"✅ 證據快照已成功入庫！URL: {url[:30]}... ID: {ref.key}", flush=True)
         
         socketio.emit('new_evidence_submitted', {
             'url': url,
@@ -270,7 +272,7 @@ def submit_evidence():
         return jsonify({"status": "fail", "message": str(e)}), 500
 
 # ==========================================
-# 🚨 升級重點：高效率的證據提取 API (避免記憶體崩潰)
+# 🚨 升級重點：高效率的證據提取 API (O(1) 瞬間提取)
 # ==========================================
 @app.route('/api/get_evidence', methods=['POST'])
 def get_evidence():
@@ -279,19 +281,27 @@ def get_evidence():
         
     data = request.json or {}
     family_id = data.get('familyID')
+    evidence_id = data.get('evidenceID')
     timestamp = data.get('timestamp')
     
     try:
-        # 🚀 效能優化：精準撈取，避免把整個資料庫載入記憶體
-        evidences = db.reference('scam_evidence').order_by_child('timestamp').equal_to(timestamp).get()
-        
-        if evidences and isinstance(evidences, dict):
-            for key, val in evidences.items():
-                if val.get('familyID') == family_id:
-                    return jsonify({
-                        "status": "success",
-                        "screenshot_base64": val.get('screenshot_base64')
-                    })
+        # 🚀 效能優化：優先使用 evidenceID 進行 O(1) 瞬間提取，不再需要比對時間！
+        if evidence_id:
+            evidence = db.reference(f'scam_evidence/{evidence_id}').get()
+            if evidence and isinstance(evidence, dict) and evidence.get('familyID') == family_id:
+                return jsonify({
+                    "status": "success",
+                    "screenshot_base64": evidence.get('screenshot_base64')
+                })
+                
+        # 備用方案 (給舊資料使用)
+        if timestamp:
+            evidences = db.reference('scam_evidence').order_by_child('timestamp').equal_to(timestamp).get()
+            if evidences and isinstance(evidences, dict):
+                for key, val in evidences.items():
+                    if val.get('familyID') == family_id:
+                        return jsonify({"status": "success", "screenshot_base64": val.get('screenshot_base64')})
+                        
         return jsonify({"status": "fail", "message": "找不到對應的證據快照，可能已遭覆蓋或未上傳成功"}), 404
     except Exception as e:
         print(f"❌ 提取證據失敗: {e}", flush=True)
