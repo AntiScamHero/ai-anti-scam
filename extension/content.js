@@ -126,33 +126,24 @@ function maskSensitiveData(text) {
 }
 
 // ==========================================
-// 🚨 升級重點：觸發蒐證攔截視窗 (異步截圖處理邏輯 + 極簡極速轉場)
+// 🚨 升級重點：觸發蒐證攔截視窗 (先拍照 ➡️ 再切換)
 // ==========================================
 async function triggerSafeBlock(reason, reportData = null) {
     if (hasTriggeredBlock) return;
     if (sessionStorage.getItem('temp_whitelist_' + window.location.href)) return;
 
     hasTriggeredBlock = true;
+    console.log("🛡️ AI 防詐盾牌：發現威脅，定住畫面並按下快門...", reason);
 
-    console.log("🛡️ AI 防詐盾牌：觸發蒐證攔截，正在按下證據快門...", reason);
+    // 1. 🟢 凍結畫面：不讓使用者點擊任何東西，但保留最真實的「詐騙畫面」給相機拍
+    if (document.body) {
+        document.body.style.pointerEvents = 'none';
+        document.body.style.userSelect = 'none';
+        // 加一點微微的紅框，讓截圖看起來有「被鎖定」的感覺
+        document.body.style.border = '5px solid rgba(255, 77, 79, 0.5)';
+    }
 
-    // 1. 🟢 視覺：極簡化 Loading 遮罩 (不搶戲，純粹擋住使用者並等待截圖)
-    const shield = document.createElement('div');
-    shield.id = 'scam-shield-overlay';
-    shield.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(20, 30, 48, 0.95); color:white; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2147483647; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; backdrop-filter:blur(8px);";
-    
-    shield.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;">
-            <div style="width: 50px; height: 50px; border: 5px solid rgba(255, 77, 79, 0.3); border-top: 5px solid #ff4d4f; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <div style="font-size:20px; font-weight: bold; color: #ff4d4f; letter-spacing: 2px;">🚨 發現高風險威脅，系統攔截中...</div>
-            <div style="font-size:14px; color: #888;">正在為您切換至安全防護網</div>
-        </div>
-        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-    `;
-    document.documentElement.appendChild(shield);
-    if (document.body) document.body.style.display = 'none';
-
-    // 2. 🟢 動作：通知背景程式按快門 (此為 async 請求)
+    // 2. 🟢 動作：通知背景程式按快門
     try {
         const timestamp = new Date().toISOString(); 
         let familyID = 'none';
@@ -160,10 +151,8 @@ async function triggerSafeBlock(reason, reportData = null) {
             const storage = await chrome.storage.local.get(['familyID']);
             if (storage.familyID) familyID = storage.familyID;
         } catch (e) {}
-
-        console.log("📸 向 background.js 發送快門指令...");
         
-        // 任務 A：發送截圖指令給背景程式
+        // 任務 A：發送截圖指令給背景程式 (此時畫面還是原來的詐騙網頁！)
         const sendPromise = chrome.runtime.sendMessage({ 
             action: "captureScamTabWithEvidence", 
             url: window.location.href, 
@@ -172,19 +161,23 @@ async function triggerSafeBlock(reason, reportData = null) {
             familyID: familyID 
         });
 
-        // 任務 B：設定 3 秒絕對超時 (避免網路卡死永遠不跳轉)
-        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({status: "timeout"}), 3000));
+        // 任務 B：設定 2 秒絕對超時 (相機最多只等兩秒)
+        const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
         
-        // 🚨 極速轉場邏輯：截圖一完成(或超時)，立刻放行！
+        // 🚨 關鍵：等待「拍照完成」！
         await Promise.race([sendPromise, timeoutPromise]);
-
-        console.log("✅ 準備跳轉至警告頁面");
 
     } catch (error) {
         console.error("❌ 自動蒐證快門失敗:", error);
     }
 
-    // 3. 🟢 跳轉：蒐證完成 (或超時後)，正式跳轉到 blocked.html 進行警報
+    // 3. 🟢 視覺與跳轉：照片拍完了！瞬間降下遮罩並跳轉到戰情室警告頁
+    document.documentElement.innerHTML = `
+        <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:#141e30; color:white; display:flex; align-items:center; justify-content:center; z-index:2147483647; font-family:sans-serif;">
+            <div style="font-size:24px; font-weight:bold; color:#ff4d4f;">🚨 證據保全完畢，系統攔截中...</div>
+        </div>
+    `;
+
     const dataToSend = reportData ? JSON.stringify(reportData) : JSON.stringify({ riskScore: "99", reason: reason, advice: "請勿輸入任何資料。" });
     try {
         window.location.replace(chrome.runtime.getURL("blocked.html") + "?data=" + encodeURIComponent(dataToSend) + "&url=" + encodeURIComponent(window.location.href));
