@@ -1,4 +1,4 @@
-// dashboard.js - 戰情室專用邏輯 (蒐證視圖升級版)
+// dashboard.js - 戰情室專用邏輯 (O(1)極速提取版)
 
 window.CONFIG = window.CONFIG || {
     API_BASE_URL: "https://ai-anti-scam.onrender.com",
@@ -13,9 +13,6 @@ let ratioChartInstance = null;
 let trendChartInstance = null;
 let isFetching = false;
 
-// ==========================================
-// 📸 升級：UI 輔助 - 顯示證據快照的彈窗
-// ==========================================
 function showEvidenceModal(imageUrl, reason) {
     if (document.getElementById("ai-evidence-modal")) document.getElementById("ai-evidence-modal").remove();
 
@@ -96,12 +93,8 @@ function initSocket(familyID) {
         });
 
         socket.on('new_scan_result', (data) => {
-            console.log("收到新掃描數據:", data);
             fetchLogs(familyID, true); 
-            
-            if (data.riskScore >= 80) {
-                triggerRedAlert(data.reason);
-            }
+            if (data.riskScore >= 80) triggerRedAlert(data.reason);
         });
 
         socket.on('emergency_alert', (data) => {
@@ -109,7 +102,6 @@ function initSocket(familyID) {
         });
 
         socket.on('new_evidence_submitted', function(data) {
-            console.log("✅ 雲端收到新的蒐證快照:", data);
             document.getElementById('emergency-detail').innerText = `✅ 已成功保全證據：${data.url.substring(0,30)}... (可於下方報表查看)`;
             document.getElementById('emergency-banner').style.display = "block";
             document.getElementById('emergency-banner').style.backgroundColor = "#34c759"; 
@@ -120,7 +112,6 @@ function initSocket(familyID) {
         });
 
         socket.on('demo_reset_triggered', function() {
-            console.log("🔄 收到神蹟重置指令，畫面即將重新載入...");
             window.location.reload();
         });
 
@@ -233,7 +224,15 @@ function updateDashboard(records, isRealtimeUpdate) {
     chartRecords.forEach(record => {
         let score = record.report.riskScore;
         if (score >= window.CONFIG.RISK_THRESHOLD_HIGH) dangerCount++; else safeCount++;
-        labels.push(record.timestamp.split(' ')[1]);
+        
+        // 🐛 防呆：處理前端 ISO 格式或後端標準格式的時間
+        let displayTime = record.timestamp || '';
+        if (displayTime.includes('T')) {
+            let d = new Date(displayTime);
+            labels.push(isNaN(d) ? displayTime : d.toLocaleTimeString('zh-TW', { hour12: false }));
+        } else {
+            labels.push(displayTime.split(' ')[1] || displayTime);
+        }
         scores.push(score);
     });
 
@@ -263,7 +262,15 @@ function updateDashboard(records, isRealtimeUpdate) {
 
         let tdTime = document.createElement('td');
         tdTime.style.cssText = "font-family:monospace; color:#8b949e;";
-        tdTime.textContent = record.timestamp.split(' ')[1]; // 畫面上只顯示時分秒
+        
+        // 🐛 防呆：處理前端 ISO 格式或後端標準格式的時間 (解決戰情室時間空白問題)
+        let displayTime = record.timestamp || '';
+        if (displayTime.includes('T')) {
+            let d = new Date(displayTime);
+            tdTime.textContent = isNaN(d) ? displayTime.split(' ')[1] || displayTime : d.toLocaleTimeString('zh-TW', { hour12: false });
+        } else {
+            tdTime.textContent = displayTime.split(' ')[1] || displayTime;
+        }
 
         let tdUrl = document.createElement('td');
         tdUrl.style.cssText = "max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
@@ -276,18 +283,25 @@ function updateDashboard(records, isRealtimeUpdate) {
         let tdReason = document.createElement('td');
         tdReason.style.cssText = "max-width:350px; line-height: 1.5; color:#c9d1d9;";
         
-        // 🚨 修正：將「完整的時間」和「網址」藏在 data-* 屬性中，確保能精準調出資料庫照片
         if (score >= window.CONFIG.RISK_THRESHOLD_HIGH) {
-            tdReason.innerHTML = `
-                ${reason}<br>
-                <button class="view-evidence-btn risk-high" 
-                    data-fulltime="${record.timestamp}" 
-                    data-url="${record.url}" 
-                    data-reason="${reason.replace(/"/g, '&quot;')}"
-                    style="margin-top:8px; padding: 5px 10px; border: 1px solid #ff4d4f; border-radius: 4px; background: rgba(255,0,0,0.1); color: #ff4d4f; cursor:pointer; font-size:12px; font-weight:bold; transition: 0.2s;">
-                    🔎 查看上帝蒐證快照
-                </button>
-            `;
+            let evidenceBtnHTML = '';
+            // 🌟 升級：只有真正帶有證據 ID (或舊版時間) 的新紀錄，才會顯示按鈕
+            if (record.evidenceID || record.timestamp) {
+                let evId = record.evidenceID || '';
+                let fullTime = record.timestamp || '';
+                evidenceBtnHTML = `
+                    <br>
+                    <button class="view-evidence-btn risk-high" 
+                        data-evidence="${evId}" 
+                        data-fulltime="${fullTime}"
+                        data-url="${record.url}" 
+                        data-reason="${reason.replace(/"/g, '&quot;')}"
+                        style="margin-top:8px; padding: 5px 10px; border: 1px solid #ff4d4f; border-radius: 4px; background: rgba(255,0,0,0.1); color: #ff4d4f; cursor:pointer; font-size:12px; font-weight:bold; transition: 0.2s;">
+                        🔎 查看上帝蒐證快照
+                    </button>
+                `;
+            }
+            tdReason.innerHTML = `${reason}${evidenceBtnHTML}`;
         } else {
             tdReason.textContent = reason;
         }
@@ -302,12 +316,12 @@ function updateDashboard(records, isRealtimeUpdate) {
 }
 
 // ==========================================
-// 🚨 升級重點：處理「查看上帝模式蒐證快照」點擊
+// 🚨 升級重點：透過 Evidence ID 進行 O(1) 瞬間提取
 // ==========================================
 document.getElementById('log-table-body').addEventListener('click', async (e) => {
     if (e.target.classList.contains('view-evidence-btn')) {
         const btn = e.target;
-        // 🐛 修復此處：直接讀取藏在屬性裡的完整時間，不再抓取畫面上殘缺的時間！
+        const evidenceID = btn.getAttribute('data-evidence'); 
         const fullTimestamp = btn.getAttribute('data-fulltime'); 
         const url = btn.getAttribute('data-url');
         const reason = btn.getAttribute('data-reason');
@@ -326,22 +340,27 @@ document.getElementById('log-table-body').addEventListener('click', async (e) =>
                 body: JSON.stringify({
                     url: url,
                     familyID: familyID,
-                    timestamp: fullTimestamp // 使用完整的時間比對！
+                    evidenceID: evidenceID,    // 🌟 首選：使用專屬 ID 瞬間提取
+                    timestamp: fullTimestamp   // 備用：舊資料相容
                 })
             });
             
-            if (!res.ok) throw new Error("證據提取失敗");
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || `伺服器回應錯誤 (${res.status})`);
+            }
+            
             const data = await res.json();
             
             if (data.status === 'success' && data.screenshot_base64) {
                 showEvidenceModal(data.screenshot_base64, reason);
             } else {
-                alert("❌ 雲端鑑識失敗：照片尚未上傳完成，或是存檔已被移除 (請稍等幾秒或檢查是否已被清空)。");
+                alert(`❌ 雲端鑑識失敗：${data.message || '照片可能已遭覆蓋或未上傳成功。'}`);
             }
 
         } catch (error) {
             console.error("提取蒐證快照失敗:", error);
-            alert("❌ 提取蒐證快照失敗，請確認後端網路連線。");
+            alert(`❌ 提取失敗：${error.message}\n\n(提示：若是舊資料可能已遺失，請重新掃描一個新網頁測試！)`);
         } finally {
             btn.innerText = "🔎 查看上帝蒐證快照";
             btn.style.opacity = "1";
