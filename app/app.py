@@ -212,11 +212,11 @@ def submit_evidence():
         return jsonify({"status": "fail", "message": "未提供圖片數據"}), 400
         
     try:
-        timestamp = get_tw_time() # 強制使用台灣時間
+        timestamp = get_tw_time() 
         family_id = data.get('familyID', 'none')
         reason = data.get('reported_reason', '前端智慧攔截')
 
-        # 1. 存照片
+        # 🌟 1. 存照片並取得專屬 ID
         ref = db.reference('scam_evidence').push({
             'url': url,
             'screenshot_base64': screenshot_base64,
@@ -225,7 +225,7 @@ def submit_evidence():
             'reason': reason
         })
         
-        # 2. 存戰情室紀錄 (🌟 關鍵：將 evidenceID 綁定進去)
+        # 🌟 2. 將專屬 ID 綁定到掃描紀錄
         report_dict = {
             "riskScore": 99,
             "riskLevel": "極度危險",
@@ -239,7 +239,7 @@ def submit_evidence():
             'userID': 'frontend_intercept', 
             'familyID': family_id, 
             'timestamp': timestamp,
-            'evidenceID': ref.key  # 🌟 將照片專屬 ID 存起來！
+            'evidenceID': ref.key  # 綁定 ID！
         })
         
         if family_id != 'none':
@@ -279,11 +279,11 @@ def get_evidence():
         
     data = request.json or {}
     family_id = data.get('familyID')
-    evidence_id = data.get('evidenceID') # 🌟 透過專屬 ID 尋找
+    evidence_id = data.get('evidenceID') # 🌟 接收專屬 ID
     timestamp = data.get('timestamp')
     
     try:
-        # 🚀 效能優化：O(1) 瞬間提取，不再因為資料庫太大而報錯 500
+        # 🚀 效能優化：使用 O(1) 極速提取，不再搜尋整個資料庫
         if evidence_id:
             evidence = db.reference(f'scam_evidence/{evidence_id}').get()
             if evidence and isinstance(evidence, dict) and evidence.get('familyID') == family_id:
