@@ -2,11 +2,50 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>終極測試</title>
+    <title>終極測試 - 詐騙誘餌頁面</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background-color: #fff0f0; 
+        }
+        h1 { color: #d32f2f; }
+        .scam-btn {
+            display: inline-block;
+            padding: 15px 30px;
+            background-color: #00c300; /* 模擬 LINE 的綠色 */
+            color: white;
+            text-decoration: none;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 10px;
+            margin-top: 20px;
+            box-shadow: 0 5px 15px rgba(0, 195, 0, 0.4);
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .scam-btn:hover { background-color: #00a000; transform: scale(1.05); }
+        .threat-text {
+            color: #d32f2f;
+            font-weight: bold;
+            font-size: 20px;
+            margin-top: 40px;
+            border: 2px dashed #d32f2f;
+            display: inline-block;
+            padding: 10px 20px;
+        }
+    </style>
 </head>
 <body>
-    <h1>恭喜中獎！保證獲利，請加賴領取飆股明牌！</h1>
-    <p>請點擊此官方連結登入：https://www.yahoo.com.lucky-verify-login.net</p>
-    <p>若不配合指示，不准報警，否則斷手斷腳！</p>
+    <h1>🎉 恭喜中獎！保證獲利，請加賴領取飆股明牌！</h1>
+    <p style="font-size: 18px; color: #555;">請點擊下方官方連結登入：https://www.yahoo.com.lucky-verify-login.net</p>
+    
+    <a href="blocked.html" class="scam-btn">👉 點我領取飆股與獎金 👈</a>
+    <br>
+    
+    <div class="threat-text">
+        ⚠️ 若不配合指示，不准報警，否則斷手斷腳！
+    </div>
 </body>
 </html>
