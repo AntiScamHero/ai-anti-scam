@@ -398,7 +398,10 @@ if (window.self === window.top) {
                          window.location.href.includes('blocked.html') ||
                          window.location.href.includes('simulator.html') || 
                          window.location.hostname === 'localhost' ||
-                         window.location.hostname === '127.0.0.1';
+                         window.location.hostname === '127.0.0.1' ||
+                         window.location.hostname.includes('github.com') ||
+                         window.location.hostname.includes('chatgpt.com') ||
+                         window.location.hostname.includes('openai.com');
 
     if (!isSystemPage) {
         new BehaviorAnalyzer(); 
