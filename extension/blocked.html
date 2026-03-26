@@ -165,17 +165,6 @@
         }
         .btn-165:hover { background-color: #333; border-color: #888; }
 
-        .checkbox-label {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 12px;
-            font-size: 15px;
-            color: #cccccc;
-            cursor: pointer;
-            line-height: 1.4;
-        }
-        .checkbox-label input { margin-right: 10px; margin-top: 3px; }
-
         .btn-safe {
             background-color: #28a745;
             color: white;
@@ -233,6 +222,18 @@
             text-align: center; border: 2px solid #FF9900;
         }
         .modal-number { font-size: 48px; font-weight: bold; color: #FF9900; margin: 20px 0; background: #111; padding: 10px; border-radius: 8px; }
+
+        /* 防詐小常識的專屬樣式 */
+        #dynamic-tip {
+            font-size: 16px; 
+            color: #ffeb3b; 
+            line-height: 1.6; 
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(255, 235, 59, 0.1);
+            border-left: 4px solid #ffeb3b;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -267,13 +268,9 @@
             </div>
 
             <div class="info-box" id="cooldown-box">
-                <div class="box-title">點擊離開前請先回想一下：</div>
-                <label class="checkbox-label"><input type="checkbox" class="soul-question"> 這份「飆股群組」是否有保證獲利？</label>
-                <label class="checkbox-label"><input type="checkbox" class="soul-question"> 是否要求您立刻將資金匯入「個人帳戶」？</label>
-                <label class="checkbox-label"><input type="checkbox" class="soul-question"> 您此時是否感到恐慌、興奮或被急迫？</label>
+                <div class="box-title">💡 防詐小常識：</div>
+                <div id="dynamic-tip">正在為您載入相關防詐資訊...</div>
                 
-                <button id="wake-up-btn" style="display: none;">我明白了，這是詐騙，立即關閉網頁</button>
-
                 <button class="btn-safe" id="manual-leave-btn">聽從建議，安全離開此網頁</button>
                 <button class="btn-safe" id="close-btn" style="display: none;">關閉分頁</button> 
 
