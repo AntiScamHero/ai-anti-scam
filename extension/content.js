@@ -1,6 +1,6 @@
 /**
- * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版 + 證據保全快門 + 極簡極速轉場)
- * 核心特色：效能優化 + 多層次快取防線 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 動態防禦 + 浮動警告視窗 + 自動蒐證快門
+ * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版 + 權重積分制 + 證據保全快門)
+ * 核心特色：效能優化 + 權重積分防禦 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 自動蒐證快門
  */
 
 // ==========================================
@@ -19,6 +19,7 @@ function hashString(str) {
 function extractHighRiskText(text, maxLength = 4000) {
     if (text.length <= maxLength) return text;
     
+    // 這裡只做初步擷取，真正的判斷在積分制
     const riskKeywords = ["保證獲利", "加賴", "飆股", "解凍", "中獎", "登入", "身分證", "帳號", "密碼"];
     let snippets = [];
     let lastIndex = 0;
@@ -111,23 +112,10 @@ function observeElements() {
 }
 
 // ==========================================
-// 🧠 模組 3：核心文本掃描與脫敏
+// 🚨 模組 3：觸發蒐證攔截視窗 (先拍照 ➡️ 再切換)
 // ==========================================
-const scamKeywords = ["保證獲利", "加賴領取", "穩賺不賠", "飆股", "破解程式", "名額有限", "內部消息", "無風險投資", "斷手斷腳", "不准報警"];
 let hasTriggeredBlock = false; 
 
-function maskSensitiveData(text) {
-    if (!text) return "";
-    return text
-        .replace(/(?:\d{4}[-\s]?){3}\d{4}/g, "[信用卡號已隱藏]")
-        .replace(/[A-Z][12]\d{8}/i, "[身分證已隱藏]")
-        .replace(/09\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, "[手機號碼已隱藏]")
-        .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
-}
-
-// ==========================================
-// 🚨 升級重點：觸發蒐證攔截視窗 (先拍照 ➡️ 再切換)
-// ==========================================
 async function triggerSafeBlock(reason, reportData = null) {
     if (hasTriggeredBlock) return;
     if (sessionStorage.getItem('temp_whitelist_' + window.location.href)) return;
@@ -135,11 +123,10 @@ async function triggerSafeBlock(reason, reportData = null) {
     hasTriggeredBlock = true;
     console.log("🛡️ AI 防詐盾牌：發現威脅，定住畫面並按下快門...", reason);
 
-    // 1. 🟢 凍結畫面：不讓使用者點擊任何東西，但保留最真實的「詐騙畫面」給相機拍
+    // 1. 🟢 凍結畫面
     if (document.body) {
         document.body.style.pointerEvents = 'none';
         document.body.style.userSelect = 'none';
-        // 加一點微微的紅框，讓截圖看起來有「被鎖定」的感覺
         document.body.style.border = '5px solid rgba(255, 77, 79, 0.5)';
     }
 
@@ -152,7 +139,6 @@ async function triggerSafeBlock(reason, reportData = null) {
             if (storage.familyID) familyID = storage.familyID;
         } catch (e) {}
         
-        // 任務 A：發送截圖指令給背景程式 (此時畫面還是原來的詐騙網頁！)
         const sendPromise = chrome.runtime.sendMessage({ 
             action: "captureScamTabWithEvidence", 
             url: window.location.href, 
@@ -161,17 +147,14 @@ async function triggerSafeBlock(reason, reportData = null) {
             familyID: familyID 
         });
 
-        // 任務 B：設定 2 秒絕對超時 (相機最多只等兩秒)
         const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // 🚨 關鍵：等待「拍照完成」！
         await Promise.race([sendPromise, timeoutPromise]);
 
     } catch (error) {
         console.error("❌ 自動蒐證快門失敗:", error);
     }
 
-    // 3. 🟢 視覺與跳轉：照片拍完了！瞬間降下遮罩並跳轉到戰情室警告頁
+    // 3. 🟢 視覺與跳轉
     document.documentElement.innerHTML = `
         <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:#141e30; color:white; display:flex; align-items:center; justify-content:center; z-index:2147483647; font-family:sans-serif;">
             <div style="font-size:24px; font-weight:bold; color:#ff4d4f;">🚨 證據保全完畢，系統攔截中...</div>
@@ -190,46 +173,67 @@ async function triggerSafeBlock(reason, reportData = null) {
     }
 }
 
+// ==========================================
+// 🧠 模組 4：全新權重積分制掃描 (取代一槍斃命)
+// ==========================================
+const scamDictionary = [
+    // 致命特徵 (一擊必殺)
+    { word: "保證獲利", score: 80 },
+    { word: "穩賺不賠", score: 80 },
+    { word: "解凍金", score: 100 },
+    { word: "殺豬盤", score: 100 },
+    { word: "不准報警", score: 100 },
+    { word: "斷手斷腳", score: 100 },
+    // 高度可疑特徵
+    { word: "無風險投資", score: 60 },
+    { word: "飆股", score: 50 },
+    { word: "破解程式", score: 50 },
+    { word: "內部消息", score: 50 },
+    // 中度行銷手法 (需搭配其他特徵)
+    { word: "加賴領取", score: 40 },
+    { word: "加line", score: 30 },
+    { word: "保證金", score: 30 },
+    { word: "中獎", score: 20 },
+    // 正常電商也愛用的詞 (分數極低，單一出現不會封鎖)
+    { word: "名額有限", score: 10 },
+    { word: "免費註冊", score: 10 }
+];
+
+function maskSensitiveData(text) {
+    if (!text) return "";
+    return text
+        .replace(/(?:\d{4}[-\s]?){3}\d{4}/g, "[信用卡號已隱藏]")
+        .replace(/[A-Z][12]\d{8}/i, "[身分證已隱藏]")
+        .replace(/09\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, "[手機號碼已隱藏]")
+        .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
+}
+
 function scanScamWords() {
     if (hasTriggeredBlock) return;
     
-    // 前端免死金牌 (知名網站白名單)
+    // 白名單保持，主要用於大型網站免掃描加速
     const frontendWhitelist = [
-        "yahoo.com", 
-        "yahoo.com.tw",
-        "tw.stock.yahoo.com",
-        "google.com", 
-        "msn.com", 
-        "pchome.com.tw", 
-        "cnyes.com", 
-        "github.com", 
-        "render.com"
+        "yahoo.com", "yahoo.com.tw", "tw.stock.yahoo.com",
+        "google.com", "msn.com", "pchome.com.tw", "cnyes.com", 
+        "github.com", "render.com", "dgc.com.tw" // 預防性加入獨角仙農場
     ];
     
     const currentHost = window.location.hostname;
     const isWhitelisted = frontendWhitelist.some(domain => currentHost.includes(domain));
 
     const textContent = document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
-    
     let iframeUrls = Array.from(document.querySelectorAll('iframe')).map(f => f.src).filter(src => src);
     let iframeText = iframeUrls.length > 0 ? `\n[隱藏的Iframe網址]: ${iframeUrls.join(', ')}` : "";
-
     const cleanText = textContent.trim();
     
-    // 如果在白名單內，或文字太少，跳過前端死板攔截，只啟用圖片與連結檢查
     if ((cleanText.length < 50 && iframeUrls.length === 0) || isWhitelisted) {
         observeElements(); 
         return;
     }
 
     const textHash = hashString(cleanText);
-    if (scannedCache.has(textHash)) {
-        observeElements();
-        return; 
-    }
-    
+    if (scannedCache.has(textHash)) { observeElements(); return; }
     scannedCache.add(textHash);
-    
     if (scannedCache.size > 50) {
         const cacheIterator = scannedCache.values();
         for (let i = 0; i < 25; i++) scannedCache.delete(cacheIterator.next().value);
@@ -238,18 +242,31 @@ function scanScamWords() {
     const smartText = extractHighRiskText(cleanText) + iframeText;
     const safeText = maskSensitiveData(smartText); 
 
-    for (let keyword of scamKeywords) {
-        if (safeText.includes(keyword)) {
-            triggerSafeBlock(`偵測到危險字彙：${keyword}`);
-            return; 
+    // 🚨 核心邏輯：計算總風險分數
+    let totalRiskScore = 0;
+    let matchedKeywords = [];
+
+    for (let item of scamDictionary) {
+        if (safeText.includes(item.word)) {
+            totalRiskScore += item.score;
+            matchedKeywords.push(item.word);
         }
+    }
+    
+    // 設定攔截門檻：大於等於 80 分才啟動防禦
+    const RISK_THRESHOLD = 80;
+
+    if (totalRiskScore >= RISK_THRESHOLD) {
+        let blockReason = `偵測到多重風險特徵 (總分 ${totalRiskScore} 分)：${matchedKeywords.join('、')}`;
+        triggerSafeBlock(blockReason, { riskScore: totalRiskScore, reason: blockReason, advice: "請勿輸入個人資料", scamDNA: matchedKeywords });
+        return; 
     }
     
     observeElements(); 
 }
 
 // ==========================================
-// ⏱️ 模組 4：資源管理與排程 (Idle Scheduling)
+// ⏱️ 模組 5：資源管理與排程 (Idle Scheduling)
 // ==========================================
 let scanCount = 0;
 let lastActivityTime = Date.now();
@@ -407,7 +424,7 @@ if (window.self === window.top) {
         new BehaviorAnalyzer(); 
         if (document.body) dynamicObserver.observe(document.body, { childList: true, subtree: true });
         scheduleIdleScan();
-        console.log("🛡️ AI 防詐盾牌：防護系統已上線 (啟用多層快取與動態防禦)");
+        console.log("🛡️ AI 防詐盾牌：防護系統已上線 (啟用權重積分與動態防禦)");
     } else {
         console.log("🛡️ AI 防詐盾牌：已偵測到友軍系統頁面 (戰情室)，已關閉自動掃描以防誤傷！");
     }
