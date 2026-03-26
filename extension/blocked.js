@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let advice = "請勿輸入任何個人資料或密碼。";
     let scamDNA = [];
 
-    // 1. 智慧解碼 (支援 JSON 資料結構，同時相容前端直接傳字串)
+    // 1. 智慧解碼
     if (dataString) {
         try {
             const data = JSON.parse(decodeURIComponent(dataString));
@@ -37,7 +37,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const adviceEl = document.getElementById('advice');
     if(adviceEl) adviceEl.innerText = "💡 專家建議：" + advice;
 
-    // 渲染標籤
     const targetDnaBox = document.getElementById('dna-box') || document.getElementById('tags-container');
     if (targetDnaBox && scamDNA.length > 0) {
         scamDNA.forEach(tagText => {
@@ -52,7 +51,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // 渲染被攔截的網址
     const targetUrlEl = document.getElementById('target-url');
     if (targetUrlEl && targetUrl) {
         targetUrlEl.innerText = decodeURIComponent(targetUrl);
@@ -261,4 +259,57 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     }
+
+    // ==========================================
+    // 🔊 8. 語音播放模組 (整合雙語接力與全螢幕解鎖)
+    // ==========================================
+    const audioZh = document.getElementById('hero-audio-zh');
+    const audioTw = document.getElementById('hero-audio-tw');
+    const voiceBubble = document.getElementById('voice-bubble');
+
+    function playVoiceAlert() {
+        if (!audioZh || !audioTw) return;
+        
+        // 暫停並重置
+        audioZh.pause(); audioZh.currentTime = 0;
+        audioTw.pause(); audioTw.currentTime = 0;
+        
+        // 國語播完接台語
+        audioZh.onended = function() {
+            let playTwPromise = audioTw.play();
+            if (playTwPromise !== undefined) {
+                playTwPromise.catch(e => console.warn("💡 台語連播被阻擋:", e));
+            }
+        };
+
+        // 播放國語
+        let playZhPromise = audioZh.play();
+        if (playZhPromise !== undefined) {
+            playZhPromise.then(() => {
+                console.log("🔊 成功開始播放語音！");
+                if (voiceBubble) voiceBubble.style.animation = "none"; // 播放成功即取消閃爍
+            }).catch(error => {
+                console.warn("💡 瀏覽器阻擋自動播放，等待全螢幕點擊解鎖...");
+                if (voiceBubble) voiceBubble.style.animation = "flash-bubble 2s infinite"; // 提示點擊
+            });
+        }
+    }
+
+    // 嘗試自動播放
+    setTimeout(playVoiceAlert, 500);
+
+    // 全螢幕點擊解鎖機制 (點擊畫面上任何一個角落都會觸發)
+    const unlockAudio = function() {
+        playVoiceAlert();
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+    };
+    
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+
+    // 氣泡和機器人圖片也可主動點擊重播
+    const robotImg = document.querySelector('.robot-img');
+    if (voiceBubble) voiceBubble.addEventListener('click', playVoiceAlert);
+    if (robotImg) robotImg.addEventListener('click', playVoiceAlert);
 });
