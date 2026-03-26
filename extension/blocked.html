@@ -55,6 +55,11 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.5);
             line-height: 1.5;
             border: 2px solid #4a90e2;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .speech-bubble:hover {
+            transform: scale(1.03);
         }
 
         .speech-bubble::after {
@@ -75,6 +80,7 @@
             max-width: 100%;
             z-index: 1;
             filter: drop-shadow(0px 10px 20px rgba(0, 195, 255, 0.2)); /* 加上微微的藍色科技光暈 */
+            cursor: pointer;
         }
 
         /* ================= 右側：資訊區塊 ================= */
