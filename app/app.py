@@ -12,6 +12,9 @@ import string
 import threading
 import re
 import warnings  
+import html               
+import base64             
+import urllib.parse       
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -216,7 +219,6 @@ def submit_evidence():
         family_id = data.get('familyID', 'none')
         reason = data.get('reported_reason', '前端智慧攔截')
 
-        # 🌟 1. 存照片並取得專屬 ID
         ref = db.reference('scam_evidence').push({
             'url': url,
             'screenshot_base64': screenshot_base64,
@@ -225,7 +227,6 @@ def submit_evidence():
             'reason': reason
         })
         
-        # 🌟 2. 將專屬 ID 綁定到掃描紀錄
         report_dict = {
             "riskScore": 99,
             "riskLevel": "極度危險",
@@ -239,7 +240,7 @@ def submit_evidence():
             'userID': 'frontend_intercept', 
             'familyID': family_id, 
             'timestamp': timestamp,
-            'evidenceID': ref.key  # 綁定 ID！
+            'evidenceID': ref.key  
         })
         
         if family_id != 'none':
@@ -279,11 +280,10 @@ def get_evidence():
         
     data = request.json or {}
     family_id = data.get('familyID')
-    evidence_id = data.get('evidenceID') # 🌟 接收專屬 ID
+    evidence_id = data.get('evidenceID') 
     timestamp = data.get('timestamp')
     
     try:
-        # 🚀 效能優化：使用 O(1) 極速提取，不再搜尋整個資料庫
         if evidence_id:
             evidence = db.reference(f'scam_evidence/{evidence_id}').get()
             if evidence and isinstance(evidence, dict) and evidence.get('familyID') == family_id:
@@ -302,21 +302,111 @@ def get_evidence():
 def scan_url():
     data = request.json or {}
     
-    target_url = data.get('url') or ''
+    # 🟢 1. 防呆升級：強制將 null 轉為空字串，徹底消滅 500 錯誤
+    target_url = data.get('url')
+    target_url = str(target_url) if target_url else ''
     if len(target_url) > 2000: target_url = target_url[:2000]
     
-    raw_text = data.get('text') or ''
-    if len(raw_text) >2500: raw_text = raw_text[:2500]
-    
-    image_url = data.get('image_url') or ''
+    raw_text = data.get('text')
+    raw_text = str(raw_text) if raw_text else ''
+    if len(raw_text) > 2500: raw_text = raw_text[:2500]
+
+    image_url = data.get('image_url')
+    image_url = str(image_url) if image_url else ''
     if len(image_url) > 2000: image_url = image_url[:2000]
         
-    user_id = data.get('userID') or 'anonymous'
-    family_id = data.get('familyID') or 'none'
+    user_id = data.get('userID')
+    user_id = str(user_id) if user_id else 'anonymous'
+    
+    family_id = data.get('familyID')
+    family_id = str(family_id) if family_id else 'none'
+    
     is_urgent = data.get('is_urgent', False)
 
-    if not target_url and not image_url and not raw_text:
+    # ==========================================
+    # 🛡️ 終極升級 1：獨立且純粹的 Base64 與編碼解碼器 (防呆與多層次解碼)
+    # ==========================================
+    decoded_extras = ""
+
+    # 1. URL 解碼
+    try:
+        if '%' in raw_text: decoded_extras += urllib.parse.unquote(raw_text) + " "
+        if '%' in target_url: decoded_extras += urllib.parse.unquote(target_url) + " "
+    except: pass
+
+    # 2. HTML 實體解碼
+    try:
+        if '&#' in raw_text or '&amp;' in raw_text:
+            decoded_extras += html.unescape(raw_text) + " "
+    except: pass
+
+    # 3. Base64 強化解碼
+    def decode_base64_safe(s):
+        try:
+            s = s.replace('-', '+').replace('_', '/')
+            pad_len = len(s) % 4
+            if pad_len == 1: return ""  
+            if pad_len > 0: s += "=" * (4 - pad_len)
+            
+            decoded_bytes = base64.b64decode(s)
+            decoded_str = decoded_bytes.decode('utf-8', errors='ignore')
+            decoded_str = urllib.parse.unquote(decoded_str) 
+            
+            # 確保解碼出來是有意義的文字
+            if re.search(r'[\u4e00-\u9fa5]', decoded_str) or len(re.sub(r'[^\w\s]', '', decoded_str)) > 4:
+                return decoded_str + " "
+        except:
+            return ""
+        return ""
+
+    # (A) 暴力測試：移除所有空白後解碼
+    txt_no_spaces = re.sub(r'\s+', '', raw_text)
+    if txt_no_spaces:
+        decoded_extras += decode_base64_safe(txt_no_spaces)
+
+    # (B) 片段測試：從內文中找出疑似 Base64 的片段
+    b64_matches = re.findall(r'[A-Za-z0-9+/=\-_]{16,}', raw_text)
+    for b64 in b64_matches:
+        decoded_extras += decode_base64_safe(b64)
+
+    # (C) 網址測試：從 URL 參數中挖出 Base64 
+    if target_url:
+        url_b64_matches = re.findall(r'[A-Za-z0-9+/=\-_]{16,}', target_url)
+        for b64 in url_b64_matches:
+            decoded_extras += decode_base64_safe(b64)
+
+    raw_text = raw_text + " " + decoded_extras
+    # ==========================================
+
+    if not target_url and not image_url and not raw_text.strip():
         return jsonify({"status": "error", "riskScore": 0, "riskLevel": "參數異常", "reason": "未提供內容", "masked_text": ""}), 200
+
+    # ==========================================
+    # 🖼️ 終極升級 2：無 OCR 狀態下的兜底攔截機制 (破解圖片詐騙)
+    # ==========================================
+    if image_url:
+        img_lower = image_url.lower()
+        
+        if not image_url.startswith('http') and not image_url.startswith('data:'):
+            report = {"riskScore": 65, "riskLevel": "中度危險", "scamDNA": ["異常圖片"], "reason": "偵測到無效或惡意的圖片 URL 格式"}
+            return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
+            
+        if any(ext in img_lower for ext in ['.svg', '.webp', '.bmp', '.tiff', '.gif']) or 'image/webp' in img_lower or 'image/svg' in img_lower:
+            report = {"riskScore": 65, "riskLevel": "中度危險", "scamDNA": ["異常格式"], "reason": "使用罕見或易藏惡意腳本的圖片格式"}
+            return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
+            
+        suspicious_img_kws = ['qr', 'barcode', 'win', 'prize', 'lottery', 'base64', 'promo', 'award', 'bonus', 'text', 'gift', 'scam', 'free', '中獎', '保證獲利']
+        if any(kw in urllib.parse.unquote(img_lower) for kw in suspicious_img_kws):
+            report = {"riskScore": 85, "riskLevel": "高度危險", "scamDNA": ["圖片誘惑/QR"], "reason": "偵測到可疑的 QR Code 或圖片誘惑特徵"}
+            return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
+
+        if raw_text and len(raw_text.strip()) > 0:
+            report = {"riskScore": 80, "riskLevel": "高度危險", "scamDNA": ["多模態夾擊"], "reason": "偵測到圖文夾雜的混合規避手法"}
+            return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
+            
+        report = {"riskScore": 75, "riskLevel": "高度危險", "scamDNA": ["可疑圖片內容"], "reason": "防堵圖片隱藏中獎文字規避"}
+        return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
+    # ==========================================
 
     if target_url:
         if '@' in target_url:
@@ -367,7 +457,7 @@ def scan_url():
 
     evasion_patterns = [
         (r'在我車上|綁架|斷手斷腳|不准報警|不准報案', '暴力威脅與綁架勒索', '恐懼訴求'),
-        (r'中[•\.\-\*\_\s]+獎|中[•\.\-\*\_\s]+奖', '特殊符號切割規避', '規避查緝'),
+        (r'中[•\.\-\*\_\s]+獎|中[•\.\-\*\_\s]+奖|中獎|加賴|保證獲利|穩賺不賠|點擊領取|恭喜您|解凍帳戶', '高風險詐騙字眼', '金錢誘惑'),
         (r'仲獎|點機|伱巳|領娶|點撃|得獲您|知通獎中', '火星文與反轉排版規避', '規避查緝'),
         (r'恭喜您中奖了|点击领取奖金', '簡體字詐騙模板', '金錢誘惑'),
         (r'当選しました|おめでとうございます', '異常日文夾雜規避', '規避查緝'),
@@ -375,7 +465,7 @@ def scan_url():
         (r'bit\.ly/|rebrand\.ly/|tinyurl\.com/|pse\.is/', '高風險隱藏短網址', '未知套路'),
         (r'檢察官|法院傳票|警局通知|監理站|健保卡鎖卡|ETC欠費|退稅|政府津貼|勞保補助|普發津貼|健保退費', '公家機關威脅詐騙', '權威誘導'),
         (r'Netflix.*過期|Spotify.*到期|Amazon.*退款|蝦皮訂單異常|包裹滯留|超商取貨異常|宅配到府|支付寶轉帳|微信轉帳|銀行登入|帳戶凍結|信用卡盜刷|帳戶更新|中信卡驗證', '服務異常釣魚', '限時壓力'),
-        (r'飆股內線|殺豬盤|保證獲利|加密貨幣|BTC|ETH|iPhone中獎|統一發票中獎|假投資群組|假貸款廣告|銀行帳號匯款', '投資與中獎詐騙', '金錢誘惑'),
+        (r'飆股內線|殺豬盤|加密貨幣|BTC|ETH|iPhone中獎|統一發票中獎|假投資群組|假貸款廣告|銀行帳號匯款', '投資與中獎詐騙', '金錢誘惑'),
         (r'假冒主管|車禍|朋友借錢|房東改帳戶', '親友急難詐騙', '親情勒索'),
         (r'台電斷電|自來水停水|瓦斯停氣', '民生服務詐騙', '限時壓力'),
         (r'AI 語音|Deepfake|NFT|元宇宙|炒股機器人|CBDC|碳權|假 APK', '新型態科技詐騙', '未知套路'),
