@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (完整展開版 + 人性化視覺回饋)
+ * AI 防詐盾牌 - 核心控制邏輯 (直接跳轉安全網頁版 + 強制變色)
  */
 
 let currentUserID = "";
@@ -68,6 +68,17 @@ const scanBtnElement = document.getElementById('scan-btn');
 if (scanBtnElement) {
     scanBtnElement.addEventListener('click', async () => {
         const scanBtn = document.getElementById('scan-btn');
+        
+        // 👇 如果已經是逃生狀態，允許手動點擊直接逃生！
+        if (scanBtn.dataset.isEscape === "true") {
+            try {
+                let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                chrome.tabs.update(tab.id, { url: "https://www.google.com" });
+                window.close();
+            } catch(e) {}
+            return;
+        }
+
         const appBody = document.getElementById('app-body');
         const headerTitle = document.getElementById('header-title');
         const loadingDiv = document.getElementById('loading');
@@ -93,7 +104,7 @@ if (scanBtnElement) {
             if (!tab || !tab.id || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) {
                 if (loadingDiv) loadingDiv.style.display = "none";
                 resetBtn(scanBtn);
-                alert("⚠️ 系統安全限制：\n無法在「瀏覽器設定頁」或「空白新分頁」進行掃描與截圖！\n\n👉 解決方法：請打開一個『正常的網頁』(例如 Yahoo、蝦皮網頁) 再試一次！");
+                alert("⚠️ 系統安全限制：\n無法在「瀏覽器設定頁」或「空白新分頁」進行掃描與截圖！");
                 return;
             }
 
@@ -115,13 +126,8 @@ if (scanBtnElement) {
             let screenshotBase64 = null;
             try {
                 await new Promise(resolve => setTimeout(resolve, 150));
-                screenshotBase64 = await chrome.tabs.captureVisibleTab(null, {
-                    format: 'jpeg',
-                    quality: 30 
-                });
-            } catch (imgErr) {
-                console.error("⚠️ 前端截圖被瀏覽器阻擋:", imgErr);
-            }
+                screenshotBase64 = await chrome.tabs.captureVisibleTab(null, { format: 'jpeg', quality: 30 });
+            } catch (imgErr) {}
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); 
@@ -147,31 +153,20 @@ if (scanBtnElement) {
                 
                 const rawText = await response.text();
                 let data = {};
-                try { data = rawText ? JSON.parse(rawText) : {}; } 
-                catch (e) { data = { riskScore: 0, riskLevel: "安全無虞", reason: "系統已完成基礎安全掃描，未發現明顯惡意特徵。" }; }
+                try { data = rawText ? JSON.parse(rawText) : {}; } catch (e) { data = { riskScore: 0 }; }
                 
                 if (loadingDiv) loadingDiv.style.display = "none";
 
-                let reportData = {};
-                if (data.report) {
-                    try {
-                        reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
-                        if (typeof reportData === 'string') reportData = JSON.parse(reportData); 
-                    } catch(e) { reportData = data; } 
-                } else {
-                    reportData = data;
-                }
+                let reportData = data.report ? (typeof data.report === 'string' ? JSON.parse(data.report) : data.report) : data;
+                if (typeof reportData === 'string') reportData = JSON.parse(reportData); 
 
-                let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score);
-                if (isNaN(score)) { score = 0; reportData.riskLevel = "安全無虞"; reportData.reason = "✅ 系統未發現明顯惡意特徵，屬於一般正常網頁。"; }
+                let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score) || 0;
 
                 if (score < 50) {
                     score = 0; 
                     reportData.riskLevel = "安全無虞";
                     reportData.reason = "✅ 系統未發現明顯惡意特徵，屬於一般正常網頁。";
                     reportData.advice = "無潛在威脅，請放心瀏覽！";
-                    if(reportData.dimensions) reportData.dimensions = {}; 
-                    if(reportData.highlight_keywords) reportData.highlight_keywords = [];
                 }
 
                 if (document.getElementById('score-text')) document.getElementById('score-text').textContent = `風險指數: ${score}%`;
@@ -179,61 +174,64 @@ if (scanBtnElement) {
                 if (document.getElementById('report-reason')) document.getElementById('report-reason').textContent = reportData.reason || "系統已完成基礎安全掃描。";
                 if (document.getElementById('report-advice')) document.getElementById('report-advice').textContent = reportData.advice || "無特別建議。";
 
-                const dimContainer = document.getElementById('report-dimensions');
-                if (dimSection && dimContainer && reportData.dimensions && Object.keys(reportData.dimensions).length > 0) {
-                    dimContainer.textContent = ''; 
-                    for (let [key, val] of Object.entries(reportData.dimensions)) {
-                        let labelName = key.split('_')[1] || key;
-                        let thresholdHigh = typeof CONFIG !== 'undefined' ? CONFIG.RISK_THRESHOLD_HIGH : 70;
-                        let thresholdMedium = typeof CONFIG !== 'undefined' ? CONFIG.RISK_THRESHOLD_MEDIUM : 30;
-                        let color = val > thresholdHigh ? '#d93025' : (val > thresholdMedium ? '#f29900' : '#1e8e3e');
-                        
-                        let row = document.createElement('div'); row.className = 'dim-row';
-                        let label = document.createElement('div'); label.className = 'dim-label'; label.textContent = labelName;
-                        let barBg = document.createElement('div'); barBg.className = 'dim-bar-bg';
-                        let barFill = document.createElement('div'); barFill.className = 'dim-bar-fill'; barFill.style.width = `${val}%`; barFill.style.backgroundColor = color;
-                        barBg.appendChild(barFill);
-                        let scoreDiv = document.createElement('div'); scoreDiv.className = 'dim-score'; scoreDiv.style.color = color; scoreDiv.textContent = val;
-                        
-                        row.appendChild(label); row.appendChild(barBg); row.appendChild(scoreDiv);
-                        dimContainer.appendChild(row);
-                    }
-                    dimSection.style.display = 'block';
-                } else if (dimSection) { dimSection.style.display = 'none'; }
-
-                const kwContainer = document.getElementById('report-keywords');
-                if (kwContainer) {
-                    kwContainer.textContent = '';
-                    if (reportData.highlight_keywords && reportData.highlight_keywords.length > 0) {
-                        if (kwSection) kwSection.style.display = 'block';
-                        reportData.highlight_keywords.forEach(kw => {
-                            const span = document.createElement('span'); span.className = 'keyword-badge'; span.textContent = kw;
-                            kwContainer.appendChild(span);
-                        });
-                    } else if (kwSection) { kwSection.style.display = 'none'; }
-                }
-
                 if (scoreContainer) scoreContainer.style.display = "block";
                 if (reportContainer) reportContainer.style.display = "block";
                 setTimeout(() => { if (progressBar) progressBar.style.width = score + "%"; }, 150);
 
                 let thresholdHigh = typeof CONFIG !== 'undefined' ? CONFIG.RISK_THRESHOLD_HIGH : 70;
                 
-                // 👇 [修復關鍵] 乾淨俐落的判斷，絕不重複
+                // 👇 【核心修改】暴力改色 ＋ 倒數跳轉機制
                 if (score < 30) {
                     if (appBody) appBody.className = "theme-safe";
                     if (headerTitle) headerTitle.innerText = "✅ 檢測通過：安全網頁";
                 } else if (score >= thresholdHigh) {
                     if (appBody) appBody.className = "theme-danger";
-                    if (headerTitle) headerTitle.innerText = "❌ 極度危險！請立即離開！";
                     
-                    // 召喚防詐小尖兵，強制把危險網頁替換成攔截畫面
-                    chrome.tabs.update(tab.id, { 
-                        url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reportData.reason) + "&original_url=" + encodeURIComponent(tab.url) 
-                    });
+                    // 強制把頂部標題列變成血紅色
+                    if (headerTitle) {
+                        headerTitle.innerText = "❌ 極度危險！請立即撤離！";
+                        headerTitle.style.color = "#ffffff";
+                        if (headerTitle.parentElement) {
+                            headerTitle.parentElement.style.background = "linear-gradient(90deg, #d32f2f 0%, #b71c1c 100%)";
+                        }
+                    }
+
+                    // 強制把分析原因的框框變成顯眼的紅色警告框
+                    const reasonEl = document.getElementById('report-reason');
+                    if (reasonEl) {
+                        reasonEl.style.color = "#d32f2f";
+                        reasonEl.style.fontWeight = "bold";
+                        reasonEl.style.backgroundColor = "#ffebee";
+                        reasonEl.style.padding = "12px";
+                        reasonEl.style.borderRadius = "8px";
+                        reasonEl.style.border = "2px solid #ffcdd2";
+                        reasonEl.style.lineHeight = "1.6";
+                    }
                     
-                    // 加上這行魔法：讓小視窗展示 1.5 秒的紅字警告後，自動關閉退場！
-                    setTimeout(() => { window.close(); }, 1500);
+                    // 啟動倒數機制
+                    scanBtn.dataset.isEscape = "true";
+                    let countdown = 5; // 👈 這裡設定 5 秒，足夠看完詳細的 AI 報告
+                    scanBtn.innerText = `🚨 危險！${countdown} 秒後自動跳轉至安全網頁`;
+                    scanBtn.style.background = "linear-gradient(90deg, #FF4444 0%, #CC0000 100%)";
+                    scanBtn.style.color = "white";
+                    scanBtn.style.border = "none";
+                    scanBtn.style.boxShadow = "0 0 20px rgba(255, 68, 68, 0.8)";
+                    scanBtn.disabled = false; // 讓使用者可以點擊提早離開
+                    
+                    const timerId = setInterval(async () => {
+                        countdown--;
+                        if (countdown > 0) {
+                            scanBtn.innerText = `🚨 危險！${countdown} 秒後自動跳轉至安全網頁`;
+                        } else {
+                            clearInterval(timerId);
+                            try {
+                                let [t] = await chrome.tabs.query({ active: true, currentWindow: true });
+                                chrome.tabs.update(t.id, { url: "https://www.google.com" });
+                                window.close();
+                            } catch(e) {}
+                        }
+                    }, 1000);
+                    
                 } else {
                     if (appBody) appBody.className = "theme-warning";
                     if (headerTitle) headerTitle.innerText = "⚠️ 警告：請提高警覺";
@@ -242,66 +240,42 @@ if (scanBtnElement) {
             } catch (err) {
                 if (loadingDiv) loadingDiv.style.display = "none";
                 if (reportContainer) reportContainer.style.display = "block";
-                
-                let isTimeout = err.name === 'AbortError';
-                let titleHtml = isTimeout ? '⏳ <b>分析逾時 (伺服器喚醒中)</b>' : '🔌 <b>系統整理中</b>';
-                let descHtml = isTimeout 
-                    ? '因為伺服器剛才在休眠，需要一點時間開機。現在伺服器應該已經醒了，請點擊下方「重新掃描」即可秒速完成！' 
-                    : '防詐盾牌正在與雲端同步資料，請稍後再試。';
-
-                if (document.getElementById('report-reason')) {
-                    document.getElementById('report-reason').innerHTML = `
-                        ${titleHtml}<br>${descHtml}<br><br>
-                        <button id="retry-btn" style="background:#5f6368; padding:8px; font-size:14px; color:white; border:none; border-radius:4px; cursor:pointer;">🔄 重新掃描</button>
-                    `;
-                }
-                if (kwSection) kwSection.style.display = 'none';
-                if (dimSection) dimSection.style.display = 'none';
-                
-                setTimeout(() => {
-                    const retryBtn = document.getElementById('retry-btn');
-                    if (retryBtn) retryBtn.onclick = () => { document.getElementById('scan-btn')?.click(); };
-                }, 100);
-            } finally { resetBtn(scanBtn); }
+                resetBtn(scanBtn);
+            }
         } catch (err) { console.error("掃描錯誤", err); resetBtn(scanBtn); }
     });
 }
 
 function resetBtn(btn) {
-    if (!btn) return;
+    if (!btn || btn.dataset.isEscape === "true") return; // 如果正在逃生倒數，不要重置它！
+    
     btn.disabled = false;
     btn.innerText = "即時掃描當前網頁";
+    btn.style.background = ""; 
+    btn.style.color = "";
+    btn.style.border = "";
+    btn.style.boxShadow = "";
     const headerTitle = document.getElementById('header-title');
     if (headerTitle && headerTitle.innerText === "🛡️ 深度分析中...") headerTitle.innerText = "🛡️ AI 防詐盾牌";
 }
 
+// 下方是群組連線邏輯，維持原樣
 const btnCreateFamily = document.getElementById('btn_create_family');
 if (btnCreateFamily) {
     btnCreateFamily.addEventListener('click', async () => {
         if (!confirm("⚠️ 確定要建立一個『全新』的家庭防護群組嗎？\n\n(若您只是想加入別人的群組，請按取消，並在下方輸入對方的 6 碼代號)")) return; 
-
         const btn = document.getElementById('btn_create_family');
         const originalText = btn.innerText;
         btn.innerText = "建立中...";
         btn.disabled = true; 
-        btn.style.opacity = "0.7";
-
-        const wakeUpTimer = setTimeout(() => { btn.innerText = "伺服器喚醒中，請稍候 (約需 50 秒)..."; }, 4000);
-
         try {
             const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
             let res = await fetchWithRetry(`${apiBase}/api/create_family`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' },
                 body: JSON.stringify({ uid: currentUserID })
             });
-            
-            clearTimeout(wakeUpTimer); 
             let result = await res.json();
-            
             if (result.status === 'success') {
                 if (document.getElementById('display_code')) document.getElementById('display_code').innerText = result.inviteCode;
                 if (document.getElementById('code_box')) document.getElementById('code_box').style.display = 'block';
@@ -314,15 +288,8 @@ if (btnCreateFamily) {
                 alert(result.message || "建立失敗");
                 btn.innerText = originalText;
                 btn.disabled = false;
-                btn.style.opacity = "1";
             }
-        } catch (err) {
-            clearTimeout(wakeUpTimer);
-            alert("❌ 連線失敗！伺服器可能正在休眠或網路異常，請再試一次。");
-            btn.innerText = originalText;
-            btn.disabled = false;
-            btn.style.opacity = "1";
-        }
+        } catch (err) { alert("連線失敗！"); btn.innerText = originalText; btn.disabled = false; }
     });
 }
 
@@ -338,24 +305,14 @@ if (btnJoinFamily) {
         const originalText = btn.innerText;
         btn.innerText = "綁定中...";
         btn.disabled = true;
-        btn.style.opacity = "0.7";
-
-        const wakeUpTimer = setTimeout(() => { btn.innerText = "伺服器喚醒中，請稍候 (約需 50 秒)..."; }, 4000);
-
         try {
             const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
             let res = await fetchWithRetry(`${apiBase}/api/join_family`, {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' },
                 body: JSON.stringify({ uid: currentUserID, inviteCode: code })
             });
-            
-            clearTimeout(wakeUpTimer); 
             let result = await res.json();
-            
             if (result.status === 'success') {
                 alert("✅ 綁定成功！");
                 currentFamilyID = code;
@@ -367,15 +324,8 @@ if (btnJoinFamily) {
                 alert("❌ 綁定失敗：" + result.message);
                 btn.innerText = "加入防護網 (被守護者)";
                 btn.disabled = false;
-                btn.style.opacity = "1";
             }
-        } catch (err) {
-            clearTimeout(wakeUpTimer);
-            alert("❌ 連線失敗！伺服器可能正在休眠或網路異常，請再試一次。");
-            btn.innerText = "加入防護網 (被守護者)";
-            btn.disabled = false;
-            btn.style.opacity = "1";
-        }
+        } catch (err) { alert("連線失敗！"); btn.innerText = "加入防護網 (被守護者)"; btn.disabled = false; }
     });
 }
 
@@ -398,15 +348,11 @@ function updateUIAsBound(familyID) {
     if (statusText) {
         statusText.innerText = `狀態：已綁定家庭 (${familyID})`;
         statusText.style.color = '#1e8e3e';
-        statusText.style.fontWeight = 'bold';
     }
-    
     const inviteInput = document.getElementById('invite_input');
     if (inviteInput) inviteInput.style.display = 'none';
-    
     const btnJoinFamily = document.getElementById('btn_join_family');
     if (btnJoinFamily) btnJoinFamily.style.display = 'none';
-
     let goDashBtn = document.getElementById('go-dashboard-btn');
     if (!goDashBtn) {
         goDashBtn = document.createElement('button');
@@ -421,16 +367,13 @@ function updateUIAsBound(familyID) {
         goDashBtn.style.fontSize = '16px';
         goDashBtn.style.fontWeight = 'bold';
         goDashBtn.style.cursor = 'pointer';
-        
         const familyContainer = document.getElementById('family-container');
         if (familyContainer) familyContainer.appendChild(goDashBtn);
     }
-    
     if (goDashBtn) {
         goDashBtn.innerText = "📊 開啟大螢幕戰情室";
         goDashBtn.onclick = () => {
-            const dashUrl = chrome.runtime.getURL(`dashboard.html?familyID=${familyID}`);
-            chrome.tabs.create({ url: dashUrl });
+            chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html?familyID=${familyID}`) });
         };
     }
 }
@@ -438,8 +381,7 @@ function updateUIAsBound(familyID) {
 function startFamilyAlertsPolling(familyID) {
     if (pollingInterval) clearInterval(pollingInterval);
     fetchFamilyAlerts(familyID); 
-    const intervalMs = typeof CONFIG !== 'undefined' && CONFIG.POLLING_INTERVAL_MS ? CONFIG.POLLING_INTERVAL_MS : 5000;
-    pollingInterval = setInterval(() => { fetchFamilyAlerts(familyID); }, intervalMs);
+    pollingInterval = setInterval(() => { fetchFamilyAlerts(familyID); }, 5000);
 } 
 
 async function fetchFamilyAlerts(familyID) {
@@ -448,10 +390,7 @@ async function fetchFamilyAlerts(familyID) {
         const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
         let res = await fetch(`${apiBase}/api/get_alerts`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json', 
-                'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
-            },
+            headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' },
             body: JSON.stringify({ familyID: familyID })
         });
         let result = await res.json();
@@ -459,29 +398,16 @@ async function fetchFamilyAlerts(familyID) {
         if (!box) return; 
         
         if (result.status === 'success' && result.data.length > 0) {
-            let html = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <div style="font-weight:bold; color:var(--text-main);">⚠️ 近期家庭防護紀錄</div>
-                    <button id="clear-alerts-btn" style="width: auto; padding: 4px 10px; margin: 0; font-size: 12px; background: #dc3545; color: white; border-radius: 4px; cursor: pointer; border: none;">🗑️ 清除</button>
-                </div>
-            `;
-            
+            let html = `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;"><div style="font-weight:bold;">⚠️ 近期家庭防護紀錄</div><button id="clear-alerts-btn" style="width: auto; padding: 4px 10px; margin: 0; font-size: 12px; background: #dc3545; color: white; border-radius: 4px; cursor: pointer; border: none;">🗑️ 清除</button></div>`;
             result.data.forEach(item => {
                 let r = {};
                 try { r = JSON.parse(item.report); } catch(e) { r = { riskLevel: "紀錄" }; }
                 let time = item.timestamp ? item.timestamp.split(' ')[1] : ''; 
-                
                 let score = parseInt(r.riskScore || r.RiskScore || r.risk_score) || 0;
                 let reasonText = (score < 50) ? "安全放行" : (r.reason ? r.reason.substring(0, 20) : "安全掃描");
                 reasonText = reasonText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 let riskText = (score < 50) ? "安全無虞" : (r.riskLevel || "未知");
-                
-                html += `
-                    <div class="alert-item">
-                        <span class="alert-time">🕒 ${time} - [${riskText}]</span>
-                        結果: ${reasonText}...
-                    </div>
-                `;
+                html += `<div class="alert-item"><span class="alert-time">🕒 ${time} - [${riskText}]</span>結果: ${reasonText}...</div>`;
             });
             box.innerHTML = html;
             box.style.display = 'block';
@@ -489,9 +415,7 @@ async function fetchFamilyAlerts(familyID) {
             box.style.display = 'none';
             box.innerHTML = '';
         }
-    } catch (e) {
-        console.log("戰情室更新失敗", e);
-    }
+    } catch (e) {}
 }
 
 const familyAlertsBox = document.getElementById('family-alerts-box');
@@ -502,19 +426,14 @@ if (familyAlertsBox) {
             const originalText = btn.innerText;
             btn.innerText = "清除中...";
             btn.disabled = true;
-            
             try {
                 const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
                 let res = await fetchWithRetry(`${apiBase}/api/clear_alerts`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026'
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' },
                     body: JSON.stringify({ familyID: currentFamilyID })
                 });
                 let result = await res.json();
-                
                 if (result.status === 'success') {
                     const box = document.getElementById('family-alerts-box');
                     if (box) { box.innerHTML = ''; box.style.display = 'none'; }
@@ -523,7 +442,6 @@ if (familyAlertsBox) {
                     setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2000);
                 }
             } catch (err) {
-                console.error("清除失敗", err);
                 btn.innerText = "連線失敗";
                 setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2000);
             }
