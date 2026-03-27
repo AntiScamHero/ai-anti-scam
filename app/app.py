@@ -636,6 +636,31 @@ def scan_url():
                     risk_score=100, 
                     scam_dna=["系統強制警示"]
                 )
+                
+                # 👇 補上這段：讓緊急攔截也能完美存入戰情室表格！
+                try:
+                    report_dict = {
+                        "riskScore": 100,
+                        "riskLevel": "極度危險",
+                        "scamDNA": ["系統強制警示"],
+                        "reason": f"【前端緊急攔截】{web_text[:50]}",
+                        "advice": "防詐盾牌已在第一時間自動為您阻擋此危險網頁。"
+                    }
+                    timestamp = get_tw_time()
+                    db.reference('scan_history').push({
+                        'url': target_url, 
+                        'report': json.dumps(report_dict, ensure_ascii=False), 
+                        'userID': user_id, 
+                        'familyID': family_id, 
+                        'timestamp': timestamp,
+                        'evidenceID': evidence_id 
+                    })
+                    socketio.emit('new_scan_result', {
+                        'url': target_url, 'riskScore': 100, 'reason': report_dict['reason'], 'timestamp': timestamp
+                    }, room=family_id)
+                except Exception as e:
+                    print(f"⚠️ 緊急攔截紀錄寫入失敗: {e}", flush=True)
+
         socketio.start_background_task(handle_urgent) 
         return jsonify({"status": "success"})
 
