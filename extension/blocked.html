@@ -168,6 +168,13 @@
             font-size: 16px; color: #ffeb3b; line-height: 1.6; margin-bottom: 20px; padding: 10px;
             background: rgba(255, 235, 59, 0.1); border-left: 4px solid #ffeb3b; border-radius: 4px;
         }
+
+        /* 密碼輸入框專屬樣式 */
+        .pin-input {
+            flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #555; background: #1a1a1a; 
+            color: #fff; font-size: 20px; text-align: center; letter-spacing: 10px; outline: none; width: 100%; box-sizing: border-box;
+        }
+        .pin-input:focus { border-color: #ff9800; box-shadow: 0 0 8px rgba(255,152,0,0.5); }
     </style>
 </head>
 <body>
@@ -210,6 +217,16 @@
 
                 <button class="btn-text" id="report-false-btn">這不是詐騙，回報誤判</button>
                 <button class="btn-text" id="bypass-btn">強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button>
+
+                <div id="password-area" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #555; width: 100%;">
+                    <div style="color: #ffeb3b; font-size: 15px; margin-bottom: 10px;">🔒 請輸入家人設定的防護密碼以解除攔截：</div>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="password" id="guardian-pin" class="pin-input" maxlength="4" inputmode="numeric" pattern="\d*" placeholder="****">
+                        <button id="verify-pin-btn" class="btn-safe" style="width: auto; margin-top: 0; padding: 10px 25px; font-size: 16px; background-color: #ff4d4f; box-shadow: 0 5px 15px rgba(255, 77, 79, 0.3);">解鎖</button>
+                    </div>
+                    <div id="pin-error" style="color: #ff4d4f; font-size: 14px; margin-top: 8px; display: none;">❌ 密碼錯誤！請打電話給設定此防護網的家人確認密碼。</div>
+                    <button id="cancel-pin-btn" class="btn-text" style="margin-top: 8px;">← 返回</button>
+                </div>
             </div>
         </div>
 

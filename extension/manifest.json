@@ -26,7 +26,8 @@
         "voice.js",
         "blocked.js",
         "socket.io.min.js",
-        "hero.png"
+        "hero.png",
+        "*.wav"
       ],
       "matches": [
         "<all_urls>"

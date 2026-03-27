@@ -1,12 +1,13 @@
 /**
- * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (2026 競賽冠軍優化版 + 權重積分制 + 證據保全快門)
- * 核心特色：效能優化 + 權重積分防禦 + 圖片分析 + 個資脫敏 + 友軍免死金牌機制 + 自動蒐證快門
+ * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (究極完美進化版)
+ * 核心特色：動態網站信譽分級 + 區域限定掃描 + 上下文權重 + 信任護城河扣分 + 條件式圖片掃描 + 自動蒐證快門
  */
 
 // ==========================================
 // 🚀 競賽級優化：多層次快取防線 (Multi-layer Cache Defense)
 // ==========================================
 const scannedCache = new Set();
+let currentGlobalRiskScore = 0; // 💡 新增：全域變數，紀錄目前的危險分數，供圖片掃描器參考
 
 function hashString(str) {
     let hash = 5381;
@@ -19,7 +20,6 @@ function hashString(str) {
 function extractHighRiskText(text, maxLength = 4000) {
     if (text.length <= maxLength) return text;
     
-    // 這裡只做初步擷取，真正的判斷在積分制
     const riskKeywords = ["保證獲利", "加賴", "飆股", "解凍", "中獎", "登入", "身分證", "帳號", "密碼"];
     let snippets = [];
     let lastIndex = 0;
@@ -39,6 +39,262 @@ function extractHighRiskText(text, maxLength = 4000) {
         return text.substring(0, 2000) + "\n...\n" + text.substring(text.length - 2000);
     }
     return finalStr.substring(0, maxLength);
+}
+
+// ==========================================
+// 🌐 網站信譽與分類系統 (可動態更新)
+// ==========================================
+const DEFAULT_REPUTATION = {
+    category: "general",
+    reputation: 50,
+    riskThreshold: 80,
+    scanMode: "full"        // full: 全頁掃描, ugc: 僅使用者內容
+};
+
+// 內建高信譽網站 (可從 storage 擴充)
+const BUILTIN_SITE_DATA = {
+    "youtube.com": { category: "video", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+    "youtu.be": { category: "video", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+    "google.com": { category: "search", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+    "facebook.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+    "twitter.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+    "x.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+    "instagram.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+    "wikipedia.org": { category: "reference", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+    "github.com": { category: "development", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+    "chatgpt.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+    "openai.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+    "pchome.com.tw": { category: "ecommerce", reputation: 80, riskThreshold: 90, scanMode: "full" },
+    "cnyes.com": { category: "news", reputation: 80, riskThreshold: 90, scanMode: "full" },
+    "msn.com": { category: "portal", reputation: 85, riskThreshold: 95, scanMode: "full" },
+    "yahoo.com": { category: "portal", reputation: 85, riskThreshold: 95, scanMode: "full" }
+};
+
+async function getSiteReputation() {
+    const host = window.location.hostname;
+    // 先嘗試從 storage 取得使用者自訂
+    try {
+        const storage = await chrome.storage.local.get(['siteReputation']);
+        const custom = storage.siteReputation?.[host];
+        if (custom) return { ...DEFAULT_REPUTATION, ...custom };
+    } catch (e) {}
+    
+    // 比對內建
+    for (let [domain, data] of Object.entries(BUILTIN_SITE_DATA)) {
+        if (host.includes(domain)) {
+            return { ...DEFAULT_REPUTATION, ...data };
+        }
+    }
+    return DEFAULT_REPUTATION;
+}
+
+// ==========================================
+// 🔍 區域限定掃描 (針對不同網站只掃描 UGC 區域)
+// ==========================================
+function getScannableText() {
+    const host = window.location.hostname;
+    
+    // YouTube
+    if (host.includes('youtube.com') || host.includes('youtu.be')) {
+        let texts = [];
+        const desc = document.querySelector('#description-inline-expander, #description, ytd-text-inline-expander');
+        if (desc) texts.push(desc.innerText);
+        const comments = document.querySelectorAll('#comments #content-text, ytd-comment-renderer #content-text');
+        comments.forEach(c => texts.push(c.innerText));
+        const liveChat = document.querySelector('#chat-messages, ytd-live-chat-frame');
+        if (liveChat) texts.push(liveChat.innerText);
+        return texts.join('\n');
+    }
+    
+    // Facebook
+    if (host.includes('facebook.com')) {
+        let texts = [];
+        const posts = document.querySelectorAll('[data-ad-comet-preview="message"], div[data-testid="post_message"]');
+        posts.forEach(p => texts.push(p.innerText));
+        const comments = document.querySelectorAll('[data-ad-comet-preview="comment"], div[data-testid="UFI2Comment/body"]');
+        comments.forEach(c => texts.push(c.innerText));
+        return texts.join('\n');
+    }
+    
+    // Twitter/X
+    if (host.includes('twitter.com') || host.includes('x.com')) {
+        let texts = [];
+        const tweets = document.querySelectorAll('[data-testid="tweetText"], [data-testid="tweet"] div[lang]');
+        tweets.forEach(t => texts.push(t.innerText));
+        return texts.join('\n');
+    }
+    
+    // Instagram
+    if (host.includes('instagram.com')) {
+        let texts = [];
+        const captions = document.querySelectorAll('span._a9zr');
+        captions.forEach(c => texts.push(c.innerText));
+        return texts.join('\n');
+    }
+    
+    // 預設全頁掃描
+    return document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
+}
+
+// ==========================================
+// 🧠 上下文權重調整與信任護城河
+// ==========================================
+const scamDictionary = [
+    { word: "保證獲利", baseScore: 80, contextModifiers: { social: 0.2, video: 0.2, general: 1.0 } },
+    { word: "穩賺不賠", baseScore: 80, contextModifiers: { social: 0.2, video: 0.2, general: 1.0 } },
+    { word: "解凍金", baseScore: 100, contextModifiers: { social: 0.5, video: 0.5, general: 1.0 } },
+    { word: "殺豬盤", baseScore: 100, contextModifiers: { social: 0.8, video: 0.8, general: 1.0 } },
+    { word: "不准報警", baseScore: 100, contextModifiers: { social: 0.5, video: 0.5, general: 1.0 } },
+    { word: "斷手斷腳", baseScore: 100, contextModifiers: { social: 0.5, video: 0.5, general: 1.0 } },
+    { word: "無風險投資", baseScore: 60, contextModifiers: { social: 0.3, video: 0.3, general: 1.0 } },
+    { word: "飆股", baseScore: 50, contextModifiers: { social: 0.4, video: 0.4, general: 1.0 } },
+    { word: "破解程式", baseScore: 50, contextModifiers: { social: 0.4, video: 0.4, general: 1.0 } },
+    { word: "內部消息", baseScore: 50, contextModifiers: { social: 0.4, video: 0.4, general: 1.0 } },
+    { word: "加賴領取", baseScore: 40, contextModifiers: { social: 0.6, video: 0.6, general: 1.0 } },
+    { word: "加line", baseScore: 30, contextModifiers: { social: 0.5, video: 0.5, general: 1.0 } },
+    { word: "保證金", baseScore: 30, contextModifiers: { social: 0.7, video: 0.7, general: 1.0 } },
+    { word: "中獎", baseScore: 20, contextModifiers: { social: 0.2, video: 0.2, general: 1.0 } },
+    { word: "名額有限", baseScore: 10, contextModifiers: { social: 0.3, video: 0.3, general: 1.0 } },
+    { word: "免費註冊", baseScore: 10, contextModifiers: { social: 0.3, video: 0.3, general: 1.0 } }
+];
+
+// 💡 修復：補回信任特徵 (扣分護城河，保護合法小網站如農場、正當電商)
+const trustDictionary = [
+    { word: "統一編號", score: -30 }, 
+    { word: "退換貨政策", score: -30 },
+    { word: "隱私權聲明", score: -20 },
+    { word: "實體門市", score: -20 }
+];
+
+function maskSensitiveData(text) {
+    if (!text) return "";
+    return text
+        .replace(/(?:\d{4}[-\s]?){3}\d{4}/g, "[信用卡號已隱藏]")
+        .replace(/[A-Z][12]\d{8}/i, "[身分證已隱藏]")
+        .replace(/09\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, "[手機號碼已隱藏]")
+        .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
+}
+
+// ==========================================
+// 🛡️ 核心掃描函數 (非同步)
+// ==========================================
+let hasTriggeredBlock = false;
+
+async function scanScamWords() {
+    if (hasTriggeredBlock) return;
+    
+    // 免死金牌：暫時信任
+    if (sessionStorage.getItem('temp_whitelist_' + window.location.href)) return;
+    
+    // 系統頁面跳過
+    const isSystemPage = window.location.protocol === 'chrome-extension:' ||
+                         window.location.href.includes('dashboard.html') ||
+                         window.location.href.includes('blocked.html') ||
+                         window.location.href.includes('simulator.html');
+    if (isSystemPage) return;
+    
+    // 獲取網站信譽
+    const siteInfo = await getSiteReputation();
+    const { category, reputation, riskThreshold, scanMode } = siteInfo;
+    
+    // 高信譽網站直接放行，不掃描 (可依需求調整)
+    if (reputation >= 100) {
+        observeElements();
+        return;
+    }
+    
+    // 獲取文字內容
+    let textContent = '';
+    if (scanMode === 'ugc') {
+        textContent = getScannableText();
+    } else {
+        textContent = document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
+    }
+    
+    // 若無內容則跳過
+    if (!textContent || textContent.trim().length < 50) {
+        observeElements();
+        return;
+    }
+    
+    // 快取去重
+    const textHash = hashString(textContent);
+    if (scannedCache.has(textHash)) {
+        observeElements();
+        return;
+    }
+    scannedCache.add(textHash);
+    if (scannedCache.size > 50) {
+        const it = scannedCache.values();
+        for (let i = 0; i < 25; i++) scannedCache.delete(it.next().value);
+    }
+    
+    // 提取高風險片段
+    const smartText = extractHighRiskText(textContent);
+    const safeText = maskSensitiveData(smartText);
+    
+    // 計算加權風險分數
+    let totalRiskScore = 0;
+    let matchedKeywords = [];
+    let trustedFootprints = [];
+    
+    for (let item of scamDictionary) {
+        if (safeText.includes(item.word)) {
+            let modifier = item.contextModifiers?.[category] ?? 1.0;
+            // 如果網站信譽高但非高風險，再降權
+            if (reputation > 70 && category !== 'general') {
+                modifier *= 0.6;
+            }
+            let finalScore = Math.floor(item.baseScore * modifier);
+            totalRiskScore += finalScore;
+            matchedKeywords.push(`${item.word}(+${finalScore})`);
+        }
+    }
+
+    // 💡 修復：計算信任扣分，防誤殺合法網站
+    for (let item of trustDictionary) {
+        if (safeText.includes(item.word)) {
+            totalRiskScore += item.score; 
+            trustedFootprints.push(`[信任]${item.word}(${item.score})`);
+        }
+    }
+    
+    // 確保分數不會扣成負數
+    totalRiskScore = Math.max(0, totalRiskScore);
+    currentGlobalRiskScore = totalRiskScore; // 💡 修復：更新全域變數，供圖片掃描器使用
+    
+    // 攔截判斷
+    if (totalRiskScore >= riskThreshold) {
+        let blockReason = `偵測到多重風險特徵 (總分 ${totalRiskScore} 分，門檻 ${riskThreshold})：${matchedKeywords.join('、')}`;
+        if (trustedFootprints.length > 0) blockReason += `\n(已扣除信任特徵：${trustedFootprints.join('、')})`;
+        
+        triggerSafeBlock(blockReason, { riskScore: totalRiskScore, reason: blockReason, advice: "請勿輸入個人資料", scamDNA: matchedKeywords });
+        return;
+    }
+    
+    // 中度風險：僅顯示浮動警告，不攔截
+    if (totalRiskScore >= riskThreshold * 0.6 && totalRiskScore < riskThreshold) {
+        if (!document.getElementById('ai-fraud-mid-risk')) {
+            showMidRiskWarning(totalRiskScore, matchedKeywords.concat(trustedFootprints));
+        }
+    }
+    
+    observeElements();
+}
+
+function showMidRiskWarning(score, keywords) {
+    const div = document.createElement('div');
+    div.id = 'ai-fraud-mid-risk';
+    div.style.cssText = 'position:fixed; bottom:20px; right:20px; background:#ff9800; color:white; padding:12px 16px; border-radius:8px; z-index:999999; font-family:sans-serif; font-size:14px; box-shadow:0 2px 10px rgba(0,0,0,0.2); max-width:300px;';
+    div.innerHTML = `
+        <div style="font-weight:bold;">⚠️ 中度風險警告</div>
+        <div>此頁面風險分數 ${score} 分，請留意勿提供個資。</div>
+        <div style="font-size:12px; margin-top:5px; color:#ffe0b2;">觸發特徵：${keywords.join(', ')}</div>
+        <button id="closeMidRisk" style="margin-top:8px; background:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; color:#ff9800; font-weight:bold;">關閉</button>
+    `;
+    document.body.appendChild(div);
+    document.getElementById('closeMidRisk').onclick = () => div.remove();
+    setTimeout(() => div.remove(), 10000);
 }
 
 // ==========================================
@@ -70,7 +326,7 @@ class BehaviorAnalyzer {
 // ==========================================
 const badDomains = ["testsafebrowsing.appspot.com", "fake-scam-delivery.com", "win-free-iphone-now.net", "lucky-verify-login.net"];
 
-const linkObserver = new IntersectionObserver((entries, observer) => {
+const linkObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
             const link = entry.target;
@@ -81,41 +337,44 @@ const linkObserver = new IntersectionObserver((entries, observer) => {
                     triggerSafeBlock("發現 165 黑名單釣魚連結：" + linkUrl.hostname);
                 }
             } catch (e) {}
-            observer.unobserve(link); 
+            linkObserver.unobserve(link);
         }
     });
 });
 
-const imageObserver = new IntersectionObserver((entries, observer) => {
+const imageObserver = new IntersectionObserver(async (entries) => {
+    const siteInfo = await getSiteReputation();
     entries.forEach(entry => {
         if (entry.isIntersecting) {
             const img = entry.target;
-            if (img.src && !img.src.startsWith('data:') && img.width > 50 && img.height > 50) {
+            // 💡 修復：只有在網站信譽較低 (<80) 且文字內容已經有嫌疑 (>20分) 時，才去掃描圖片
+            // 這徹底解決了 YouTube、FB 等大型社群平台因為圖文夾雜而產生的大量誤判！
+            if (siteInfo.reputation < 80 && currentGlobalRiskScore > 20 && img.src && !img.src.startsWith('data:') && img.width > 50 && img.height > 50) {
                 try {
                     chrome.runtime.sendMessage({ action: "scanImageInBackground", imageUrl: img.src, pageUrl: window.location.href });
                 } catch (error) {
                     console.warn("⚠️ 擴充功能已更新，請重新整理此網頁。");
                 }
             }
-            observer.unobserve(img);
+            imageObserver.unobserve(img);
         }
     });
 });
 
 function observeElements() {
     document.querySelectorAll('a:not([data-scanned="true"])').forEach(link => {
-        link.dataset.scanned = "true"; linkObserver.observe(link);
+        link.dataset.scanned = "true";
+        linkObserver.observe(link);
     });
     document.querySelectorAll('img:not([data-scanned="true"])').forEach(img => {
-        img.dataset.scanned = "true"; imageObserver.observe(img);
+        img.dataset.scanned = "true";
+        imageObserver.observe(img);
     });
 }
 
 // ==========================================
-// 🚨 模組 3：觸發蒐證攔截視窗 (先拍照 ➡️ 再切換)
+// 🚨 模組 3：觸發蒐證攔截視窗
 // ==========================================
-let hasTriggeredBlock = false; 
-
 async function triggerSafeBlock(reason, reportData = null) {
     if (hasTriggeredBlock) return;
     if (sessionStorage.getItem('temp_whitelist_' + window.location.href)) return;
@@ -123,14 +382,12 @@ async function triggerSafeBlock(reason, reportData = null) {
     hasTriggeredBlock = true;
     console.log("🛡️ AI 防詐盾牌：發現威脅，定住畫面並按下快門...", reason);
 
-    // 1. 🟢 凍結畫面
     if (document.body) {
         document.body.style.pointerEvents = 'none';
         document.body.style.userSelect = 'none';
         document.body.style.border = '5px solid rgba(255, 77, 79, 0.5)';
     }
 
-    // 2. 🟢 動作：通知背景程式按快門
     try {
         const timestamp = new Date().toISOString(); 
         let familyID = 'none';
@@ -154,7 +411,6 @@ async function triggerSafeBlock(reason, reportData = null) {
         console.error("❌ 自動蒐證快門失敗:", error);
     }
 
-    // 3. 🟢 視覺與跳轉
     document.documentElement.innerHTML = `
         <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:#141e30; color:white; display:flex; align-items:center; justify-content:center; z-index:2147483647; font-family:sans-serif;">
             <div style="font-size:24px; font-weight:bold; color:#ff4d4f;">🚨 證據保全完畢，系統攔截中...</div>
@@ -174,99 +430,7 @@ async function triggerSafeBlock(reason, reportData = null) {
 }
 
 // ==========================================
-// 🧠 模組 4：全新權重積分制掃描 (取代一槍斃命)
-// ==========================================
-const scamDictionary = [
-    // 致命特徵 (一擊必殺)
-    { word: "保證獲利", score: 80 },
-    { word: "穩賺不賠", score: 80 },
-    { word: "解凍金", score: 100 },
-    { word: "殺豬盤", score: 100 },
-    { word: "不准報警", score: 100 },
-    { word: "斷手斷腳", score: 100 },
-    // 高度可疑特徵
-    { word: "無風險投資", score: 60 },
-    { word: "飆股", score: 50 },
-    { word: "破解程式", score: 50 },
-    { word: "內部消息", score: 50 },
-    // 中度行銷手法 (需搭配其他特徵)
-    { word: "加賴領取", score: 40 },
-    { word: "加line", score: 30 },
-    { word: "保證金", score: 30 },
-    { word: "中獎", score: 20 },
-    // 正常電商也愛用的詞 (分數極低，單一出現不會封鎖)
-    { word: "名額有限", score: 10 },
-    { word: "免費註冊", score: 10 }
-];
-
-function maskSensitiveData(text) {
-    if (!text) return "";
-    return text
-        .replace(/(?:\d{4}[-\s]?){3}\d{4}/g, "[信用卡號已隱藏]")
-        .replace(/[A-Z][12]\d{8}/i, "[身分證已隱藏]")
-        .replace(/09\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, "[手機號碼已隱藏]")
-        .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
-}
-
-function scanScamWords() {
-    if (hasTriggeredBlock) return;
-    
-    // 白名單保持，主要用於大型網站免掃描加速
-    const frontendWhitelist = [
-        "yahoo.com", "yahoo.com.tw", "tw.stock.yahoo.com",
-        "google.com", "msn.com", "pchome.com.tw", "cnyes.com", 
-        "github.com", "render.com", "dgc.com.tw" // 預防性加入獨角仙農場
-    ];
-    
-    const currentHost = window.location.hostname;
-    const isWhitelisted = frontendWhitelist.some(domain => currentHost.includes(domain));
-
-    const textContent = document.body ? (document.body.innerText || document.body.textContent) : document.documentElement.textContent;
-    let iframeUrls = Array.from(document.querySelectorAll('iframe')).map(f => f.src).filter(src => src);
-    let iframeText = iframeUrls.length > 0 ? `\n[隱藏的Iframe網址]: ${iframeUrls.join(', ')}` : "";
-    const cleanText = textContent.trim();
-    
-    if ((cleanText.length < 50 && iframeUrls.length === 0) || isWhitelisted) {
-        observeElements(); 
-        return;
-    }
-
-    const textHash = hashString(cleanText);
-    if (scannedCache.has(textHash)) { observeElements(); return; }
-    scannedCache.add(textHash);
-    if (scannedCache.size > 50) {
-        const cacheIterator = scannedCache.values();
-        for (let i = 0; i < 25; i++) scannedCache.delete(cacheIterator.next().value);
-    }
-
-    const smartText = extractHighRiskText(cleanText) + iframeText;
-    const safeText = maskSensitiveData(smartText); 
-
-    // 🚨 核心邏輯：計算總風險分數
-    let totalRiskScore = 0;
-    let matchedKeywords = [];
-
-    for (let item of scamDictionary) {
-        if (safeText.includes(item.word)) {
-            totalRiskScore += item.score;
-            matchedKeywords.push(item.word);
-        }
-    }
-    
-    // 設定攔截門檻：大於等於 80 分才啟動防禦
-    const RISK_THRESHOLD = 80;
-
-    if (totalRiskScore >= RISK_THRESHOLD) {
-        let blockReason = `偵測到多重風險特徵 (總分 ${totalRiskScore} 分)：${matchedKeywords.join('、')}`;
-        triggerSafeBlock(blockReason, { riskScore: totalRiskScore, reason: blockReason, advice: "請勿輸入個人資料", scamDNA: matchedKeywords });
-        return; 
-    }
-    
-    observeElements(); 
-}
-
-// ==========================================
-// ⏱️ 模組 5：資源管理與排程 (Idle Scheduling)
+// ⏱️ 模組 4：資源管理與排程
 // ==========================================
 let scanCount = 0;
 let lastActivityTime = Date.now();
@@ -275,12 +439,12 @@ document.addEventListener('mousemove', () => { lastActivityTime = Date.now(); },
 document.addEventListener('keydown', () => { lastActivityTime = Date.now(); }, { passive: true });
 
 function scheduleIdleScan() {
-    if (Date.now() - lastActivityTime > (window.CONFIG?.INACTIVITY_TIMEOUT_MS || 300000)) {
-        setTimeout(scheduleIdleScan, 5000); 
+    if (Date.now() - lastActivityTime > 300000) {
+        setTimeout(scheduleIdleScan, 5000);
         return;
     }
     
-    if (scanCount >= (window.CONFIG?.MAX_SCANS_PER_MINUTE || 10)) {
+    if (scanCount >= 10) {
         setTimeout(() => { scanCount = 0; scheduleIdleScan(); }, 60000);
         return;
     }
@@ -289,18 +453,18 @@ function scheduleIdleScan() {
     if (window.requestIdleCallback) {
         requestIdleCallback(() => { 
             scanScamWords(); 
-            setTimeout(scheduleIdleScan, window.CONFIG?.SCAN_COOLDOWN_MS || 1500); 
+            setTimeout(scheduleIdleScan, 1500); 
         }, { timeout: 2000 });
     } else {
         setTimeout(() => { 
             scanScamWords(); 
             scheduleIdleScan(); 
-        }, window.CONFIG?.SCAN_COOLDOWN_MS || 1500);
+        }, 1500);
     }
 }
 
 // ==========================================
-// 🛡️ 升級功能 1：動態 DOM 變化監測 (防繞過)
+// 🛡️ 升級功能 1：動態 DOM 變化監測
 // ==========================================
 let lastDynamicScanTime = Date.now();
 const dynamicObserver = new MutationObserver((mutations) => {
@@ -354,24 +518,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // ==========================================
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     if (request.action === "show_alert") {
-        console.log("⚠️ 收到警告指令，顯示浮動視窗");
         if (document.getElementById("ai-fraud-alert-box")) return;
 
         let alertDiv = document.createElement("div");
         alertDiv.id = "ai-fraud-alert-box";
-        alertDiv.style.position = "fixed";
-        alertDiv.style.bottom = "20px";
-        alertDiv.style.right = "20px";
-        alertDiv.style.backgroundColor = "#ff4d4f";
-        alertDiv.style.color = "white";
-        alertDiv.style.padding = "15px 20px";
-        alertDiv.style.borderRadius = "8px";
-        alertDiv.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
-        alertDiv.style.zIndex = "999999";
-        alertDiv.style.fontFamily = "sans-serif";
-        alertDiv.style.fontSize = "16px";
-        alertDiv.style.fontWeight = "bold";
-        alertDiv.style.maxWidth = "300px";
+        alertDiv.style.cssText = "position:fixed; bottom:20px; right:20px; background:#ff4d4f; color:white; padding:15px 20px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:999999; font-family:sans-serif; font-size:16px; font-weight:bold; max-width:300px;";
 
         let title = document.createElement("div");
         title.innerText = "⚠️ AI 防詐盾牌警告";
@@ -407,7 +558,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 });
 
 // ==========================================
-// 🛡️ 啟動邏輯：系統判定與免死金牌
+// 🛡️ 啟動邏輯
 // ==========================================
 if (window.self === window.top) {
     const isSystemPage = window.location.protocol === 'chrome-extension:' ||
@@ -415,17 +566,13 @@ if (window.self === window.top) {
                          window.location.href.includes('blocked.html') ||
                          window.location.href.includes('simulator.html') || 
                          window.location.hostname === 'localhost' ||
-                         window.location.hostname === '127.0.0.1' ||
-                         window.location.hostname.includes('github.com') ||
-                         window.location.hostname.includes('chatgpt.com') ||
-                         window.location.hostname.includes('openai.com');
-
+                         window.location.hostname === '127.0.0.1';
     if (!isSystemPage) {
         new BehaviorAnalyzer(); 
         if (document.body) dynamicObserver.observe(document.body, { childList: true, subtree: true });
         scheduleIdleScan();
-        console.log("🛡️ AI 防詐盾牌：防護系統已上線 (啟用權重積分與動態防禦)");
+        console.log("🛡️ AI 防詐盾牌：動態信譽防護系統已上線");
     } else {
-        console.log("🛡️ AI 防詐盾牌：已偵測到友軍系統頁面 (戰情室)，已關閉自動掃描以防誤傷！");
+        console.log("🛡️ AI 防詐盾牌：已偵測到友軍系統頁面，關閉自動掃描");
     }
 }

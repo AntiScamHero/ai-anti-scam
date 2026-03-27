@@ -352,8 +352,11 @@ document.getElementById('log-table-body').addEventListener('click', async (e) =>
             
             const data = await res.json();
             
-            if (data.status === 'success' && data.screenshot_base64) {
-                showEvidenceModal(data.screenshot_base64, reason);
+            // 🌟 升級：優先讀取新版的 Storage 網址，如果沒有再退回讀取舊版的 Base64
+            const finalImage = data.evidence_image_url || data.screenshot_base64;
+            
+            if (data.status === 'success' && finalImage) {
+                showEvidenceModal(finalImage, reason);
             } else {
                 alert(`❌ 雲端鑑識失敗：${data.message || '照片可能已遭覆蓋或未上傳成功。'}`);
             }
