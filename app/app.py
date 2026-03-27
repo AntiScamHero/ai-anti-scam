@@ -496,10 +496,28 @@ def scan_url():
             print(f"⚠️ 讀取雲端白名單失敗: {e}", flush=True)
 
     if is_white_listed and not is_urgent:
-        return jsonify({
+        # 👇 新增：即使是安全白名單，也強制存檔並通知前端戰情室！
+        report_dict = {
             "riskScore": 0, "riskLevel": "安全無虞", "scamDNA": ["無"], "reason": "官方信任網域", 
-            "advice": "正常存取即可", "masked_text": web_text
-        })
+            "advice": "正常存取即可"
+        }
+        if firebase_initialized:
+            try:
+                timestamp = get_tw_time()
+                db.reference('scan_history').push({
+                    'url': target_url, 
+                    'report': json.dumps(report_dict, ensure_ascii=False), 
+                    'userID': user_id, 
+                    'familyID': family_id, 
+                    'timestamp': timestamp
+                })
+                socketio.emit('new_scan_result', {
+                    'url': target_url, 'riskScore': 0, 'reason': report_dict['reason'], 'timestamp': timestamp
+                }, room=family_id)
+            except Exception as e:
+                print(f"⚠️ 寫入白名單紀錄失敗: {e}", flush=True)
+
+        return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
 
     check_list = [target_url]
     if "http" in raw_text.lower() or "www." in raw_text.lower() or ".net" in raw_text.lower() or ".com" in raw_text.lower():
