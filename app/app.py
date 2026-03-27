@@ -15,7 +15,7 @@ import warnings
 import html               
 import base64             
 import urllib.parse
-import uuid # 👈 確保有 import uuid 產生隨機檔名
+import uuid
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -29,12 +29,16 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 import firebase_admin
-from firebase_admin import credentials, db, storage # 👈 這裡新增了 storage
+from firebase_admin import credentials, db, storage
 
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.messaging import Configuration, ApiClient, MessagingApi, ReplyMessageRequest, PushMessageRequest, TextMessage
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
+# 🚀 新增引入：PostbackEvent, TemplateMessage, ButtonsTemplate, PostbackAction 用於誤判回報按鈕
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+from linebot.v3.messaging import (
+    Configuration, ApiClient, MessagingApi, ReplyMessageRequest, 
+    PushMessageRequest, TextMessage, TemplateMessage, ButtonsTemplate, PostbackAction
+)
 
 from security import mask_sensitive_data, is_genuine_white_listed, check_165_blacklist, TRUSTED_DOMAINS
 from ai_service import analyze_risk_with_ai, stream_scam_simulation
@@ -116,6 +120,9 @@ def check_google_safe_browsing(url):
 
 configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+
+# 💡 可以設定專門接收警報的管理員 ID，若無則預設使用一般 LINE_USER_ID
+ADMIN_LINE_ID = os.getenv("ADMIN_LINE_ID", os.getenv("LINE_USER_ID"))
 LINE_USER_ID = os.getenv("LINE_USER_ID")
 
 KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "serviceAccountKey.json")
@@ -123,7 +130,6 @@ firebase_initialized = False
 try:
     if os.path.exists(KEY_PATH) and not firebase_admin._apps:
         cred = credentials.Certificate(KEY_PATH)
-        # ☁️ 新增 storageBucket 設定 (從你的 databaseURL 推斷而來)
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://antifraud-ai-94d72-default-rtdb.asia-southeast1.firebasedatabase.app',
             'storageBucket': 'antifraud-ai-94d72.appspot.com' 
@@ -206,9 +212,6 @@ def health_check():
         "time": get_tw_time()
     })
 
-# ==========================================
-# 📸 終極升級：證據上傳 API (支援 Firebase Storage)
-# ==========================================
 @app.route('/api/submit_evidence', methods=['POST'])
 @limiter.limit("10 per minute") 
 def submit_evidence():
@@ -229,7 +232,6 @@ def submit_evidence():
 
         image_url = ""
         
-        # ☁️ 將截圖解碼並上傳到 Firebase Storage
         try:
             if ',' in screenshot_base64:
                 screenshot_base64 = screenshot_base64.split(',')[1]
@@ -242,14 +244,12 @@ def submit_evidence():
             blob.upload_from_string(decoded_image, content_type='image/jpeg')
             blob.make_public()
             image_url = blob.public_url
-            print(f"☁️ 圖片已成功上傳至 Storage: {image_url}", flush=True)
         except Exception as e:
             print(f"⚠️ 圖片上傳 Storage 失敗: {e}", flush=True)
 
-        # 💾 儲存到 RTDB，現在只存短短的 image_url
         ref = db.reference('scam_evidence').push({
             'url': url,
-            'evidence_image_url': image_url, # 👈 從一大坨字串變成清爽的網址
+            'evidence_image_url': image_url, 
             'familyID': family_id,
             'timestamp': timestamp,
             'reason': reason
@@ -280,12 +280,8 @@ def submit_evidence():
                 scam_dna=["系統強制警示"]
             )
         
-        print(f"✅ 證據快照已成功入庫！URL: {url[:30]}... ID: {ref.key}", flush=True)
-        
         socketio.emit('new_evidence_submitted', {
-            'url': url,
-            'evidenceID': ref.key,
-            'timestamp': timestamp
+            'url': url, 'evidenceID': ref.key, 'timestamp': timestamp
         }, room=family_id)
         
         socketio.emit('new_scan_result', {
@@ -302,9 +298,6 @@ def submit_evidence():
         print(f"❌ 證據入庫失敗：{e}", flush=True)
         return jsonify({"status": "fail", "message": str(e)}), 500
 
-# ==========================================
-# 📥 對應修改：取得證據 API 回傳網址
-# ==========================================
 @app.route('/api/get_evidence', methods=['POST'])
 def get_evidence():
     if not firebase_initialized:
@@ -318,7 +311,6 @@ def get_evidence():
         if evidence_id:
             evidence = db.reference(f'scam_evidence/{evidence_id}').get()
             if evidence and isinstance(evidence, dict) and evidence.get('familyID') == family_id:
-                # 這裡改為回傳網址或 base64 (為了兼容舊資料)
                 return jsonify({
                     "status": "success",
                     "evidence_image_url": evidence.get('evidence_image_url', ''),
@@ -327,7 +319,6 @@ def get_evidence():
                         
         return jsonify({"status": "fail", "message": "找不到對應的證據快照，可能已遭覆蓋或未上傳成功"}), 404
     except Exception as e:
-        print(f"❌ 提取證據失敗: {e}", flush=True)
         return jsonify({"status": "fail", "message": str(e)}), 500
 
 @app.route('/scan', methods=['POST'])
@@ -404,7 +395,6 @@ def scan_url():
 
     if image_url:
         img_lower = image_url.lower()
-        
         if not image_url.startswith('http') and not image_url.startswith('data:'):
             report = {"riskScore": 65, "riskLevel": "中度危險", "scamDNA": ["異常圖片"], "reason": "偵測到無效或惡意的圖片 URL 格式"}
             return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
@@ -435,6 +425,18 @@ def scan_url():
 
     web_text = mask_sensitive_data(raw_text)
     is_white_listed = is_genuine_white_listed(target_url)
+
+    # 🚀 升級：檢查 Firebase 上的「雲端動態白名單」
+    if not is_white_listed and firebase_initialized and target_url:
+        try:
+            host = urlparse(target_url.lower().strip()).hostname or target_url
+            safe_domain_key = host.replace('.', '_dot_') # Firebase 鍵值不允許包含 '.'
+            cloud_whitelist = db.reference(f'trusted_domains/{safe_domain_key}').get()
+            if cloud_whitelist:
+                is_white_listed = True
+                print(f"🛡️ 觸發雲端動態白名單放行: {host}", flush=True)
+        except Exception as e:
+            print(f"⚠️ 讀取雲端白名單失敗: {e}", flush=True)
 
     if is_white_listed and not is_urgent:
         return jsonify({
@@ -508,7 +510,7 @@ def scan_url():
                 c_data = json.loads(cached) if isinstance(cached, str) else cached
                 return jsonify({**c_data, "report": json.dumps(c_data, ensure_ascii=False), "masked_text": web_text})
         except Exception as e: 
-            print(f"⚠️ 讀取快取失敗: {e}", flush=True)
+            pass
 
     if is_urgent:
         def handle_urgent():
@@ -614,6 +616,49 @@ def handle_message(event):
         except Exception as e: 
             print(f"LINE Bot 處理錯誤: {e}", flush=True)
 
+# 🚀 新增：處理 LINE Bot 的按鈕點擊事件 (加入白名單)
+@handler.add(PostbackEvent)
+def handle_postback(event):
+    if not firebase_initialized: return
+    postback_data = event.postback.data
+    
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+        
+        if "action=approve_fp" in postback_data:
+            parsed_data = dict(urllib.parse.parse_qsl(postback_data))
+            domain = parsed_data.get('domain')
+            
+            if domain:
+                try:
+                    safe_domain_key = domain.replace('.', '_dot_')
+                    db.reference(f'trusted_domains/{safe_domain_key}').set({
+                        'domain': domain,
+                        'addedAt': get_tw_time(),
+                        'addedBy': event.source.user_id
+                    })
+                    
+                    line_bot_api.reply_message(
+                        ReplyMessageRequest(
+                            reply_token=event.reply_token,
+                            messages=[TextMessage(text=f"✅ 解鎖成功！\n已將 {domain} 加入雲端白名單，長輩的畫面即刻放行。")]
+                        )
+                    )
+                except Exception as e:
+                    line_bot_api.reply_message(
+                        ReplyMessageRequest(
+                            reply_token=event.reply_token,
+                            messages=[TextMessage(text=f"❌ 寫入資料庫失敗：{e}")]
+                        )
+                    )
+        elif postback_data == "action=ignore_fp":
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="已忽略此回報，該網域將維持封鎖狀態。")]
+                )
+            )
+
 @app.route('/api/send_family_broadcast', methods=['POST'])
 def send_family_broadcast():
     data = request.json
@@ -643,14 +688,51 @@ def simulate_scam():
 
     return Response(generate(), mimetype='text/event-stream')
 
+# 🚀 升級版：收到誤判回報時，觸發 LINE 互動按鈕給管理員
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_fp():
+    data = request.json or {}
+    url = data.get('url', '未知網址')
     if firebase_initialized: 
         try:
-            db.reference('false_positives').push({**request.json, 'timestamp': get_tw_time()})
+            db.reference('false_positives').push({**data, 'timestamp': get_tw_time()})
+            
+            # 使用 ADMIN_LINE_ID，若未設定則使用原本的 LINE_USER_ID
+            if ADMIN_LINE_ID:
+                domain = urlparse(url).hostname or url
+                
+                # 建立按鈕選單 (Template Message)
+                buttons_template = ButtonsTemplate(
+                    title='🚨 收到誤判回報',
+                    text=f'網域: {domain[:35]}\n請問是否要將此網域加入白名單並放行？',
+                    actions=[
+                        PostbackAction(
+                            label='✅ 允許並加入白名單',
+                            data=f'action=approve_fp&domain={domain}'
+                        ),
+                        PostbackAction(
+                            label='❌ 忽略維持封鎖',
+                            data='action=ignore_fp'
+                        )
+                    ]
+                )
+                template_message = TemplateMessage(
+                    alt_text='您收到一則新的網頁誤判回報，請至手機 LINE 查看詳細選單。',
+                    template=buttons_template
+                )
+                
+                with ApiClient(configuration) as api_client:
+                    line_bot_api = MessagingApi(api_client)
+                    line_bot_api.push_message(
+                        PushMessageRequest(
+                            to=ADMIN_LINE_ID,
+                            messages=[template_message]
+                        )
+                    )
         except Exception as e:
-            print(f"⚠️ 誤判回報寫入失敗: {e}", flush=True)
+            print(f"⚠️ 誤判回報寫入或推播失敗: {e}", flush=True)
             return jsonify({"status": "error", "message": str(e)}), 500
+            
     return jsonify({"status": "success"})
 
 @app.route('/api/create_family', methods=['POST'])
@@ -660,34 +742,22 @@ def create_family():
         return jsonify({"status": "error", "msg": "Invalid UID"}), 400
     
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    print(f"👉 [Debug] 準備建立家庭，代碼: {code}, 守護者UID: {uid}", flush=True)
 
     if firebase_initialized:
         try:
-            print("⏳ [Debug] 正在寫入 Firebase families...", flush=True)
             db.reference(f'families/{code}').set({
                 'guardianUID': uid, 
                 'familyID': code, 
                 'createdAt': get_tw_time()
             })
-            
-            print("⏳ [Debug] 正在更新 Firebase users...", flush=True)
             db.reference(f'users/{uid}').update({
                 'role': 'guardian', 
                 'familyID': code
             })
-            
-            print("✅ [Debug] Firebase 寫入成功！準備回傳給前端...", flush=True)
             return jsonify({"status": "success", "inviteCode": code})
-            
         except Exception as e:
-            print(f"❌ [Debug] 建立家庭寫入 Firebase 發生嚴重錯誤: {e}", flush=True)
-            return jsonify({
-                "status": "error", 
-                "message": f"資料庫寫入失敗，請檢查後端日誌: {str(e)}"
-            }), 500
+            return jsonify({"status": "error", "message": str(e)}), 500
             
-    print("❌ [Debug] Firebase 初始化未成功，無法建立家庭", flush=True)
     return jsonify({"status": "error", "message": "Firebase 未連線"}), 500
 
 @app.route('/api/join_family', methods=['POST'])
@@ -699,39 +769,23 @@ def join_family():
     if not code or len(code) != 6 or not code.isalnum(): 
         return jsonify({"status": "fail", "message": "無效的邀請碼格式"}), 400
 
-    print(f"👉 [Debug] 準備加入家庭，代碼: {code}, 申請人UID: {uid}", flush=True)
-
     if firebase_initialized:
         try:
-            print("⏳ [Debug] 正在查詢 Firebase 驗證家庭是否存在...", flush=True)
             family_node = db.reference(f'families/{code}').get()
-            
             if family_node:
-                print("⏳ [Debug] 正在寫入 Firebase 成員名單...", flush=True)
                 db.reference(f'families/{code}/memberUIDs/{uid}').set(True)
-                
-                print("⏳ [Debug] 正在更新 Firebase users...", flush=True)
                 db.reference(f'users/{uid}').update({
                     'role': 'member', 
                     'familyID': code
                 })
-                print("✅ [Debug] Firebase 加入成功！準備回傳給前端...", flush=True)
                 return jsonify({"status": "success"})
             else:
-                print("❌ [Debug] 找不到此家庭代碼", flush=True)
                 return jsonify({"status": "fail", "message": "無效的邀請碼"}), 400
-                
         except Exception as e:
-            print(f"❌ [Debug] 加入家庭讀寫 Firebase 發生嚴重錯誤: {e}", flush=True)
-            return jsonify({
-                "status": "error", 
-                "message": f"資料庫讀寫失敗，請檢查後端日誌: {str(e)}"
-            }), 500
+            return jsonify({"status": "error", "message": str(e)}), 500
 
-    print("❌ [Debug] Firebase 初始化未成功，無法加入家庭", flush=True)
     return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
 
-# 🚀 【效能升級】改用 order_by_child 查詢，避免全表掃描
 @app.route('/api/get_alerts', methods=['POST'])
 def get_alerts():
     fid = request.json.get('familyID')
@@ -743,19 +797,14 @@ def get_alerts():
         
     try:
         records = db.reference('scan_history').order_by_child('familyID').equal_to(fid).limit_to_last(50).get()
-        
         result = []
         if records and isinstance(records, dict):
             result = [v for v in records.values() if isinstance(v, dict)]
-            
         result.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        
         return jsonify({"status": "success", "data": result[:20]})
     except Exception as e:
-        print(f"❌ [Debug] 獲取戰情室警告失敗: {e}", flush=True)
         return jsonify({"status": "fail", "data": []}), 500
 
-# 🚀 【效能升級】只抓出該家庭的 ID 並精準刪除，避免抓取整個資料庫
 @app.route('/api/clear_alerts', methods=['POST'])
 def clear_alerts():
     fid = request.json.get('familyID')
@@ -780,37 +829,30 @@ def clear_alerts():
                 
         return jsonify({"status": "success"})
     except Exception as e:
-        print(f"❌ [Debug] 清除戰情室紀錄失敗: {e}", flush=True)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/reset_demo', methods=['POST'])
 def reset_demo():
     data = request.json or {}
     family_id = data.get('familyID', 'demo_family') 
-    
     if not firebase_initialized:
         return jsonify({"status": "error", "message": "Firebase 未連線"}), 500
         
     try:
         ref = db.reference('scan_history')
         all_rec = ref.get() or {}
-        
         if isinstance(all_rec, list):
             all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
-            
         updates = {}
         for key, val in all_rec.items():
             if isinstance(val, dict) and val.get('familyID') == family_id:
                 updates[key] = None 
-                
         if updates: 
             ref.update(updates)
             
         socketio.emit('demo_reset_triggered', {'message': '系統已洗白'}, room=family_id)
-        
         return jsonify({"status": "success", "message": "✨ 神蹟降臨：Demo 狀態已完美重置！"})
     except Exception as e:
-        print(f"❌ [Debug] 洗白展示紀錄失敗: {e}", flush=True)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/set_contact', methods=['POST'])
@@ -818,13 +860,11 @@ def set_contact():
     data = request.json
     uid = data.get('uid')
     contact = data.get('contact') 
-    
     if firebase_initialized and uid and contact:
         try:
             db.reference(f'users/{uid}').update({'emergency_contact': contact})
             return jsonify({"status": "success"})
         except Exception as e:
-            print(f"❌ [Debug] 設定聯絡人失敗: {e}", flush=True)
             return jsonify({"status": "error", "message": str(e)}), 500
     return jsonify({"status": "error"}), 400
 
@@ -839,13 +879,12 @@ def get_contact():
         if family_node and isinstance(family_node, dict) and family_node.get('guardianUID'):
             guardian_uid = family_node.get('guardianUID')
             user_node = db.reference(f'users/{guardian_uid}').get()
-            
             if user_node and isinstance(user_node, dict):
                 contact = user_node.get('emergency_contact')
                 if contact:
                     return jsonify({"status": "success", "contact": contact})
     except Exception as e:
-        print(f"❌ [Debug] 取得聯絡人失敗: {e}", flush=True)
+        pass
         
     return jsonify({"status": "fail", "contact": "tel:165"})
 
