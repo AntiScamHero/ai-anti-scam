@@ -591,6 +591,16 @@ def scan_url():
                     socketio.emit('new_scan_result', {
                         'url': target_url, 'riskScore': 95, 'reason': report_dict['reason'], 'timestamp': timestamp
                     }, room=family_id)
+                    
+                    # 👇 新增這段：補上 LINE 的緊急推播通報！
+                    send_dynamic_line_alert(
+                        family_id=family_id, 
+                        url=target_url, 
+                        reason=report_dict['reason'],
+                        risk_score=95,
+                        scam_dna=[dna_tag]
+                    )
+
                 except Exception as e:
                     print(f"⚠️ 寫入前置攔截紀錄失敗: {e}", flush=True)
 
