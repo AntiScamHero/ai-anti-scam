@@ -64,18 +64,6 @@ chrome.storage.local.get(['userID', 'familyID'], (result) => {
     }
 });
 
-function isWhitelisted(url) {
-    try {
-        const hostname = new URL(url).hostname;
-        const whitelist = [
-            'google.com', 'youtube.com', 'yahoo.com.tw', 'gov.tw', 
-            'facebook.com', 'line.me', 'instagram.com', 
-            'momoshop.com.tw', 'pchome.com.tw', 'shopee.tw'
-        ];
-        return whitelist.some(domain => hostname === domain || hostname.endsWith('.' + domain));
-    } catch { return false; }
-}
-
 const scanBtnElement = document.getElementById('scan-btn');
 if (scanBtnElement) {
     scanBtnElement.addEventListener('click', async () => {
@@ -109,8 +97,6 @@ if (scanBtnElement) {
                 return;
             }
 
-            // 💡 註：原本這裡有一段攔截白名單的程式碼，現在已經拔除，讓前端乖乖把所有網頁都傳給後端！
-
             let pageText = "";
             try {
                 const inject = await chrome.scripting.executeScript({
@@ -126,13 +112,9 @@ if (scanBtnElement) {
 
             let safePageText = maskSensitiveData(pageText);
             
-            // 📸 --- 【截圖邏輯進化版：強勢破除 Chrome 限制】 ---
             let screenshotBase64 = null;
             try {
-                // 1. 延遲一下，確保擴充功能視窗穩定，避免爭奪焦點
                 await new Promise(resolve => setTimeout(resolve, 150));
-                
-                // 2. 放棄 tab.windowId，直接用 null 鎖定「當前視窗」，成功率直飆 99%
                 screenshotBase64 = await chrome.tabs.captureVisibleTab(null, {
                     format: 'jpeg',
                     quality: 30 
@@ -140,7 +122,6 @@ if (scanBtnElement) {
             } catch (imgErr) {
                 console.error("⚠️ 前端截圖被瀏覽器阻擋:", imgErr);
             }
-            // 📸 --- 【截圖邏輯結束】 ---
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); 
@@ -156,7 +137,7 @@ if (scanBtnElement) {
                     body: JSON.stringify({ 
                         url: tab.url, 
                         text: safePageText, 
-                        image: screenshotBase64, // 這次絕對有照片！
+                        image: screenshotBase64,
                         userID: currentUserID, 
                         familyID: currentFamilyID 
                     }),
@@ -237,11 +218,12 @@ if (scanBtnElement) {
                 setTimeout(() => { if (progressBar) progressBar.style.width = score + "%"; }, 150);
 
                 let thresholdHigh = typeof CONFIG !== 'undefined' ? CONFIG.RISK_THRESHOLD_HIGH : 70;
+                
+                // 👇 [修復關鍵] 乾淨俐落的判斷，絕不重複
                 if (score < 30) {
                     if (appBody) appBody.className = "theme-safe";
                     if (headerTitle) headerTitle.innerText = "✅ 檢測通過：安全網頁";
-               } else if (score >= thresholdHigh) {
-                  } else if (score >= thresholdHigh) {
+                } else if (score >= thresholdHigh) {
                     if (appBody) appBody.className = "theme-danger";
                     if (headerTitle) headerTitle.innerText = "❌ 極度危險！請立即離開！";
                     
@@ -250,7 +232,7 @@ if (scanBtnElement) {
                         url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reportData.reason) + "&original_url=" + encodeURIComponent(tab.url) 
                     });
                     
-                    // 👇 加上這行魔法：讓小視窗展示 1.5 秒的紅字警告後，自動關閉退場！
+                    // 加上這行魔法：讓小視窗展示 1.5 秒的紅字警告後，自動關閉退場！
                     setTimeout(() => { window.close(); }, 1500);
                 } else {
                     if (appBody) appBody.className = "theme-warning";
