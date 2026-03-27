@@ -1,9 +1,10 @@
-// dashboard.js - 戰情室專用邏輯 (O(1)極速提取版)
+// dashboard.js - 戰情室專用邏輯 (O(1)極速提取版 + 究極防呆裝甲)
 
 window.CONFIG = window.CONFIG || {
     API_BASE_URL: "https://ai-anti-scam.onrender.com",
     RISK_THRESHOLD_HIGH: 70,
-    RISK_THRESHOLD_MEDIUM: 40
+    RISK_THRESHOLD_MEDIUM: 40,
+    EXTENSION_SECRET: "ai_shield_secure_2026"
 };
 
 setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-TW', { hour12: false }); }, 1000);
@@ -26,7 +27,7 @@ function showEvidenceModal(imageUrl, reason) {
             <div style="font-size:24px; font-weight:bold; color:#ff4d4f; margin-bottom:15px; text-align:center;">💞【AI 防詐盾牌 - 攔截證據保全快照】💞</div>
             <div style="color:#aaa; margin-bottom:20px; text-align:center;">證據原因：${reason}</div>
             <img src="${imageUrl}" alt="詐騙網頁證據" style="width:100%; max-height:80vh; border:4px solid #ff4d4f; border-radius:8px; box-shadow:0 0 30px rgba(255,0,0,0.5); object-fit:contain; background:#222;">
-            <div style="margin-top:20px; color:#ff4d4f; font-size:14px;">(⚠️ 此圖片為 JPEG 自動壓縮快照，用作鑑識與 165 檢舉之用)</div>
+            <div style="margin-top:20px; color:#ff4d4f; font-size:14px;">(⚠️ 此圖片為自動保全之快照，用作鑑識與 165 檢舉之用)</div>
         </div>
     `;
     
@@ -168,7 +169,10 @@ async function fetchLogs(familyID, isRealtimeUpdate = false) {
     try {
         const res = await fetch(`${CONFIG.API_BASE_URL}/api/get_alerts`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'X-Extension-Secret': window.CONFIG.EXTENSION_SECRET
+            },
             body: JSON.stringify({ familyID: familyID })
         });
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -225,7 +229,6 @@ function updateDashboard(records, isRealtimeUpdate) {
         let score = record.report.riskScore;
         if (score >= window.CONFIG.RISK_THRESHOLD_HIGH) dangerCount++; else safeCount++;
         
-        // 🐛 防呆：處理前端 ISO 格式或後端標準格式的時間
         let displayTime = record.timestamp || '';
         if (displayTime.includes('T')) {
             let d = new Date(displayTime);
@@ -263,7 +266,6 @@ function updateDashboard(records, isRealtimeUpdate) {
         let tdTime = document.createElement('td');
         tdTime.style.cssText = "font-family:monospace; color:#8b949e;";
         
-        // 🐛 防呆：處理前端 ISO 格式或後端標準格式的時間 (解決戰情室時間空白問題)
         let displayTime = record.timestamp || '';
         if (displayTime.includes('T')) {
             let d = new Date(displayTime);
@@ -285,7 +287,6 @@ function updateDashboard(records, isRealtimeUpdate) {
         
         if (score >= window.CONFIG.RISK_THRESHOLD_HIGH) {
             let evidenceBtnHTML = '';
-            // 🌟 升級：只有真正帶有證據 ID (或舊版時間) 的新紀錄，才會顯示按鈕
             if (record.evidenceID || record.timestamp) {
                 let evId = record.evidenceID || '';
                 let fullTime = record.timestamp || '';
@@ -316,59 +317,66 @@ function updateDashboard(records, isRealtimeUpdate) {
 }
 
 // ==========================================
-// 🚨 升級重點：透過 Evidence ID 進行 O(1) 瞬間提取
+// 🚨 升級重點：提取快照防呆機制 (絕對不會再當機)
 // ==========================================
 document.getElementById('log-table-body').addEventListener('click', async (e) => {
-    if (e.target.classList.contains('view-evidence-btn')) {
-        const btn = e.target;
-        const evidenceID = btn.getAttribute('data-evidence'); 
-        const fullTimestamp = btn.getAttribute('data-fulltime'); 
-        const url = btn.getAttribute('data-url');
-        const reason = btn.getAttribute('data-reason');
+    // 防呆：確保點擊的一定是按鈕本身，而不會誤觸內部文字導致抓不到 ID
+    const btn = e.target.closest('.view-evidence-btn');
+    if (!btn) return;
+    
+    const evidenceID = btn.getAttribute('data-evidence'); 
+    const fullTimestamp = btn.getAttribute('data-fulltime'); 
+    const url = btn.getAttribute('data-url');
+    const reason = btn.getAttribute('data-reason');
+    
+    btn.innerText = "⏳ 證據提取中...";
+    btn.style.opacity = "0.5";
+    btn.style.pointerEvents = "none";
+
+    try {
+        const apiBase = window.CONFIG.API_BASE_URL || 'https://ai-anti-scam.onrender.com';
+        const secret = window.CONFIG.EXTENSION_SECRET || 'ai_shield_secure_2026';
+        const inputID = document.getElementById('family-id-input') ? document.getElementById('family-id-input').value : null;
+        const familyID = inputID || localStorage.getItem('savedFamilyID') || "demo_family";
         
-        btn.innerText = "⏳ 證據提取中...";
-        btn.style.opacity = "0.5";
-        btn.style.pointerEvents = "none";
-
-        try {
-            const apiUrl = `${CONFIG.API_BASE_URL}/api/get_evidence`;
-            const familyID = document.getElementById('family-id-input')?.value || localStorage.getItem('savedFamilyID') || "demo_family";
-            
-            const res = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url: url,
-                    familyID: familyID,
-                    evidenceID: evidenceID,    // 🌟 首選：使用專屬 ID 瞬間提取
-                    timestamp: fullTimestamp   // 備用：舊資料相容
-                })
-            });
-            
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(errData.message || `伺服器回應錯誤 (${res.status})`);
-            }
-            
-            const data = await res.json();
-            
-            // 🌟 升級：優先讀取新版的 Storage 網址，如果沒有再退回讀取舊版的 Base64
-            const finalImage = data.evidence_image_url || data.screenshot_base64;
-            
-            if (data.status === 'success' && finalImage) {
-                showEvidenceModal(finalImage, reason);
-            } else {
-                alert(`❌ 雲端鑑識失敗：${data.message || '照片可能已遭覆蓋或未上傳成功。'}`);
-            }
-
-        } catch (error) {
-            console.error("提取蒐證快照失敗:", error);
-            alert(`❌ 提取失敗：${error.message}\n\n(提示：若是舊資料可能已遺失，請重新掃描一個新網頁測試！)`);
-        } finally {
-            btn.innerText = "🔎 查看上帝蒐證快照";
-            btn.style.opacity = "1";
-            btn.style.pointerEvents = "auto";
+        const res = await fetch(`${apiBase}/api/get_evidence`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'X-Extension-Secret': secret 
+            },
+            body: JSON.stringify({
+                url: url || "",
+                familyID: familyID,
+                evidenceID: evidenceID || "",    
+                timestamp: fullTimestamp || ""   
+            })
+        });
+        
+        if (!res.ok) {
+            let errorMsg = `伺服器連線失敗 (${res.status})`;
+            try { const errData = await res.json(); errorMsg = errData.message || errorMsg; } catch (e) {}
+            throw new Error(errorMsg);
         }
+        
+        const data = await res.json();
+        const finalImage = data.evidence_image_url || data.screenshot_base64;
+        
+        if (data.status === 'success' && finalImage) {
+            showEvidenceModal(finalImage, reason);
+        } else {
+            // 防呆：沒有照片時友善提醒
+            alert(`⚠️ 雲端鑑識失敗：\n可能因為該網頁受到 Chrome 安全限制(例如設定頁面) 而無法成功截圖。`);
+        }
+
+    } catch (error) {
+        console.error("提取快照失敗:", error);
+        // 將系統原本冷冰冰的紅字替換成白話文，絕不會再出現 reading 'id'
+        alert(`❌ 提取失敗，連線逾時或遭拒絕。\n\n(提示：若是舊資料可能已遺失，請打開一個「正常的外部網頁」重新掃描測試！)`);
+    } finally {
+        btn.innerText = "🔎 查看上帝蒐證快照";
+        btn.style.opacity = "1";
+        btn.style.pointerEvents = "auto";
     }
 });
 
@@ -446,12 +454,11 @@ function triggerRedAlert(reason) {
         gainNode.connect(audioCtx.destination);
         oscillator.start();
         setTimeout(() => oscillator.stop(), 200); 
-    } catch(e) { console.log("音效播放被阻擋"); }
+    } catch(e) { }
 
     setTimeout(() => { document.body.style.boxShadow = "none"; }, 500);
 }
 
-// 🪄 上帝模式觸發器
 let secretClickCount = 0;
 let clickTimer = null;
 const dashboardTitle = document.querySelector('h1') || document.body; 
@@ -472,12 +479,16 @@ dashboardTitle.addEventListener('click', () => {
 
 async function triggerDemoReset() {
     try {
-        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
+        const apiBase = window.CONFIG.API_BASE_URL || 'https://ai-anti-scam.onrender.com';
+        const secret = window.CONFIG.EXTENSION_SECRET || 'ai_shield_secure_2026';
         const familyID = document.getElementById('family-id-input')?.value || localStorage.getItem('savedFamilyID') || "demo_family"; 
 
-        const res = await fetch(`${apiUrl}/api/reset_demo`, {
+        const res = await fetch(`${apiBase}/api/reset_demo`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'X-Extension-Secret': secret 
+            },
             body: JSON.stringify({ familyID: familyID })
         });
         
@@ -494,9 +505,9 @@ async function triggerDemoReset() {
     }
 }
 
-// 🗑️ 一鍵清空掃描紀錄
 document.getElementById('btn-clear-logs')?.addEventListener('click', async () => {
-    const familyID = document.getElementById('family-id-input').value.trim().toUpperCase() || localStorage.getItem('savedFamilyID');
+    const inputID = document.getElementById('family-id-input') ? document.getElementById('family-id-input').value.trim().toUpperCase() : null;
+    const familyID = inputID || localStorage.getItem('savedFamilyID');
     if (!familyID) return alert("⚠️ 請先輸入或連線家庭代碼！");
 
     if (!confirm("⚠️ 確定要清空所有的掃描紀錄與截圖證據嗎？\n此動作無法復原。")) return;
@@ -507,11 +518,15 @@ document.getElementById('btn-clear-logs')?.addEventListener('click', async () =>
     btn.disabled = true;
 
     try {
-        const apiUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
+        const apiBase = window.CONFIG.API_BASE_URL || 'https://ai-anti-scam.onrender.com';
+        const secret = window.CONFIG.EXTENSION_SECRET || 'ai_shield_secure_2026';
         
-        const res = await fetch(`${apiUrl}/api/clear_alerts`, {
+        const res = await fetch(`${apiBase}/api/clear_alerts`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'X-Extension-Secret': secret 
+            },
             body: JSON.stringify({ familyID: familyID })
         });
         
