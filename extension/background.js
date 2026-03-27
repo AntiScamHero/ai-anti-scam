@@ -82,44 +82,70 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
                     }
                 });
                 pageText = inject[0]?.result || "";
-            } catch (err) { }
+            } catch (err) { } // 忽略無法注入腳本的頁面錯誤
 
             let screenshotBase64 = null;
             try {
                 await new Promise(resolve => setTimeout(resolve, 500)); 
-                screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 30 });
-            } catch (imgErr) { }
+                if (tab.windowId) {
+                    screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 30 });
+                }
+            } catch (imgErr) { } // 忽略背景截圖失敗
 
-            const response = await fetch(`${CONFIG.API_BASE_URL}/scan`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'X-Extension-Secret': CONFIG.EXTENSION_SECRET 
-                },
-                body: JSON.stringify({ 
-                    url: tab.url, text: pageText, image: screenshotBase64,
-                    userID: currentUserID, familyID: currentFamilyID 
-                })
-            });
+            // 💡 強化：捕捉伺服器未開啟的連線錯誤，不再拋出紅字
+            let response;
+            try {
+                response = await fetch(`${CONFIG.API_BASE_URL}/scan`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'X-Extension-Secret': CONFIG.EXTENSION_SECRET 
+                    },
+                    body: JSON.stringify({ 
+                        url: tab.url, text: pageText, image: screenshotBase64,
+                        userID: currentUserID, familyID: currentFamilyID 
+                    })
+                });
+            } catch (fetchErr) {
+                console.warn(`[背景巡邏] 伺服器未連線 (${CONFIG.API_BASE_URL})，暫停掃描。`);
+                return; // 直接安靜退出，不觸發底下的 catch
+            }
 
-            if (!response.ok) return;
+            if (!response || !response.ok) return;
 
             const data = await response.json();
-            let reportData = data.report ? (typeof data.report === 'string' ? JSON.parse(data.report) : data.report) : data;
-            if (typeof reportData === 'string') reportData = JSON.parse(reportData); 
+            
+            // 💡 強化：更安全的 JSON 解析
+            let reportData = data;
+            try {
+                if (data.report) {
+                    reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
+                }
+                if (typeof reportData === 'string') reportData = JSON.parse(reportData);
+            } catch (parseErr) {
+                console.warn("[背景巡邏] AI 報告解析失敗", parseErr);
+            }
 
-            let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score) || 0;
+            let score = parseInt(reportData?.riskScore || reportData?.RiskScore || reportData?.risk_score) || 0;
 
             // 🚨 自動發現危險：無情攔截！
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                 console.log("🚨 背景巡邏員發現危險，強制攔截！", tab.url);
-                const reasonText = reportData.reason || "系統深層掃描發現高度危險特徵！";
-                chrome.tabs.update(tabId, { 
-                    url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reasonText) + "&original_url=" + encodeURIComponent(tab.url) 
+                const reasonText = reportData?.reason || "系統深層掃描發現高度危險特徵！";
+                
+                // 💡 強化：先檢查分頁是否還活著，避免報錯
+                chrome.tabs.get(tabId, (currentTab) => {
+                    if (chrome.runtime.lastError) {
+                        console.log("[背景巡邏] 目標分頁已關閉，取消攔截。");
+                        return;
+                    }
+                    chrome.tabs.update(tabId, { 
+                        url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reasonText) + "&original_url=" + encodeURIComponent(tab.url) 
+                    }).catch(e => console.log("跳轉攔截頁面失敗:", e));
                 });
             }
         } catch (error) {
-            console.error("背景自動掃描發生錯誤:", error);
+            console.error("背景自動掃描發生未預期錯誤:", error);
         }
     }
 });
