@@ -14,7 +14,8 @@ import re
 import warnings  
 import html               
 import base64             
-import urllib.parse       
+import urllib.parse
+import uuid # 👈 確保有 import uuid 產生隨機檔名
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -28,7 +29,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 import firebase_admin
-from firebase_admin import credentials, db 
+from firebase_admin import credentials, db, storage # 👈 這裡新增了 storage
 
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -122,7 +123,11 @@ firebase_initialized = False
 try:
     if os.path.exists(KEY_PATH) and not firebase_admin._apps:
         cred = credentials.Certificate(KEY_PATH)
-        firebase_admin.initialize_app(cred, {'databaseURL': 'https://antifraud-ai-94d72-default-rtdb.asia-southeast1.firebasedatabase.app'})
+        # ☁️ 新增 storageBucket 設定 (從你的 databaseURL 推斷而來)
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': 'https://antifraud-ai-94d72-default-rtdb.asia-southeast1.firebasedatabase.app',
+            'storageBucket': 'antifraud-ai-94d72.appspot.com' 
+        })
         firebase_initialized = True
         print("✅ Firebase 初始化成功！", flush=True)
     elif firebase_admin._apps:
@@ -201,6 +206,9 @@ def health_check():
         "time": get_tw_time()
     })
 
+# ==========================================
+# 📸 終極升級：證據上傳 API (支援 Firebase Storage)
+# ==========================================
 @app.route('/api/submit_evidence', methods=['POST'])
 @limiter.limit("10 per minute") 
 def submit_evidence():
@@ -219,9 +227,29 @@ def submit_evidence():
         family_id = data.get('familyID', 'none')
         reason = data.get('reported_reason', '前端智慧攔截')
 
+        image_url = ""
+        
+        # ☁️ 將截圖解碼並上傳到 Firebase Storage
+        try:
+            if ',' in screenshot_base64:
+                screenshot_base64 = screenshot_base64.split(',')[1]
+            decoded_image = base64.b64decode(screenshot_base64)
+            
+            bucket = storage.bucket()
+            file_name = f"evidence/{family_id}/{uuid.uuid4().hex}.jpg"
+            blob = bucket.blob(file_name)
+            
+            blob.upload_from_string(decoded_image, content_type='image/jpeg')
+            blob.make_public()
+            image_url = blob.public_url
+            print(f"☁️ 圖片已成功上傳至 Storage: {image_url}", flush=True)
+        except Exception as e:
+            print(f"⚠️ 圖片上傳 Storage 失敗: {e}", flush=True)
+
+        # 💾 儲存到 RTDB，現在只存短短的 image_url
         ref = db.reference('scam_evidence').push({
             'url': url,
-            'screenshot_base64': screenshot_base64,
+            'evidence_image_url': image_url, # 👈 從一大坨字串變成清爽的網址
             'familyID': family_id,
             'timestamp': timestamp,
             'reason': reason
@@ -267,12 +295,16 @@ def submit_evidence():
         return jsonify({
             "status": "success", 
             "message": "✅ 證據保全快照已成功存檔，並已通知家人。",
-            "evidenceID": ref.key
+            "evidenceID": ref.key,
+            "image_url": image_url
         })
     except Exception as e:
         print(f"❌ 證據入庫失敗：{e}", flush=True)
         return jsonify({"status": "fail", "message": str(e)}), 500
 
+# ==========================================
+# 📥 對應修改：取得證據 API 回傳網址
+# ==========================================
 @app.route('/api/get_evidence', methods=['POST'])
 def get_evidence():
     if not firebase_initialized:
@@ -281,15 +313,16 @@ def get_evidence():
     data = request.json or {}
     family_id = data.get('familyID')
     evidence_id = data.get('evidenceID') 
-    timestamp = data.get('timestamp')
     
     try:
         if evidence_id:
             evidence = db.reference(f'scam_evidence/{evidence_id}').get()
             if evidence and isinstance(evidence, dict) and evidence.get('familyID') == family_id:
+                # 這裡改為回傳網址或 base64 (為了兼容舊資料)
                 return jsonify({
                     "status": "success",
-                    "screenshot_base64": evidence.get('screenshot_base64')
+                    "evidence_image_url": evidence.get('evidence_image_url', ''),
+                    "screenshot_base64": evidence.get('screenshot_base64', '')
                 })
                         
         return jsonify({"status": "fail", "message": "找不到對應的證據快照，可能已遭覆蓋或未上傳成功"}), 404
@@ -302,7 +335,6 @@ def get_evidence():
 def scan_url():
     data = request.json or {}
     
-    # 🟢 1. 防呆升級：強制將 null 轉為空字串，徹底消滅 500 錯誤
     target_url = data.get('url')
     target_url = str(target_url) if target_url else ''
     if len(target_url) > 2000: target_url = target_url[:2000]
@@ -323,24 +355,18 @@ def scan_url():
     
     is_urgent = data.get('is_urgent', False)
 
-    # ==========================================
-    # 🛡️ 終極升級 1：獨立且純粹的 Base64 與編碼解碼器 (防呆與多層次解碼)
-    # ==========================================
     decoded_extras = ""
 
-    # 1. URL 解碼
     try:
         if '%' in raw_text: decoded_extras += urllib.parse.unquote(raw_text) + " "
         if '%' in target_url: decoded_extras += urllib.parse.unquote(target_url) + " "
     except: pass
 
-    # 2. HTML 實體解碼
     try:
         if '&#' in raw_text or '&amp;' in raw_text:
             decoded_extras += html.unescape(raw_text) + " "
     except: pass
 
-    # 3. Base64 強化解碼
     def decode_base64_safe(s):
         try:
             s = s.replace('-', '+').replace('_', '/')
@@ -352,38 +378,30 @@ def scan_url():
             decoded_str = decoded_bytes.decode('utf-8', errors='ignore')
             decoded_str = urllib.parse.unquote(decoded_str) 
             
-            # 確保解碼出來是有意義的文字
             if re.search(r'[\u4e00-\u9fa5]', decoded_str) or len(re.sub(r'[^\w\s]', '', decoded_str)) > 4:
                 return decoded_str + " "
         except:
             return ""
         return ""
 
-    # (A) 暴力測試：移除所有空白後解碼
     txt_no_spaces = re.sub(r'\s+', '', raw_text)
     if txt_no_spaces:
         decoded_extras += decode_base64_safe(txt_no_spaces)
 
-    # (B) 片段測試：從內文中找出疑似 Base64 的片段
     b64_matches = re.findall(r'[A-Za-z0-9+/=\-_]{16,}', raw_text)
     for b64 in b64_matches:
         decoded_extras += decode_base64_safe(b64)
 
-    # (C) 網址測試：從 URL 參數中挖出 Base64 
     if target_url:
         url_b64_matches = re.findall(r'[A-Za-z0-9+/=\-_]{16,}', target_url)
         for b64 in url_b64_matches:
             decoded_extras += decode_base64_safe(b64)
 
     raw_text = raw_text + " " + decoded_extras
-    # ==========================================
 
     if not target_url and not image_url and not raw_text.strip():
         return jsonify({"status": "error", "riskScore": 0, "riskLevel": "參數異常", "reason": "未提供內容", "masked_text": ""}), 200
 
-    # ==========================================
-    # 🖼️ 終極升級 2：無 OCR 狀態下的兜底攔截機制 (破解圖片詐騙)
-    # ==========================================
     if image_url:
         img_lower = image_url.lower()
         
@@ -406,7 +424,6 @@ def scan_url():
             
         report = {"riskScore": 75, "riskLevel": "高度危險", "scamDNA": ["可疑圖片內容"], "reason": "防堵圖片隱藏中獎文字規避"}
         return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
-    # ==========================================
 
     if target_url:
         if '@' in target_url:
