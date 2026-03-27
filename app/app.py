@@ -88,7 +88,6 @@ def check_extension_secret():
             "status": "error", 
             "message": "Access Denied: 偵測到未經授權的 API 呼叫，該行為已被系統記錄。"
         }), 403
-# ==========================================
 
 @app.errorhandler(HTTPException)
 def handle_http_exception(e):
@@ -271,6 +270,7 @@ def submit_evidence():
         ref = db.reference('scam_evidence').push({
             'url': url,
             'evidence_image_url': image_url, 
+            'screenshot_base64': screenshot_base64, # 雙重備援
             'familyID': family_id,
             'timestamp': timestamp,
             'reason': reason
@@ -367,33 +367,42 @@ def scan_url():
     
     is_urgent = data.get('is_urgent', False)
 
-    # 👇 --- [修復關鍵] 接收照片並立即產生證據 ID ---
+    # 👇 --- [終極防護] 接收照片並保證存檔 ---
     screenshot_base64 = data.get('image')
     evidence_id = ""
     
     if screenshot_base64 and firebase_initialized:
+        cloud_img_url = ""
         try:
+            # 嘗試上傳到 Storage
             if ',' in screenshot_base64:
-                screenshot_base64 = screenshot_base64.split(',')[1]
-            decoded_image = base64.b64decode(screenshot_base64)
+                pure_base64 = screenshot_base64.split(',')[1]
+            else:
+                pure_base64 = screenshot_base64
+            decoded_image = base64.b64decode(pure_base64)
             
             bucket = storage.bucket()
             file_name = f"evidence/{family_id}/{uuid.uuid4().hex}.jpg"
             blob = bucket.blob(file_name)
-            
             blob.upload_from_string(decoded_image, content_type='image/jpeg')
             blob.make_public()
-            
+            cloud_img_url = blob.public_url
+        except Exception as e:
+            print(f"⚠️ Storage 上傳失敗，將使用 Base64 備援: {e}", flush=True)
+
+        # 💡 無論 Storage 是否成功，強制將截圖的 Base64 存入 Realtime Database 備援！
+        try:
             ev_ref = db.reference('scam_evidence').push({
                 'url': target_url,
-                'evidence_image_url': blob.public_url,
+                'evidence_image_url': cloud_img_url,
+                'screenshot_base64': screenshot_base64, # 直接塞進去，保證有圖！
                 'familyID': family_id,
                 'timestamp': get_tw_time(),
                 'reason': "手動掃描快照"
             })
             evidence_id = ev_ref.key
         except Exception as e:
-            print(f"⚠️ 手動截圖上傳失敗: {e}", flush=True)
+            print(f"⚠️ 資料庫寫入失敗: {e}", flush=True)
     # 👆 ------------------------------------------
 
     decoded_extras = ""
@@ -552,7 +561,7 @@ def scan_url():
             if firebase_initialized:
                 try:
                     timestamp = get_tw_time()
-                    # 👇 完美綁定證據 ID！
+                    # 👇 保證連動新產生的 evidence_id
                     db.reference('scan_history').push({
                         'url': target_url, 
                         'report': json.dumps(report_dict, ensure_ascii=False), 
@@ -605,7 +614,6 @@ def scan_url():
             with app.app_context(): 
                 timestamp = get_tw_time()
                 try:
-                    # 👇 完美綁定證據 ID！
                     db.reference('scan_history').push({
                         'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp, 'evidenceID': evidence_id
                     })
