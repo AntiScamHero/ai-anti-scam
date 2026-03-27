@@ -214,11 +214,7 @@ async function scanScamWords() {
                          window.location.href.includes('simulator.html');
     if (isSystemPage) return;
 
-    // 🛑 【免死金牌】：開發環境與維基百科，絕對不掃描！避免誤傷開發者
-    const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org'];
-    if (devWhitelist.some(domain => window.location.hostname.includes(domain))) {
-        return; 
-    }
+    // 💡 已移除提早退出的「免死金牌」，現在 localhost 與 Wikipedia 也會照常送出掃描紀錄給戰情室！
     
     const siteInfo = await getSiteReputation();
     const { category, reputation, riskThreshold, scanMode } = siteInfo;
@@ -277,7 +273,6 @@ async function scanScamWords() {
         }
     }
     
-    // 💯 【邏輯修復】：強制最高只能 100 分，最低 0 分
     totalRiskScore = Math.min(100, Math.max(0, totalRiskScore));
     currentGlobalRiskScore = totalRiskScore; 
     
@@ -387,7 +382,7 @@ function observeElements() {
 }
 
 // ==========================================
-// 🚨 模組 3：觸發蒐證攔截視窗
+// 🚨 模組 3：觸發蒐證攔截視窗 (終極防彈背心版)
 // ==========================================
 async function triggerSafeBlock(reason, reportData = null) {
     if (hasTriggeredBlock) return;
@@ -396,7 +391,11 @@ async function triggerSafeBlock(reason, reportData = null) {
     hasTriggeredBlock = true;
     console.log("🛡️ AI 防詐盾牌：發現威脅，定住畫面並按下快門...", reason);
 
-    if (document.body) {
+    // 🛑 【防彈背心啟動】：判斷是否為開發環境，如果是，就不冰凍畫面！
+    const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org', 'render.com'];
+    const isDev = devWhitelist.some(domain => window.location.hostname.includes(domain));
+
+    if (!isDev && document.body) {
         document.body.style.pointerEvents = 'none';
         document.body.style.userSelect = 'none';
         document.body.style.border = '5px solid rgba(255, 77, 79, 0.5)';
@@ -410,6 +409,7 @@ async function triggerSafeBlock(reason, reportData = null) {
             if (storage.familyID) familyID = storage.familyID;
         } catch (e) {}
         
+        // 📸 拍照並上傳 (無條件執行，確保戰情室有資料！)
         const sendPromise = chrome.runtime.sendMessage({ 
             action: "captureScamTabWithEvidence", 
             url: window.location.href, 
@@ -423,6 +423,12 @@ async function triggerSafeBlock(reason, reportData = null) {
 
     } catch (error) {
         console.error("❌ 自動蒐證快門失敗:", error);
+    }
+
+    // 🛑 【防彈背心發威】：如果是您的開發網域，資料傳送完後就強制退出，絕對不跳轉！
+    if (isDev) {
+        console.log("🛠️ 觸發開發者防彈背心：已將警報送至戰情室，但不強制跳轉畫面。");
+        return; 
     }
 
     document.documentElement.innerHTML = `
@@ -578,9 +584,7 @@ if (window.self === window.top) {
     const isSystemPage = window.location.protocol === 'chrome-extension:' ||
                          window.location.href.includes('dashboard.html') ||
                          window.location.href.includes('blocked.html') ||
-                         window.location.href.includes('simulator.html') || 
-                         window.location.hostname === 'localhost' ||
-                         window.location.hostname === '127.0.0.1';
+                         window.location.href.includes('simulator.html'); // 拔除 localhost 的忽略，讓系統能掃描
     if (!isSystemPage) {
         new BehaviorAnalyzer(); 
         if (document.body) dynamicObserver.observe(document.body, { childList: true, subtree: true });

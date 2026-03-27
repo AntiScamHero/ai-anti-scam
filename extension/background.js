@@ -50,20 +50,15 @@ async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
 }
 
 // ==========================================
-// 🚀 全自動背景巡邏員
+// 🚀 全自動背景巡邏員 (移除了早退機制，確保戰情室會收到安全紀錄)
 // ==========================================
-const whitelist = [
-    'google.com', 'youtube.com', 'yahoo.com.tw', 'gov.tw', 
-    'facebook.com', 'line.me', 'instagram.com', 
-    'momoshop.com.tw', 'pchome.com.tw', 'shopee.tw',
-    'chrome://', 'edge://', 'extensions', 'render.com'
-];
+// 💡 只跳過擴充功能內部的系統網頁，其他的(如維基百科)一律送給後端檢查！
+const systemPages = ['chrome://', 'edge://', 'extensions', 'blocked.html', 'dashboard.html', 'simulator.html'];
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete' && tab && tab.url) {
         
-        if (whitelist.some(domain => tab.url.includes(domain))) return;
-        if (tab.url.includes("blocked.html") || tab.url.includes("dashboard.html")) return;
+        if (systemPages.some(domain => tab.url.includes(domain))) return;
 
         try {
             const storage = await chrome.storage.local.get(['userID', 'familyID']);
@@ -134,6 +129,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
                 console.log("🚨 背景巡邏員發現危險，強制攔截！", tab.url);
                 const reasonText = reportData?.reason || "系統深層掃描發現高度危險特徵！";
                 
+                // 🛑 【防彈背心】：如果背景巡邏發現是開發網域（分數雖高），不執行強制跳轉！
+                const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org', 'render.com'];
+                if (devWhitelist.some(domain => tab.url.includes(domain))) {
+                    console.log("🛠️ 開發免死金牌：已將紀錄送至戰情室，但取消跳轉。");
+                    return; 
+                }
+
                 chrome.tabs.get(tabId, (currentTab) => {
                     if (chrome.runtime.lastError) return;
                     chrome.tabs.update(tabId, { 
@@ -267,9 +269,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const tabId = sender.tab ? sender.tab.id : null;
 
         const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org', 'render.com'];
-        if (devWhitelist.some(domain => originalUrl.includes(domain))) {
-            return true; 
-        }
+        const isDev = devWhitelist.some(domain => originalUrl.includes(domain));
 
         chrome.storage.local.get(['userID', 'familyID']).then(async storage => {
             let screenshotBase64 = null;
@@ -277,10 +277,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (windowId) screenshotBase64 = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
             } catch(e) { }
 
-            if (tabId) {
+            // 🛑 【防彈背心】：如果不是開發網域，才執行強制跳轉與語音警告！
+            if (tabId && !isDev) {
                 chrome.tabs.update(tabId, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
+                chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
+            } else if (isDev) {
+                console.log("🛠️ 開發免死金牌：已將紀錄送至戰情室，但取消跳轉。");
             }
-            chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
 
             if (screenshotBase64) {
                 fetchWithRetry(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
