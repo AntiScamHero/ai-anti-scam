@@ -16,7 +16,7 @@ import html
 import base64             
 import urllib.parse
 import uuid
-import time # 👈 新增 time 模組，用於模擬 AI 備用打字延遲
+import time
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -270,7 +270,7 @@ def submit_evidence():
         ref = db.reference('scam_evidence').push({
             'url': url,
             'evidence_image_url': image_url, 
-            'screenshot_base64': screenshot_base64, # 雙重備援
+            'screenshot_base64': screenshot_base64, 
             'familyID': family_id,
             'timestamp': timestamp,
             'reason': reason
@@ -311,7 +311,7 @@ def submit_evidence():
         
         return jsonify({
             "status": "success", 
-            "message": "✅ 證據保全快照已成功存檔，並已通知家人。",
+            "message": "✅ 證據保全快照已成功存檔",
             "evidenceID": ref.key,
             "image_url": image_url
         })
@@ -338,7 +338,7 @@ def get_evidence():
                     "screenshot_base64": evidence.get('screenshot_base64', '')
                 })
                         
-        return jsonify({"status": "fail", "message": "找不到對應的證據快照，可能已遭覆蓋或未上傳成功"}), 404
+        return jsonify({"status": "fail", "message": "找不到對應的證據快照，可能已遭覆蓋"}), 404
     except Exception as e:
         return jsonify({"status": "fail", "message": str(e)}), 500
 
@@ -366,15 +366,12 @@ def scan_url():
     family_id = str(family_id) if family_id else 'none'
     
     is_urgent = data.get('is_urgent', False)
-
-    # 👇 --- [終極防護] 接收照片並保證存檔 ---
     screenshot_base64 = data.get('image')
     evidence_id = ""
     
     if screenshot_base64 and firebase_initialized:
         cloud_img_url = ""
         try:
-            # 嘗試上傳到 Storage
             if ',' in screenshot_base64:
                 pure_base64 = screenshot_base64.split(',')[1]
             else:
@@ -388,14 +385,13 @@ def scan_url():
             blob.make_public()
             cloud_img_url = blob.public_url
         except Exception as e:
-            print(f"⚠️ Storage 上傳失敗，將使用 Base64 備援: {e}", flush=True)
+            print(f"⚠️ Storage 上傳失敗: {e}", flush=True)
 
-        # 💡 無論 Storage 是否成功，強制將截圖的 Base64 存入 Realtime Database 備援！
         try:
             ev_ref = db.reference('scam_evidence').push({
                 'url': target_url,
                 'evidence_image_url': cloud_img_url,
-                'screenshot_base64': screenshot_base64, # 直接塞進去，保證有圖！
+                'screenshot_base64': screenshot_base64,
                 'familyID': family_id,
                 'timestamp': get_tw_time(),
                 'reason': "手動掃描快照"
@@ -403,7 +399,6 @@ def scan_url():
             evidence_id = ev_ref.key
         except Exception as e:
             print(f"⚠️ 資料庫寫入失敗: {e}", flush=True)
-    # 👆 ------------------------------------------
 
     decoded_extras = ""
     try:
@@ -487,7 +482,7 @@ def scan_url():
     if not is_white_listed and firebase_initialized and target_url:
         try:
             host = urlparse(target_url.lower().strip()).hostname or target_url
-            safe_domain_key = host.replace('.', '_dot_') 
+            safe_domain_key = re.sub(r'[^a-zA-Z0-9_-]', '_', host)
             cloud_whitelist = db.reference(f'trusted_domains/{safe_domain_key}').get()
             if cloud_whitelist:
                 is_white_listed = True
@@ -496,7 +491,6 @@ def scan_url():
             print(f"⚠️ 讀取雲端白名單失敗: {e}", flush=True)
 
     if is_white_listed and not is_urgent:
-        # 👇 新增：即使是安全白名單，也強制存檔並通知前端戰情室！
         report_dict = {
             "riskScore": 0, "riskLevel": "安全無虞", "scamDNA": ["無"], "reason": "官方信任網域", 
             "advice": "正常存取即可"
@@ -574,8 +568,7 @@ def scan_url():
             is_bad_image_url = re.search(pattern, image_url, re.IGNORECASE)
 
         if is_bad_text or is_bad_image_url:
-            # 升級具有威嚇力與教育意義的 AI 報告
-            detailed_reason = f"🚨 【AI 深度威脅分析】\n系統深層掃描後，發現此網頁高度吻合「{reason}」的典型詐騙特徵！詐騙集團正試圖利用「{dna_tag}」的心理操縱手法（例如：保證獲利、急迫性威脅等）來降低您的防備心。此為極高風險的詐騙套路！"
+            detailed_reason = f"🚨 【AI 深度威脅分析】\n系統深層掃描後，發現此網頁高度吻合「{reason}」的典型詐騙特徵！詐騙集團正試圖利用「{dna_tag}」的心理操縱手法來降低您的防備心。此為極高風險的詐騙套路！"
             detailed_advice = "🛑 絕對不要輸入任何個資或聽信指示匯款！為保護您的安全，系統即將引導您撤離此網頁。"
             
             report_dict = {
@@ -601,7 +594,6 @@ def scan_url():
                         'url': target_url, 'riskScore': 95, 'reason': report_dict['reason'], 'timestamp': timestamp
                     }, room=family_id)
                     
-                    # 👇 新增這段：補上 LINE 的緊急推播通報！
                     send_dynamic_line_alert(
                         family_id=family_id, 
                         url=target_url, 
@@ -615,7 +607,9 @@ def scan_url():
 
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
-    safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:120] if target_url else "no_url"
+    # 🛠️ 終極修復：保證 url_cache 的 Key 絕對沒有任何非法字元 (包含斜線)
+    safe_url_key = re.sub(r'[^a-zA-Z0-9_-]', '_', target_url)[:120] if target_url else "no_url"
+    
     if firebase_initialized and target_url and not image_url and not is_urgent and not is_white_listed:
         try:
             cached = db.reference(f'url_cache/{safe_url_key}').get()
@@ -637,7 +631,6 @@ def scan_url():
                     scam_dna=["系統強制警示"]
                 )
                 
-                # 👇 補上這段：讓緊急攔截也能完美存入戰情室表格！
                 try:
                     report_dict = {
                         "riskScore": 100,
