@@ -2,8 +2,8 @@
  * AI 防詐盾牌 - 全域設定檔
  */
 const CONFIG = {
-    // 🔗 後端 API 網址 (已更新為 Render 正式上線網址)
-    API_BASE_URL: 'https://ai-anti-scam.onrender.com', 
+    // 🔗 後端 API 網址 (目前改為本機測試，確認沒問題後，記得改回 'https://ai-anti-scam.onrender.com')
+    API_BASE_URL: 'http://127.0.0.1:5000', 
     
     // ⚙️ 效能與記憶體控制參數
     MAX_SCANS_PER_MINUTE: 10,        // 每分鐘最大文字掃描次數

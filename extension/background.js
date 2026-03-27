@@ -214,19 +214,48 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === "triggerBlock") {
-        if (sender.tab && sender.tab.id) {
-            const originalUrl = sender.tab.url ? sender.tab.url : "";
-            chrome.tabs.update(sender.tab.id, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
-        }
-        chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
-        
-        chrome.storage.local.get(['userID', 'familyID']).then(storage => {
-            fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
-                body: JSON.stringify({ url: sender.tab ? sender.tab.url : "未知網址", text: `【攔截】${request.reason}`, image_url: "", userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: true })
-            }).catch(e => console.log("推播請求失敗:", e));
+        const originalUrl = sender.tab ? sender.tab.url : "未知網址";
+        const windowId = sender.tab ? sender.tab.windowId : null;
+        const tabId = sender.tab ? sender.tab.id : null;
+
+        chrome.storage.local.get(['userID', 'familyID']).then(async storage => {
+            let screenshotBase64 = null;
+            // 📸 1. 光速按下快門，把詐騙畫面拍下來
+            try {
+                if (windowId) {
+                    screenshotBase64 = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
+                }
+            } catch(e) { console.log("緊急快門失敗:", e); }
+
+            // 🛑 2. 拍完照後，無情地跳轉到紅色攔截頁面
+            if (tabId) {
+                chrome.tabs.update(tabId, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
+            }
+            chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
+
+            // 💾 3. 呼叫蒐證專用 API，保證照片與紀錄 100% 寫入戰情室
+            if (screenshotBase64) {
+                fetchWithRetry(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
+                    body: JSON.stringify({ 
+                        url: originalUrl, 
+                        timestamp: new Date().toLocaleTimeString('zh-TW', { hour12: false }), 
+                        familyID: storage.familyID || "none", 
+                        screenshot_base64: screenshotBase64, 
+                        reported_reason: request.reason 
+                    })
+                });
+            } else {
+                // 萬一截圖失敗，改送一般掃描 (is_urgent: false 強制存入資料庫)
+                fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
+                    body: JSON.stringify({ url: originalUrl, text: `【緊急攔截】${request.reason}`, image_url: "", userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: false })
+                });
+            }
         });
+        return true;
     }
     
     if (request.action === "scanImageInBackground") {
