@@ -341,7 +341,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const socketUrl = (typeof window.CONFIG !== 'undefined' && window.CONFIG.API_BASE_URL) 
                         ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
-                    const socket = io(socketUrl);
+                    
+                    // 👇 加上這個魔法指令，強制走 WebSocket
+                    const socket = io(socketUrl, {
+                        transports: ['websocket']
+                    });
+                    
                     socket.emit('join_family_room', { familyID: familyID });
                     
                     socket.on('family_urgent_broadcast', (data) => {

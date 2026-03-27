@@ -80,7 +80,10 @@ window.onload = () => {
 
 function initSocket(familyID) {
     if (!socket) {
-        socket = io(CONFIG.API_BASE_URL);
+        // 強制使用 websocket，繞過 Render 的輪詢限制，保證不斷線！
+        socket = io(CONFIG.API_BASE_URL, {
+            transports: ['websocket']
+        });
 
         socket.on('connect', () => {
             document.getElementById('connection-status').className = "status-badge status-connected";
