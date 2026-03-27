@@ -140,6 +140,21 @@ if (scanBtnElement) {
             } catch (err) { console.warn("抓取文字失敗:", err); }
 
             let safePageText = maskSensitiveData(pageText);
+            
+            // 📸 --- 【新增截圖邏輯開始】 ---
+            let screenshotBase64 = null;
+            try {
+                // 擷取當前畫面，並壓縮品質避免打爆後端
+                screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, {
+                    format: 'jpeg',
+                    quality: 40 // 建議設 40-50 即可，足夠 AI 辨識且傳輸快
+                });
+            } catch (imgErr) {
+                console.warn("截圖失敗 (可能因為在擴充功能頁面或權限不足):", imgErr);
+                // 截圖失敗不中斷流程，沒圖一樣可以送純文字給 AI 掃描
+            }
+            // 📸 --- 【新增截圖邏輯結束】 ---
+
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); 
 
@@ -151,7 +166,14 @@ if (scanBtnElement) {
                         'Content-Type': 'application/json', 
                         'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
                     },
-                    body: JSON.stringify({ url: tab.url, text: safePageText, userID: currentUserID, familyID: currentFamilyID }),
+                    // 📦 【修改】將截圖 (image) 包進 payload 一起送給後端
+                    body: JSON.stringify({ 
+                        url: tab.url, 
+                        text: safePageText, 
+                        image: screenshotBase64, // <-- 關鍵！把照片送出去
+                        userID: currentUserID, 
+                        familyID: currentFamilyID 
+                    }),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId); 
