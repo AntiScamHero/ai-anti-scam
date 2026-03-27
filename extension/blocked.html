@@ -23,7 +23,8 @@
         .speech-bubble:hover { transform: scale(1.03); }
         .speech-bubble::after { content: ''; position: absolute; bottom: -12px; right: 30%; border-width: 12px 12px 0; border-style: solid; border-color: #ffffff transparent transparent transparent; z-index: 3; }
         .speech-bubble::before { content: ''; position: absolute; bottom: -15px; right: calc(30% - 1.5px); border-width: 15px 15px 0; border-style: solid; border-color: #4a90e2 transparent transparent transparent; z-index: 1; }
-        .robot-img { width: 350px; max-width: 100%; z-index: 1; filter: drop-shadow(0px 10px 20px rgba(0, 195, 255, 0.2)); cursor: pointer; }
+        
+        .robot-img { width: 350px; max-width: 100%; z-index: 1; filter: drop-shadow(0px 10px 20px rgba(0, 195, 255, 0.2)); cursor: pointer; transition: 0.3s; }
 
         .right-col { flex: 1.2; display: flex; flex-direction: column; align-items: flex-start; min-width: 350px; }
         
@@ -31,7 +32,6 @@
         .risk-score-display { font-size: 32px; font-weight: bold; color: #ffffff; margin-bottom: 10px; }
         .risk-score-display span { font-size: 48px; color: #ff4d4f; text-shadow: 0 0 15px rgba(255, 77, 79, 0.5); }
         
-        /* 🚨 直接把通用警告做成醒目的副標題 */
         .warning-subtitle { font-size: 18px; color: #ff4d4f; font-weight: bold; margin-bottom: 20px; line-height: 1.5;}
 
         .info-box {
@@ -72,25 +72,41 @@
         .pin-input { flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #555; background: #1a1a1a; color: #fff; font-size: 20px; text-align: center; letter-spacing: 10px; outline: none; width: 100%; box-sizing: border-box; }
         .pin-input:focus { border-color: #ff9800; box-shadow: 0 0 8px rgba(255,152,0,0.5); }
 
-        /* 💬 詐騙對話神還原 UI */
+        /* 💬 小尖兵與小玲對話神還原 UI */
         .chat-simulator-wrapper { background: #111; border: 1px solid #333; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
-        .chat-header { font-size: 15px; color: #ffeb3b; font-weight: bold; margin-bottom: 10px; text-align: center; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        .chat-container { height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 5px; scroll-behavior: smooth; }
+        .chat-header { font-size: 16px; color: #ffeb3b; font-weight: bold; margin-bottom: 10px; text-align: center; border-bottom: 1px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
+        
+        .chat-status { font-size: 12px; color: #4adcff; animation: pulse-text 1.5s infinite; }
+        @keyframes pulse-text { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+        .chat-container { height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px; scroll-behavior: smooth; }
         .chat-container::-webkit-scrollbar { width: 6px; }
         .chat-container::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
-        .msg-wrapper { display: flex; flex-direction: column; animation: fadeIn 0.3s ease-in-out; }
-        .msg-left { align-items: flex-start; }
-        .msg-right { align-items: flex-end; }
-        .msg-center { align-items: center; margin-top: 10px; margin-bottom: 5px; }
-        .msg-name { font-size: 12px; color: #888; margin-bottom: 4px; padding: 0 5px; }
-        .msg-bubble { padding: 10px 14px; border-radius: 16px; font-size: 15px; max-width: 85%; line-height: 1.4; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-        .bubble-scammer { background: #2c3e50; color: white; border-top-left-radius: 4px; }
+        
+        .msg-row { display: flex; gap: 10px; align-items: flex-start; animation: fadeIn 0.4s ease-in-out; }
+        .msg-row.left { flex-direction: row; }
+        .msg-row.right { flex-direction: row-reverse; }
+
+        /* 大頭貼設計 (支援 emoji 與圖片) */
+        .msg-avatar { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.4); border: 2px solid #555; }
+        .avatar-scammer { background: #1a1a2e; border-color: #ff4d4f; }
+        .avatar-victim { background: #1b5e20; border-color: #4caf50; }
+        
+        /* 🤖 專屬小尖兵/小玲圖片大頭貼 */
+        img.img-avatar { object-fit: contain; background: #fff; padding: 2px; }
+
+        .msg-content { display: flex; flex-direction: column; max-width: 75%; }
+        .msg-row.left .msg-content { align-items: flex-start; }
+        .msg-row.right .msg-content { align-items: flex-end; }
+
+        .msg-name { font-size: 13px; color: #888; margin-bottom: 4px; padding: 0 5px; font-weight: bold; }
+        .msg-bubble { padding: 12px 16px; border-radius: 18px; font-size: 16px; line-height: 1.5; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        
+        .bubble-scammer { background: #2c3e50; color: white; border-top-left-radius: 4px; border: 1px solid #4a5568;}
         .bubble-victim { background: #4caf50; color: white; border-top-right-radius: 4px; }
-        .bubble-system { background: rgba(244, 67, 54, 0.15); border: 1px solid #f44336; color: #ffeb3b; font-size: 13px; font-weight: bold; border-radius: 8px; padding: 8px 15px;}
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .btn-next-msg { background: #ff9800; color: #111; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; width: 100%; transition: 0.2s; margin-top: 10px; }
-        .btn-next-msg:hover { background: #ffc107; transform: translateY(-2px); }
-        .btn-next-msg:disabled { background: #444; color: #888; cursor: not-allowed; transform: none; }
+        .bubble-system { background: rgba(255, 235, 59, 0.1); border: 1px solid #ffeb3b; color: #ffeb3b; font-size: 16px; font-weight: bold; border-radius: 12px; border-top-left-radius: 4px;}
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
@@ -108,7 +124,7 @@
                 什麼都會騙！<br>
                 趕快離開才安全喔！<span style="font-size: 28px;">🔊</span>
             </div>
-            <img src="hero.png" alt="AI 防詐英雄" class="robot-img">
+            <img src="hero.png" id="main-mascot" alt="AI 防詐英雄" class="robot-img">
         </div>
 
         <div class="right-col">
@@ -121,14 +137,14 @@
             
             <a href="tel:165" class="btn-165" id="call-btn">📞 有疑慮？撥打 165 反詐騙專線</a>
 
-            <div id="reason-box" style="display:none;"></div><div id="dna-box" style="display:none;"></div><div id="tags-container" style="display:none;"></div><div id="advice" style="display:none;"></div>
-
             <div class="info-box" id="cooldown-box" style="border-color: #ffeb3b; box-shadow: 0 0 15px rgba(255, 235, 59, 0.1);">
                 
                 <div class="chat-simulator-wrapper">
-                    <div class="chat-header">📱 詐騙情境還原：看看他們都怎麼騙</div>
+                    <div class="chat-header">
+                        <span>📱 詐騙情境還原：看看他們都怎麼騙</span>
+                        <span class="chat-status" id="chat-status">▶ 自動播放中...</span>
+                    </div>
                     <div class="chat-container" id="chat-history"></div>
-                    <button class="btn-next-msg" id="btn-next-msg">👉 點擊看下一句對話...</button>
                 </div>
                 
                 <button class="btn-safe" id="manual-leave-btn">聽從建議，安全離開此網頁</button>
@@ -153,7 +169,6 @@
 
     <div class="url-display">
         <span id="target-url">載入中...</span>
-        <span id="original-url"></span>
     </div>
 
     <div id="desktop-modal" class="modal-overlay">

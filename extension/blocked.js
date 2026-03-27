@@ -4,66 +4,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dataString = urlParams.get('data');
     const targetUrlRaw = urlParams.get('url') || urlParams.get('original_url') || '';
     
-    // 🛡️ 防呆：安全的 URL 解碼
     let decodedTargetUrl = '';
-    try { 
-        decodedTargetUrl = decodeURIComponent(targetUrlRaw); 
-    } catch(e) { 
-        decodedTargetUrl = targetUrlRaw; 
-        console.warn("URL 解碼失敗，使用原始 URL", e);
-    }
+    try { decodedTargetUrl = decodeURIComponent(targetUrlRaw); } 
+    catch(e) { decodedTargetUrl = targetUrlRaw; }
 
     let riskScore = "99"; 
-    // 💡 UX 升級：移除複雜的分數與原因，直接給予最高級別警告
-    let reason = "🚨 警告！這是一個極度危險的詐騙網頁，請立刻離開，千萬不要相信！"; 
-    let advice = "請勿輸入任何個人資料或密碼。";
-    let scamDNA = [];
+    let internalReason = "系統偵測到高風險異常行為。"; 
 
-    // 1. 智慧解碼
     if (dataString) {
         try {
             const data = JSON.parse(decodeURIComponent(dataString));
             let rawScore = parseInt(data.riskScore);
-            // 🛡️ 強制將顯示的分數上限鎖定在 100 分
-            if (!isNaN(rawScore)) {
-                riskScore = rawScore > 100 ? "100" : rawScore.toString();
-            } else {
-                riskScore = data.riskScore || riskScore;
-            }
-            advice = data.advice || advice;
-            scamDNA = data.scamDNA || [];
+            if (!isNaN(rawScore)) { riskScore = rawScore > 100 ? "100" : rawScore.toString(); } 
+            else { riskScore = data.riskScore || riskScore; }
+            internalReason = data.reason || internalReason;
         } catch (e) { console.error("資料解析失敗", e); }
     } else {
-        const dnaString = urlParams.get('scamDNA') || "";
-        scamDNA = dnaString ? dnaString.split(',') : ["前端極速攔截"];
+        internalReason = urlParams.get('reason') || internalReason;
     }
 
-    // 2. 渲染 UI 畫面
     const scoreEl = document.getElementById('score');
     if(scoreEl) scoreEl.innerText = riskScore;
     
-    const reasonEl = document.getElementById('reason');
-    if(reasonEl) {
-        reasonEl.innerText = reason;
-        reasonEl.style.color = "#ff4d4f"; 
-        reasonEl.style.fontWeight = "bold";
-        reasonEl.style.fontSize = "18px";
-    }
-    
-    const adviceEl = document.getElementById('advice');
-    if(adviceEl) adviceEl.innerText = "💡 專家建議：" + advice;
-
-    // 隱藏不必要的特徵標籤，畫面更乾淨
-    const targetDnaBox = document.getElementById('dna-box') || document.getElementById('tags-container');
-    if (targetDnaBox) targetDnaBox.style.display = 'none';
-
     const targetUrlEl = document.getElementById('target-url');
-    if (targetUrlEl && decodedTargetUrl) {
-        targetUrlEl.innerText = decodedTargetUrl;
+    if (targetUrlEl && decodedTargetUrl) { targetUrlEl.innerText = decodedTargetUrl; }
+
+    // 🤖 左側大吉祥物隨機輪班 (小尖兵 vs 小玲)
+    const mainMascot = document.getElementById('main-mascot');
+    if (mainMascot) {
+        mainMascot.src = Math.random() > 0.5 ? 'hero.png' : 'ling.png';
     }
 
     // ==========================================
-    // 💬 多重宇宙劇本庫：隨機抽取詐騙對話神還原
+    // 🤖 雙警探出擊：自動播放對話引擎 + 專屬大頭貼
     // ==========================================
     const allScenarios = window.allScenarios || []; 
     const chatScript = allScenarios.length > 0 
@@ -71,33 +44,81 @@ document.addEventListener('DOMContentLoaded', async () => {
         : []; 
 
     let currentChatIdx = 0;
-    const btnNextMsg = document.getElementById('btn-next-msg');
     const chatContainer = document.getElementById('chat-history');
+    const chatStatus = document.getElementById('chat-status');
 
     function renderNextMessage() {
-        if (!btnNextMsg || !chatContainer) return;
-        if (currentChatIdx >= chatScript.length) return;
+        if (!chatContainer || currentChatIdx >= chatScript.length) return;
 
         const msg = chatScript[currentChatIdx];
-        const wrapper = document.createElement('div');
+        const row = document.createElement('div');
         
-        if (msg.role === 'scammer') wrapper.className = 'msg-wrapper msg-left';
-        else if (msg.role === 'victim') wrapper.className = 'msg-wrapper msg-right';
-        else wrapper.className = 'msg-wrapper msg-center';
+        // 系統角色(警察)跟騙子都在左邊，受害者在右邊
+        row.className = `msg-row ${msg.role === 'victim' ? 'right' : 'left'}`;
+
+        // 🧠 智慧大頭貼指派
+        let avatar;
+        if (msg.role === 'system') {
+            avatar = document.createElement('img');
+            // 💡 根據名字判斷要請哪位警探出場，並給予專屬顏色的框框
+            if (msg.name.includes('小玲')) {
+                avatar.src = 'ling.png'; 
+                avatar.style.border = '2px solid #ff80ab'; // 小玲粉紅框
+                avatar.style.boxShadow = '0 0 10px rgba(255, 128, 171, 0.5)';
+            } else {
+                avatar.src = 'hero.png'; 
+                avatar.style.border = '2px solid #ffeb3b'; // 尖兵金黃框
+                avatar.style.boxShadow = '0 0 10px rgba(255, 235, 59, 0.5)';
+            }
+            avatar.className = 'msg-avatar img-avatar';
+        } else {
+            // 騙子與受害者使用 Emoji
+            avatar = document.createElement('div');
+            avatar.className = `msg-avatar avatar-${msg.role}`;
+            let emoji = '👤';
+            if (msg.role === 'scammer') {
+                if (msg.name.includes('助理') || msg.name.includes('女') || msg.name.includes('客服')) emoji = '👩‍💼';
+                else if (msg.name.includes('警') || msg.name.includes('官')) emoji = '👮‍♂️';
+                else if (msg.name.includes('醫') || msg.name.includes('軍')) emoji = '👨‍⚕️';
+                else emoji = '😈';
+            } else if (msg.role === 'victim') {
+                emoji = '👴'; 
+            }
+            avatar.innerText = emoji;
+        }
+        row.appendChild(avatar);
+
+        // 💬 訊息內容
+        const content = document.createElement('div');
+        content.className = 'msg-content';
 
         if (msg.name) {
             const nameEl = document.createElement('div');
             nameEl.className = 'msg-name';
+            // 小尖兵跟小玲的名字顏色區分
+            if (msg.role === 'system') {
+                nameEl.style.color = msg.name.includes('小玲') ? '#ff80ab' : '#ffeb3b';
+            }
             nameEl.innerText = msg.name;
-            wrapper.appendChild(nameEl);
+            content.appendChild(nameEl);
         }
 
         const bubble = document.createElement('div');
         bubble.className = `msg-bubble bubble-${msg.role}`;
         bubble.innerText = msg.text;
-        wrapper.appendChild(bubble);
-
-        chatContainer.appendChild(wrapper);
+        
+        // 系統警告特別變色
+        if (msg.role === 'system') {
+            if (msg.name.includes('小玲')) {
+                bubble.style.border = '1px solid #ff80ab';
+                bubble.style.color = '#ff80ab';
+                bubble.style.backgroundColor = 'rgba(255, 128, 171, 0.1)';
+            }
+        }
+        
+        content.appendChild(bubble);
+        row.appendChild(content);
+        chatContainer.appendChild(row);
         
         // 平滑滾動到底部
         setTimeout(() => {
@@ -106,16 +127,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         currentChatIdx++;
 
-        if (currentChatIdx >= chatScript.length) {
-            btnNextMsg.innerText = '✅ 觀看完畢！請保持警覺，切勿輕信。';
-            btnNextMsg.disabled = true;
+        // ⏱️ 自動播放邏輯：每 2.5 秒自動播放一句
+        if (currentChatIdx < chatScript.length) {
+            setTimeout(renderNextMessage, 2500); 
+        } else {
+            if (chatStatus) {
+                chatStatus.innerText = '✅ 播放完畢！請提高警覺。';
+                chatStatus.style.color = '#4caf50';
+                chatStatus.style.animation = 'none'; 
+            }
         }
     }
 
-    if (btnNextMsg && chatScript.length > 0) {
-        btnNextMsg.addEventListener('click', renderNextMessage);
-        // 自動顯示第一句話
-        renderNextMessage();
+    if (chatScript.length > 0) {
+        setTimeout(renderNextMessage, 1000);
     }
 
     // 3. 🟢 單純跳轉到安全網頁 (Google) + 倒數自動跳離
@@ -133,7 +158,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const manualLeaveBtn = document.getElementById('manual-leave-btn');
     if (manualLeaveBtn) {
         manualLeaveBtn.addEventListener('click', safeLeaveAction);
-        let autoLeaveTimer = 15;
+        let autoLeaveTimer = 35; // 配合看劇時間
         manualLeaveBtn.innerText = `安全離開 (${autoLeaveTimer} 秒後自動跳離)`;
         
         autoLeaveInterval = setInterval(() => {
@@ -299,7 +324,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ? window.CONFIG.API_BASE_URL : 'https://ai-anti-scam.onrender.com';
                 await fetch(`${apiUrl}/api/report_false_positive`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: decodedTargetUrl || window.location.href, reported_reason: reason })
+                    body: JSON.stringify({ url: decodedTargetUrl || window.location.href, reported_reason: internalReason })
                 });
                 reportBtn.innerText = "✅ 感謝回報！我們將派員審核。";
                 reportBtn.style.color = "#34c759";
