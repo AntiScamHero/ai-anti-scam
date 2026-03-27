@@ -731,6 +731,7 @@ def join_family():
     print("❌ [Debug] Firebase 初始化未成功，無法加入家庭", flush=True)
     return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
 
+# 🚀 【效能升級】改用 order_by_child 查詢，避免全表掃描
 @app.route('/api/get_alerts', methods=['POST'])
 def get_alerts():
     fid = request.json.get('familyID')
@@ -741,11 +742,12 @@ def get_alerts():
         return jsonify({"status": "fail", "data": []}), 500
         
     try:
-        all_rec = db.reference('scan_history').get() or {}
-        if isinstance(all_rec, list): 
-            all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
+        records = db.reference('scan_history').order_by_child('familyID').equal_to(fid).limit_to_last(50).get()
+        
+        result = []
+        if records and isinstance(records, dict):
+            result = [v for v in records.values() if isinstance(v, dict)]
             
-        result = [v for v in all_rec.values() if isinstance(v, dict) and v.get('familyID') == fid]
         result.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
         
         return jsonify({"status": "success", "data": result[:20]})
@@ -753,6 +755,7 @@ def get_alerts():
         print(f"❌ [Debug] 獲取戰情室警告失敗: {e}", flush=True)
         return jsonify({"status": "fail", "data": []}), 500
 
+# 🚀 【效能升級】只抓出該家庭的 ID 並精準刪除，避免抓取整個資料庫
 @app.route('/api/clear_alerts', methods=['POST'])
 def clear_alerts():
     fid = request.json.get('familyID')
@@ -763,23 +766,17 @@ def clear_alerts():
         return jsonify({"status": "error"}), 500
         
     try:
-        ref = db.reference('scan_history')
-        all_rec = ref.get() or {}
-        if isinstance(all_rec, list): 
-            all_rec = {str(i): v for i, v in enumerate(all_rec) if v is not None}
-        if all_rec:
-            updates = {k: None for k, v in all_rec.items() if isinstance(v, dict) and v.get('familyID') == fid}
-            if updates: 
-                ref.update(updates)
+        history_ref = db.reference('scan_history')
+        records_to_delete = history_ref.order_by_child('familyID').equal_to(fid).get()
+        if records_to_delete and isinstance(records_to_delete, dict):
+            for key in records_to_delete.keys():
+                history_ref.child(key).delete()
 
         evidence_ref = db.reference('scam_evidence')
-        all_evi = evidence_ref.get() or {}
-        if isinstance(all_evi, list):
-            all_evi = {str(i): v for i, v in enumerate(all_evi) if v is not None}
-        if all_evi:
-            evi_updates = {k: None for k, v in all_evi.items() if isinstance(v, dict) and v.get('familyID') == fid}
-            if evi_updates:
-                evidence_ref.update(evi_updates)
+        evidence_to_delete = evidence_ref.order_by_child('familyID').equal_to(fid).get()
+        if evidence_to_delete and isinstance(evidence_to_delete, dict):
+            for key in evidence_to_delete.keys():
+                evidence_ref.child(key).delete()
                 
         return jsonify({"status": "success"})
     except Exception as e:
