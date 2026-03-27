@@ -115,19 +115,25 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
             const data = await response.json();
             
-            // 💡 強化：更安全的 JSON 解析
-            let reportData = data;
+            // 💡 終極裝甲：超強容錯 JSON 解析
+            let reportData = {};
             try {
-                if (data.report) {
+                if (data && data.report) {
                     reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
+                    if (typeof reportData === 'string') reportData = JSON.parse(reportData); 
+                } else if (data) {
+                    reportData = data; // 如果沒有 report 屬性，就直接把外層當作報告
                 }
-                if (typeof reportData === 'string') reportData = JSON.parse(reportData);
             } catch (parseErr) {
-                console.warn("[背景巡邏] AI 報告解析失敗", parseErr);
+                console.warn("[背景巡邏] AI 報告解析失敗，已啟動備援資料", parseErr);
+                reportData = data || {}; 
             }
 
-            let score = parseInt(reportData?.riskScore || reportData?.RiskScore || reportData?.risk_score) || 0;
-
+            // 確保 score 一定是數字，否則給 0
+            let score = 0;
+            if (reportData) {
+                score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score || data.riskScore) || 0;
+            }
             // 🚨 自動發現危險：無情攔截！
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                 console.log("🚨 背景巡邏員發現危險，強制攔截！", tab.url);
