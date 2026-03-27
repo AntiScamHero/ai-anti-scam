@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 背景服務 (高容錯重試 + 圖片視覺掃描處理 + 中風險浮動警告 + 自動蒐證快門 + ⏱️ MV3 永不休眠心跳機制 + 🔐 防盜刷密鑰)
+ * AI 防詐盾牌 - 背景服務 (全自動巡邏 + 高容錯重試 + 圖片視覺掃描 + 右鍵選單 + 自動蒐證快門 + ⏱️ MV3 永不休眠心跳機制)
  */
 importScripts('config.js');
 
@@ -49,6 +49,84 @@ async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
     }
 }
 
+// ==========================================
+// 🚀 新增功能：全自動背景巡邏員 (網頁載入即自動掃描)
+// ==========================================
+const whitelist = [
+    'google.com', 'youtube.com', 'yahoo.com.tw', 'gov.tw', 
+    'facebook.com', 'line.me', 'instagram.com', 
+    'momoshop.com.tw', 'pchome.com.tw', 'shopee.tw',
+    'chrome://', 'edge://', 'extensions'
+];
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && tab && tab.url) {
+        
+        // 白名單或系統頁面不掃描
+        if (whitelist.some(domain => tab.url.includes(domain))) return;
+        if (tab.url.includes("blocked.html") || tab.url.includes("dashboard.html")) return;
+
+        try {
+            const storage = await chrome.storage.local.get(['userID', 'familyID']);
+            let currentUserID = storage.userID || "anonymous";
+            let currentFamilyID = storage.familyID || "none";
+
+            let pageText = "";
+            try {
+                const inject = await chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    func: () => {
+                        const title = document.title;
+                        const bodyText = (document.documentElement.innerText || document.documentElement.textContent || "").replace(/\s+/g, ' ').substring(0, 800);
+                        return `[標題]:${title} [內文]:${bodyText}`;
+                    }
+                });
+                pageText = inject[0]?.result || "";
+            } catch (err) { }
+
+            let screenshotBase64 = null;
+            try {
+                await new Promise(resolve => setTimeout(resolve, 500)); 
+                screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 30 });
+            } catch (imgErr) { }
+
+            const response = await fetch(`${CONFIG.API_BASE_URL}/scan`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'X-Extension-Secret': CONFIG.EXTENSION_SECRET 
+                },
+                body: JSON.stringify({ 
+                    url: tab.url, text: pageText, image: screenshotBase64,
+                    userID: currentUserID, familyID: currentFamilyID 
+                })
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            let reportData = data.report ? (typeof data.report === 'string' ? JSON.parse(data.report) : data.report) : data;
+            if (typeof reportData === 'string') reportData = JSON.parse(reportData); 
+
+            let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score) || 0;
+
+            // 🚨 自動發現危險：無情攔截！
+            if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
+                console.log("🚨 背景巡邏員發現危險，強制攔截！", tab.url);
+                const reasonText = reportData.reason || "系統深層掃描發現高度危險特徵！";
+                chrome.tabs.update(tabId, { 
+                    url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reasonText) + "&original_url=" + encodeURIComponent(tab.url) 
+                });
+            }
+        } catch (error) {
+            console.error("背景自動掃描發生錯誤:", error);
+        }
+    }
+});
+
+// ==========================================
+// 👆 原有功能完美保留：右鍵選單掃描
+// ==========================================
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     let targetData = ""; let scanType = ""; let imageUrl = "";
     if (info.menuItemId === "scan-text" && info.selectionText) { targetData = info.selectionText; scanType = "文字"; } 
@@ -63,7 +141,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 method: 'POST', 
                 headers: { 
                     'Content-Type': 'application/json',
-                    'X-Extension-Secret': CONFIG.EXTENSION_SECRET // 🔐 夾帶通關密語
+                    'X-Extension-Secret': CONFIG.EXTENSION_SECRET
                 },
                 body: JSON.stringify({ url: tab.url, text: targetData, image_url: imageUrl, userID: storage.userID || "anonymous", familyID: storage.familyID || "none" })
             });
@@ -84,10 +162,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                     
                     fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
                         method: 'POST', 
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'X-Extension-Secret': CONFIG.EXTENSION_SECRET // 🔐 夾帶通關密語
-                        },
+                        headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
                         body: JSON.stringify({ url: tab.url, text: `【手動掃描攔截】${reportData.reason}`, image_url: "", userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: true })
                     });
                 }
@@ -106,56 +181,35 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 });
 
+// ==========================================
+// 👆 原有功能完美保留：前端與背景的訊息溝通 (蒐證快門、觸發阻擋)
+// ==========================================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "captureScamTabWithEvidence") {
         const { url, reason, timestamp, familyID } = request;
         const tabId = sender.tab ? sender.tab.id : null;
-        const windowId = sender.tab ? sender.tab.windowId : null; // 🎯 升級 1：鎖定確切的視窗 ID，避免抓錯或失焦
+        const windowId = sender.tab ? sender.tab.windowId : null; 
         
         if (!tabId || !windowId) {
-            console.error("❌ 無法取得來源標籤頁與視窗 ID，取消快門。");
             sendResponse({status: "fail", message: "No tabId or windowId"});
             return true;
         }
 
-        console.log(`📸 正在對標籤頁 ${tabId} 按下證據快門... URL: ${url.substring(0, 40)}`);
-
         (async () => {
             try {
-                // 🎯 升級 2：指定 windowId，取代原本的 null
                 const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
-                console.log("✅ 證據快照擷取完成 (Base64)");
-
-                const apiUrl = `${CONFIG.API_BASE_URL}/api/submit_evidence`;
-                console.log(`⏳ 正在上傳證據到雲端: ${apiUrl}`);
-
-                const fetchResponse = await fetch(apiUrl, {
+                const fetchResponse = await fetch(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-Extension-Secret': CONFIG.EXTENSION_SECRET // 🔐 夾帶通關密語
-                    },
-                    body: JSON.stringify({
-                        url: url,
-                        timestamp: timestamp,
-                        familyID: familyID,
-                        screenshot_base64: dataUrl,
-                        reported_reason: reason
-                    })
+                    headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
+                    body: JSON.stringify({ url: url, timestamp: timestamp, familyID: familyID, screenshot_base64: dataUrl, reported_reason: reason })
                 });
-                
                 const data = await fetchResponse.json();
-                console.log("✅ 雲端上傳證據回應:", data);
-
                 sendResponse({status: "success", backendResponse: data});
-
             } catch (error) {
-                // 🎯 升級 3：捕捉截圖權限崩潰，不讓整個背景服務死當
-                console.error("❌ 截圖被 Chrome 瀏覽器阻擋 (極可能是 file:/// 權限問題):", error);
+                console.error("❌ 截圖權限受限:", error);
                 sendResponse({status: "error", details: "截圖受限於 Chrome 本機安全機制"});
             }
         })();
-
         return true; 
     }
 
@@ -169,10 +223,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         chrome.storage.local.get(['userID', 'familyID']).then(storage => {
             fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
                 method: 'POST', 
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-Extension-Secret': CONFIG.EXTENSION_SECRET // 🔐 夾帶通關密語
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
                 body: JSON.stringify({ url: sender.tab ? sender.tab.url : "未知網址", text: `【攔截】${request.reason}`, image_url: "", userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: true })
             }).catch(e => console.log("推播請求失敗:", e));
         });
@@ -182,10 +233,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         chrome.storage.local.get(['userID', 'familyID']).then(storage => {
             fetch(`${CONFIG.API_BASE_URL}/scan`, { 
                 method: 'POST', 
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-Extension-Secret': CONFIG.EXTENSION_SECRET // 🔐 夾帶通關密語
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
                 body: JSON.stringify({ url: request.pageUrl, text: "背景圖片自動分析", image_url: request.imageUrl, userID: storage.userID || "anonymous", familyID: storage.familyID || "none", is_urgent: false })
             }).then(res => res.json()).then(data => {
                 let reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
