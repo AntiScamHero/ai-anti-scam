@@ -109,21 +109,7 @@ if (scanBtnElement) {
                 return;
             }
 
-            if (isWhitelisted(tab.url)) {
-                if (loadingDiv) loadingDiv.style.display = "none";
-                if (document.getElementById('score-text')) document.getElementById('score-text').innerText = `風險指數: 0%`;
-                if (document.getElementById('report-level')) document.getElementById('report-level').innerText = "安全無虞";
-                if (document.getElementById('report-reason')) document.getElementById('report-reason').innerText = "此為系統內建的受信任大型網站 (白名單)。";
-                if (document.getElementById('report-advice')) document.getElementById('report-advice').innerText = "請放心瀏覽！";
-                
-                if (scoreContainer) scoreContainer.style.display = "block";
-                if (reportContainer) reportContainer.style.display = "block";
-                if (appBody) appBody.className = "theme-safe";
-                if (headerTitle) headerTitle.innerText = "✅ 檢測通過：安全網頁";
-                setTimeout(() => { if (progressBar) progressBar.style.width = "0%"; }, 150);
-                resetBtn(scanBtn);
-                return;
-            }
+            // 💡 註：原本這裡有一段攔截白名單的程式碼，現在已經拔除，讓前端乖乖把所有網頁都傳給後端！
 
             let pageText = "";
             try {
