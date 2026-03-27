@@ -50,13 +50,13 @@ async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
 }
 
 // ==========================================
-// 🚀 新增功能：全自動背景巡邏員 (網頁載入即自動掃描)
+// 🚀 全自動背景巡邏員
 // ==========================================
 const whitelist = [
     'google.com', 'youtube.com', 'yahoo.com.tw', 'gov.tw', 
     'facebook.com', 'line.me', 'instagram.com', 
     'momoshop.com.tw', 'pchome.com.tw', 'shopee.tw',
-    'chrome://', 'edge://', 'extensions'
+    'chrome://', 'edge://', 'extensions', 'render.com'
 ];
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
@@ -112,7 +112,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
             if (!response || !response.ok) return;
 
             const data = await response.json();
-            
             let reportData = {};
             try {
                 if (data && data.report) {
@@ -130,15 +129,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
             if (reportData) {
                 score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score || data.riskScore) || 0;
             }
+            
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                 console.log("🚨 背景巡邏員發現危險，強制攔截！", tab.url);
                 const reasonText = reportData?.reason || "系統深層掃描發現高度危險特徵！";
                 
                 chrome.tabs.get(tabId, (currentTab) => {
-                    if (chrome.runtime.lastError) {
-                        console.log("[背景巡邏] 目標分頁已關閉，取消攔截。");
-                        return;
-                    }
+                    if (chrome.runtime.lastError) return;
                     chrome.tabs.update(tabId, { 
                         url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reasonText) + "&original_url=" + encodeURIComponent(tab.url) 
                     }).catch(e => console.log("跳轉攔截頁面失敗:", e));
@@ -151,7 +148,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 // ==========================================
-// 👆 原有功能完美保留：右鍵選單掃描
+// 右鍵選單掃描
 // ==========================================
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     let targetData = ""; let scanType = ""; let imageUrl = "";
@@ -174,17 +171,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             const data = await response.json();
             
             let reportData = data;
-            if (data.report) {
-                reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
-            }
-            
+            if (data.report) reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
             let score = parseInt(reportData.riskScore) || 0; 
             chrome.notifications.clear("scanning");
             
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                 if (tab && tab.id) {
                     chrome.tabs.update(tab.id, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reportData.reason) + "&original_url=" + encodeURIComponent(tab.url) });
-                    chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
+                    chrome.tts.speak("警告！這個網站是騙人的，千萬不要輸入資料！", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
                     
                     fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
                         method: 'POST', 
@@ -194,9 +188,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 }
             } else if (score >= 60) {
                 if (tab && tab.id) {
-                    chrome.tabs.sendMessage(tab.id, { action: "show_alert", data: reportData }).catch(err => {
-                        console.log("無法傳送中度風險警告訊息:", err);
-                    });
+                    chrome.tabs.sendMessage(tab.id, { action: "show_alert", data: reportData }).catch(err => {});
                 }
             } else {
                 chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: "✅ 掃描完成", message: `【風險指數: ${score}%】\n${reportData.advice || "請保持警覺"}` });
@@ -208,9 +200,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // ==========================================
-// 👆 原有功能完美保留：前端與背景的訊息溝通 (蒐證快門、觸發阻擋)
+// 💡 前端與背景的訊息溝通 (終極防呆版蒐證快門)
 // ==========================================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    
+    // 📸 處理來自 content.js 的前端緊急攔截
     if (request.action === "captureScamTabWithEvidence") {
         const { url, reason, timestamp, familyID } = request;
         const tabId = sender.tab ? sender.tab.id : null;
@@ -222,18 +216,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
 
         (async () => {
+            let dataUrl = null;
+            // 📸 1. 嘗試拍照 (獨立防呆，失敗絕對不中斷)
             try {
-                const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
-                const fetchResponse = await fetch(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
-                    body: JSON.stringify({ url: url, timestamp: timestamp, familyID: familyID, screenshot_base64: dataUrl, reported_reason: reason })
-                });
-                const data = await fetchResponse.json();
-                sendResponse({status: "success", backendResponse: data});
+                dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
             } catch (error) {
-                console.error("❌ 截圖權限受限:", error);
-                sendResponse({status: "error", details: "截圖受限於 Chrome 本機安全機制"});
+                console.log("❌ 截圖跳轉太快或受限，改用純文字備援");
+            }
+
+            // 💾 2. 保證寫入戰情室 (有圖傳圖，沒圖傳字)
+            try {
+                if (dataUrl) {
+                    const fetchResponse = await fetch(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
+                        body: JSON.stringify({ url: url, timestamp: timestamp, familyID: familyID, screenshot_base64: dataUrl, reported_reason: reason })
+                    });
+                    const data = await fetchResponse.json();
+                    sendResponse({status: "success", backendResponse: data});
+                } else {
+                    // 備援方案：沒照片也要把警報送進戰情室！
+                    chrome.storage.local.get(['userID']).then(async storage => {
+                        const fetchResponse = await fetch(`${CONFIG.API_BASE_URL}/scan`, { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
+                            body: JSON.stringify({ 
+                                url: url, 
+                                text: `【前端緊急攔截】${reason}`, 
+                                image_url: "", 
+                                userID: storage.userID || "anonymous", 
+                                familyID: familyID, 
+                                is_urgent: true 
+                            })
+                        });
+                        const data = await fetchResponse.json();
+                        sendResponse({status: "success", backendResponse: data});
+                    });
+                }
+            } catch (apiError) {
+                console.error("❌ API 傳送失敗:", apiError);
+                sendResponse({status: "error", details: "API 連線失敗"});
             }
         })();
         return true; 
@@ -244,36 +266,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const windowId = sender.tab ? sender.tab.windowId : null;
         const tabId = sender.tab ? sender.tab.id : null;
 
-        // 🛑 【新增免死金牌】：開發環境與維基百科免死金牌
-        const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org'];
+        const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org', 'render.com'];
         if (devWhitelist.some(domain => originalUrl.includes(domain))) {
-            console.log("🛠️ 觸發免死金牌，放行開發環境:", originalUrl);
             return true; 
         }
 
         chrome.storage.local.get(['userID', 'familyID']).then(async storage => {
             let screenshotBase64 = null;
             try {
-                if (windowId) {
-                    screenshotBase64 = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
-                }
-            } catch(e) { console.log("緊急快門失敗:", e); }
+                if (windowId) screenshotBase64 = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
+            } catch(e) { }
 
             if (tabId) {
                 chrome.tabs.update(tabId, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
             }
-            chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
+            chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
 
             if (screenshotBase64) {
                 fetchWithRetry(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
                     body: JSON.stringify({ 
-                        url: originalUrl, 
-                        timestamp: new Date().toLocaleTimeString('zh-TW', { hour12: false }), 
-                        familyID: storage.familyID || "none", 
-                        screenshot_base64: screenshotBase64, 
-                        reported_reason: request.reason 
+                        url: originalUrl, timestamp: new Date().toLocaleTimeString('zh-TW', { hour12: false }), 
+                        familyID: storage.familyID || "none", screenshot_base64: screenshotBase64, reported_reason: request.reason 
                     })
                 });
             } else {
