@@ -16,6 +16,7 @@ import html
 import base64             
 import urllib.parse
 import uuid
+import time # 👈 新增 time 模組，用於模擬 AI 備用打字延遲
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -33,7 +34,6 @@ from firebase_admin import credentials, db, storage
 
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
-# 🚀 新增引入：PostbackEvent, TemplateMessage, ButtonsTemplate, PostbackAction 用於誤判回報按鈕
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest, 
@@ -67,6 +67,33 @@ limiter = Limiter(
 )
 
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+# ==========================================
+# 🛡️ 核心升級：防盜刷 API 守門員
+# ==========================================
+# 這個金鑰必須跟前端 config.js 的 EXTENSION_SECRET 保持完全一致！
+API_SECRET = os.getenv("EXTENSION_SECRET", "ai_shield_secure_2026")
+
+@app.before_request
+def check_extension_secret():
+    # 1. 允許不需 Token 的公開路由 (首頁狀態、LINE 回呼) 與 CORS 預檢請求
+    if request.path in ['/', '/callback'] or request.method == 'OPTIONS':
+        return
+    
+    # 2. 允許 Socket.IO 的即時連線
+    if request.path.startswith('/socket.io/'):
+        return
+
+    # 3. 嚴格審查：檢查請求 Header 是否帶有正確的密語
+    provided_secret = request.headers.get('X-Extension-Secret')
+    if provided_secret != API_SECRET:
+        client_ip = request.remote_addr
+        print(f"🚨 阻擋非法 API 請求 (來源 IP: {client_ip}) - 缺少或錯誤的金鑰", flush=True)
+        return jsonify({
+            "status": "error", 
+            "message": "Access Denied: 偵測到未經授權的 API 呼叫，該行為已被系統記錄。"
+        }), 403
+# ==========================================
 
 @app.errorhandler(HTTPException)
 def handle_http_exception(e):
@@ -121,7 +148,6 @@ def check_google_safe_browsing(url):
 configuration = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 💡 可以設定專門接收警報的管理員 ID，若無則預設使用一般 LINE_USER_ID
 ADMIN_LINE_ID = os.getenv("ADMIN_LINE_ID", os.getenv("LINE_USER_ID"))
 LINE_USER_ID = os.getenv("LINE_USER_ID")
 
@@ -426,11 +452,10 @@ def scan_url():
     web_text = mask_sensitive_data(raw_text)
     is_white_listed = is_genuine_white_listed(target_url)
 
-    # 🚀 升級：檢查 Firebase 上的「雲端動態白名單」
     if not is_white_listed and firebase_initialized and target_url:
         try:
             host = urlparse(target_url.lower().strip()).hostname or target_url
-            safe_domain_key = host.replace('.', '_dot_') # Firebase 鍵值不允許包含 '.'
+            safe_domain_key = host.replace('.', '_dot_') 
             cloud_whitelist = db.reference(f'trusted_domains/{safe_domain_key}').get()
             if cloud_whitelist:
                 is_white_listed = True
@@ -616,7 +641,6 @@ def handle_message(event):
         except Exception as e: 
             print(f"LINE Bot 處理錯誤: {e}", flush=True)
 
-# 🚀 新增：處理 LINE Bot 的按鈕點擊事件 (加入白名單)
 @handler.add(PostbackEvent)
 def handle_postback(event):
     if not firebase_initialized: return
@@ -671,6 +695,7 @@ def send_family_broadcast():
     socketio.emit('family_urgent_broadcast', {'message': message}, room=family_id)
     return jsonify({"status": "success", "message": "已成功發送親情廣播！"})
 
+# 🚨 升級：AI 演練室救急備胎機制
 @app.route('/api/simulate_scam', methods=['POST'])
 def simulate_scam():
     data = request.json or {}
@@ -680,15 +705,25 @@ def simulate_scam():
     
     def generate():
         try:
+            # 💡 正常模式：嘗試呼叫真實的 AI
             for text_chunk in stream_scam_simulation(chat_history, scenario_type, user_message):
                 yield f"data: {json.dumps({'text': text_chunk})}\n\n"
             yield "data: [DONE]\n\n"
+            
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            # 🚨 救急模式：如果真實 AI 出錯（例如 API 金鑰沒設定、額度用完）
+            # 會自動觸發這段「假 AI 打字機」，保證 Demo 順利，絕對不開天窗！
+            print(f"⚠️ 真實 AI 發生錯誤: {e}，自動切換備用演練回覆", flush=True)
+            
+            fallback_reply = f"【系統備用回覆】您好，您剛才說「{user_message[:10]}...」。因為目前 AI 伺服器連線異常，這是一則自動防護演練回覆。提醒您：切勿點擊不明連結或匯款！"
+            
+            for char in fallback_reply:
+                yield f"data: {json.dumps({'text': char})}\n\n"
+                time.sleep(0.05) # 模擬 AI 打字延遲
+            yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
 
-# 🚀 升級版：收到誤判回報時，觸發 LINE 互動按鈕給管理員
 @app.route('/api/report_false_positive', methods=['POST'])
 def report_fp():
     data = request.json or {}
@@ -697,11 +732,9 @@ def report_fp():
         try:
             db.reference('false_positives').push({**data, 'timestamp': get_tw_time()})
             
-            # 使用 ADMIN_LINE_ID，若未設定則使用原本的 LINE_USER_ID
             if ADMIN_LINE_ID:
                 domain = urlparse(url).hostname or url
                 
-                # 建立按鈕選單 (Template Message)
                 buttons_template = ButtonsTemplate(
                     title='🚨 收到誤判回報',
                     text=f'網域: {domain[:35]}\n請問是否要將此網域加入白名單並放行？',
