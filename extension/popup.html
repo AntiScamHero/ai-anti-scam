@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    /* 🎨 基礎與亮色模式 (預設) */
+    :root { 
+        --bg-color: #f0f2f5; --card-bg: white; --text-main: #333; 
+        --text-sub: #666; --border: #eee; --panel-bg: #fafafa; 
+        --shield-green-1: #34c759; --shield-green-2: #1e8e3e;
+    }
+    
+    /* 🌙 深色模式支援 (Dark Mode) */
+    @media (prefers-color-scheme: dark) {
+        :root { 
+            --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; 
+            --text-sub: #aaaaaa; --border: #333; --panel-bg: #2a2a2a; 
+        }
+    }
+
+    body { width: 380px; padding: 15px; font-family: '微軟正黑體', 'Segoe UI', Roboto, sans-serif; background-color: var(--bg-color); transition: all 0.3s ease; margin: 0; color: var(--text-main); }
+    .app-card { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); transition: 0.5s; border: 1px solid var(--border); }
+    h2 { margin-top: 0; margin-bottom: 15px; padding: 12px; color: white; background-color: #1a73e8; font-size: 18px; text-align: center; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.5s; letter-spacing: 1px; cursor: default; }
+    
+    button { width: 100%; padding: 12px; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.3s; margin-bottom: 12px; }
+    #scan-btn { background: linear-gradient(135deg, #333333 0%, #000000 100%); }
+    @media (prefers-color-scheme: dark) { #scan-btn { background: linear-gradient(135deg, #555 0%, #222 100%); border: 1px solid #444; } }
+    button:hover { opacity: 0.9; transform: translateY(-1px); }
+    
+    /* 載入動畫 */
+    #loading { display: none; text-align: center; padding: 20px; font-weight: bold; color: var(--text-sub); font-size: 14px; }
+    #loading .spinner { border: 3px solid var(--border); border-top: 3px solid #1a73e8; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; margin-right: 10px; vertical-align: middle; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    /* 掃描分數區塊 */
+    #score-container { display: none; background: rgba(26, 115, 232, 0.05); padding: 15px; border-radius: 10px; margin-bottom: 15px; text-align: center; border: 1px solid var(--border); }
+    .score-title { font-size: 28px; font-weight: 900; margin-bottom: 12px; transition: 0.5s; }
+    .progress-wrapper { width: 100%; position: relative; }
+    .progress-bg { width: 100%; height: 10px; background-color: var(--border); border-radius: 10px; overflow: hidden; position: relative; }
+    .progress-bar { height: 100%; width: 0%; border-radius: 10px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s; background-size: 20px 20px; background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent); animation: progress-stripes 1s linear infinite; }
+    @keyframes progress-stripes { from { background-position: 20px 0; } to { background-position: 0 0; } }
+    
+    /* AI 報告區塊 */
+    #report-container { display: none; border-top: 1px solid var(--border); margin-top: 15px; padding-top: 15px; }
+    .report-section { margin-bottom: 12px; background: var(--panel-bg); padding: 10px; border-radius: 6px; }
+    .section-title { font-size: 13px; color: var(--text-sub); font-weight: bold; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .section-content { font-size: 14px; color: var(--text-main); line-height: 1.5; font-weight: 500; }
+    
+    /* 🌟 新增：家族防禦力戰情室 (遊戲化區塊) */
+    #defense-room { background: var(--panel-bg); padding: 15px; border-radius: 12px; border: 2px solid #e6f4ea; margin-top: 20px; text-align: center; position: relative; overflow: hidden; }
+    @media (prefers-color-scheme: dark) { #defense-room { border-color: #1a3c23; } }
+    .defense-header { font-size: 16px; font-weight: 800; color: var(--shield-green-2); margin-bottom: 10px; }
+    
+    /* 圓形進度條 CSS */
+    .circular-chart { display: block; margin: 5px auto; max-width: 140px; max-height: 140px; }
+    .circle-bg { fill: none; stroke: var(--border); stroke-width: 3.8; }
+    .circle { fill: none; stroke-width: 2.8; stroke-linecap: round; animation: fill-progress 1.5s ease-out forwards; }
+    @keyframes fill-progress { 0% { stroke-dasharray: 0, 100; } }
+    .percentage { fill: var(--text-main); font-family: 'Segoe UI', sans-serif; font-size: 0.45em; text-anchor: middle; font-weight: 900; }
+    .percentage-sub { fill: var(--text-sub); font-size: 0.18em; text-anchor: middle; }
+    
+    /* 積分明細 */
+    .score-details { display: flex; justify-content: space-around; font-size: 12px; color: var(--text-main); margin-top: 10px; font-weight: bold; background: var(--card-bg); padding: 8px; border-radius: 8px; border: 1px dashed var(--shield-green-1); }
+    .score-badge { display: flex; flex-direction: column; align-items: center; }
+    .score-plus { color: var(--shield-green-2); font-size: 14px; font-weight: 900; }
+
+    /* 家庭綁定區塊 */
+    #family-container { background: var(--panel-bg); padding: 18px; border-radius: 12px; border: 1px solid var(--border); margin-top: 15px; position: relative; }
+    #family-container::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background-color: #1a73e8; border-radius: 12px 0 0 12px;}
+    .family-header { font-size: 15px; font-weight: 700; color: var(--text-main); margin-bottom: 12px; text-align: center; }
+    .status-text { text-align: center; font-size: 12px; color: var(--text-sub); margin-bottom: 12px; background: var(--card-bg); padding: 5px; border-radius: 4px; display: block; }
+    
+    .btn-guardian { background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%); }
+    .btn-member { background: linear-gradient(135deg, #34c759 0%, #1e8e3e 100%); margin-bottom: 0;}
+    .invite-input { width: 90%; padding: 12px; margin-bottom: 10px; border: 2px solid var(--border); border-radius: 8px; outline: none; text-align: center; font-size: 18px; letter-spacing: 4px; font-weight: bold; background: var(--card-bg); color: var(--text-main); display: block; margin-left: auto; margin-right: auto;}
+    
+    #code_box { display: none; background: rgba(255, 77, 77, 0.1); border: 2px dashed #ff4d4d; padding: 15px; border-radius: 8px; margin-bottom: 12px; text-align: center; cursor: pointer; }
+    #display_code { font-size: 26px; color: #ff4d4d; letter-spacing: 5px; font-weight: 900; }
+    
+    /* 動態主題顏色 */
+    .theme-safe h2 { background-color: #1e8e3e; } .theme-safe .score-title { color: #1e8e3e; } .theme-safe .progress-bar { background-color: #1e8e3e; } .theme-safe #score-container { border-color: #1e8e3e; } 
+    .theme-warning h2 { background-color: #f29900; } .theme-warning .score-title { color: #f29900; } .theme-warning .progress-bar { background-color: #f29900; } .theme-warning #score-container { border-color: #f29900; } 
+    .theme-danger .app-card { border: 2px solid #d93025; box-shadow: 0 0 15px rgba(217, 48, 37, 0.3); } .theme-danger h2 { background-color: #d93025; animation: pulse-red 1.5s infinite; } .theme-danger .score-title { color: #d93025; } .theme-danger .progress-bar { background-color: #d93025; }
+    @keyframes pulse-red { 0% { box-shadow: 0 2px 4px rgba(217, 48, 37, 0.2); } 50% { box-shadow: 0 0 15px rgba(217, 48, 37, 0.6); } 100% { box-shadow: 0 2px 4px rgba(217, 48, 37, 0.2); } }
+  </style>
+</head>
+<body id="app-body">
+  <div class="app-card">
+    <h2 id="header-title">🛡️ AI 防詐盾牌</h2>
+    
+    <button id="scan-btn">即時掃描當前網頁</button>
+    <div id="loading"><div class="spinner"></div>深度網頁文本萃取中... AI 大腦分析中</div>
+    
+    <div id="score-container">
+      <div class="score-title" id="score-text">風險指數: 0%</div>
+      <div class="progress-wrapper"><div class="progress-bg"><div class="progress-bar" id="progress-bar"></div></div></div>
+    </div>
+    
+    <div id="report-container">
+      <div class="report-section"><div class="section-title">📌 風險等級</div><div class="section-content" id="report-level"></div></div>
+      <div class="report-section"><div class="section-title">🔍 分析原因</div><div class="section-content" id="report-reason"></div></div>
+      <div class="report-section"><div class="section-title">💡 資安建議</div><div class="section-content" id="report-advice"></div></div>
+    </div>
+
+    <div id="defense-room">
+      <div class="defense-header">🛡️ 家族防禦力積分</div>
+      
+      <svg viewBox="0 0 36 36" class="circular-chart">
+        <defs>
+          <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#34c759" />
+            <stop offset="100%" stop-color="#1e8e3e" />
+          </linearGradient>
+        </defs>
+        <path class="circle-bg"
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+        />
+        <path class="circle" id="shield-circle"
+          stroke="url(#shieldGradient)"
+          stroke-dasharray="85, 100" 
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+        />
+        <text x="18" y="17.5" class="percentage" id="shield-score-text">85</text>
+        <text x="18" y="23.5" class="percentage-sub">防禦積分</text>
+      </svg>
+
+      <div class="score-details">
+        <div class="score-badge">
+          <span>🛡️ 成功攔截</span>
+          <span class="score-plus">+10 分</span>
+        </div>
+        <div class="score-badge">
+          <span>🎮 防詐學習</span>
+          <span class="score-plus">+5 分</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="family-container">
+      <div class="family-header">🔗 守護者連線設定</div>
+      <div class="status-text" id="bind-status">狀態：尚未綁定</div>
+      
+      <button id="btn_create_family" class="btn-guardian">建立家庭群組 (守護者)</button>
+      
+      <div id="code_box" title="點擊複製邀請碼">
+          <div style="font-size: 12px; margin-bottom: 5px;">您的邀請碼 (點擊複製)</div>
+          <div id="display_code">------</div>
+      </div>
+      
+      <input type="text" id="invite_input" class="invite-input" placeholder="輸入 6 位邀請碼">
+      <button id="btn_join_family" class="btn-member">加入防護網 (被守護者)</button>
+    </div>
+
+  </div> 
+
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
