@@ -16,7 +16,7 @@ import html
 import base64             
 import urllib.parse
 import uuid
-import time # 👈 新增 time 模組，用於模擬 AI 備用打字延遲
+import time # 👈 用於模擬 AI 備用打字延遲
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 
@@ -601,7 +601,7 @@ def scan_url():
                         'url': target_url, 'riskScore': 95, 'reason': report_dict['reason'], 'timestamp': timestamp
                     }, room=family_id)
                     
-                    # 👇 新增這段：補上 LINE 的緊急推播通報！
+                    # 👇 補上 LINE 的緊急推播通報！
                     send_dynamic_line_alert(
                         family_id=family_id, 
                         url=target_url, 
@@ -615,7 +615,9 @@ def scan_url():
 
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
+    # 👇 確保 safe_url_key 正確定義
     safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:120] if target_url else "no_url"
+    
     if firebase_initialized and target_url and not image_url and not is_urgent and not is_white_listed:
         try:
             cached = db.reference(f'url_cache/{safe_url_key}').get()
@@ -637,7 +639,7 @@ def scan_url():
                     scam_dna=["系統強制警示"]
                 )
                 
-                # 👇 補上這段：讓緊急攔截也能完美存入戰情室表格！
+                # 讓緊急攔截也能完美存入戰情室表格
                 try:
                     report_dict = {
                         "riskScore": 100,
@@ -719,7 +721,7 @@ def callback():
     return 'OK'
 
 @handler.add(MessageEvent, message=TextMessageContent)
-def handle_message(event):
+def handle_line_message(event):
     if not firebase_initialized: return
     user_msg = event.message.text
     line_user_id = event.source.user_id 
