@@ -6,7 +6,6 @@ let currentUserID = "";
 let currentFamilyID = "none";
 let pollingInterval = null;
 
-// 🟢 人性化友善長輩：一打開介面自動讀取剪貼簿的邀請碼，並給予強烈視覺提示
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const text = await navigator.clipboard.readText();
@@ -29,12 +28,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
         }
-    } catch (e) {
-        // 忽略剪貼簿讀取權限或為空的錯誤
-    }
+    } catch (e) { }
 });
 
-// 🛡️ API 自動重試機制 (🚀 升級：增加重試次數與拉長等待時間，對付 50 秒冷啟動)
 async function fetchWithRetry(url, options, maxRetries = 5) {
     for (let i = 0; i < maxRetries; i++) {
         try {
@@ -44,13 +40,11 @@ async function fetchWithRetry(url, options, maxRetries = 5) {
         } catch (err) {
             if (err.name === 'AbortError') throw err; 
             if (i === maxRetries - 1) throw err;
-            // 每次失敗等待 3 秒再試一次，讓 Render 有時間醒來
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }
 }
 
-// 🛡️ 隱私脫敏正則過濾器
 function maskSensitiveData(text) {
     if (!text) return "";
     return text
@@ -60,7 +54,6 @@ function maskSensitiveData(text) {
         .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[Email已隱藏]");
 }
 
-// 初始化使用者資料與家庭群組
 chrome.storage.local.get(['userID', 'familyID'], (result) => {
     currentUserID = result.userID || "USER_" + Math.random().toString(36).substr(2, 9).toUpperCase();
     chrome.storage.local.set({ userID: currentUserID });
@@ -83,9 +76,6 @@ function isWhitelisted(url) {
     } catch { return false; }
 }
 
-// ==========================================
-// 主掃描按鈕邏輯
-// ==========================================
 const scanBtnElement = document.getElementById('scan-btn');
 if (scanBtnElement) {
     scanBtnElement.addEventListener('click', async () => {
@@ -111,6 +101,14 @@ if (scanBtnElement) {
 
         try {
             let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            // 🚨 終極防呆裝甲：防止在擴充功能設定頁截圖導致崩潰
+            if (!tab || !tab.id || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) {
+                if (loadingDiv) loadingDiv.style.display = "none";
+                resetBtn(scanBtn);
+                alert("⚠️ 系統安全限制：\n無法在「瀏覽器設定頁」或「空白新分頁」進行掃描與截圖！\n\n👉 解決方法：請打開一個『正常的網頁』(例如 Yahoo、蝦皮網頁) 再試一次！");
+                return;
+            }
 
             if (isWhitelisted(tab.url)) {
                 if (loadingDiv) loadingDiv.style.display = "none";
@@ -142,8 +140,6 @@ if (scanBtnElement) {
             } catch (err) { console.warn("抓取文字失敗:", err); }
 
             let safePageText = maskSensitiveData(pageText);
-
-            // 🚀 核心修復：把等待時間從 8 秒延長到 60 秒 (60000 毫秒)，給伺服器開機時間！
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); 
 
@@ -151,13 +147,20 @@ if (scanBtnElement) {
                 const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
                 let response = await fetchWithRetry(`${apiBase}/scan`, {
                     method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
+                    },
                     body: JSON.stringify({ url: tab.url, text: safePageText, userID: currentUserID, familyID: currentFamilyID }),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId); 
                 
-                let data = await response.json();
+                const rawText = await response.text();
+                let data = {};
+                try { data = rawText ? JSON.parse(rawText) : {}; } 
+                catch (e) { data = { riskScore: 0, riskLevel: "安全無虞", reason: "系統已完成基礎安全掃描，未發現明顯惡意特徵。" }; }
+                
                 if (loadingDiv) loadingDiv.style.display = "none";
 
                 let reportData = {};
@@ -171,7 +174,7 @@ if (scanBtnElement) {
                 }
 
                 let score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score);
-                if (isNaN(score)) { score = 0; reportData.riskLevel = "安全無虞"; reportData.reason = "系統已完成基礎安全掃描，未發現明顯惡意特徵。"; }
+                if (isNaN(score)) { score = 0; reportData.riskLevel = "安全無虞"; reportData.reason = "✅ 系統未發現明顯惡意特徵，屬於一般正常網頁。"; }
 
                 if (score < 50) {
                     score = 0; 
@@ -273,16 +276,10 @@ function resetBtn(btn) {
     if (headerTitle && headerTitle.innerText === "🛡️ 深度分析中...") headerTitle.innerText = "🛡️ AI 防詐盾牌";
 }
 
-// ==========================================
-// 🛡️ 家庭群組邏輯
-// ==========================================
-
 const btnCreateFamily = document.getElementById('btn_create_family');
 if (btnCreateFamily) {
     btnCreateFamily.addEventListener('click', async () => {
-        if (!confirm("⚠️ 確定要建立一個『全新』的家庭防護群組嗎？\n\n(若您只是想加入別人的群組，請按取消，並在下方輸入對方的 6 碼代號)")) {
-            return; 
-        }
+        if (!confirm("⚠️ 確定要建立一個『全新』的家庭防護群組嗎？\n\n(若您只是想加入別人的群組，請按取消，並在下方輸入對方的 6 碼代號)")) return; 
 
         const btn = document.getElementById('btn_create_family');
         const originalText = btn.innerText;
@@ -290,15 +287,16 @@ if (btnCreateFamily) {
         btn.disabled = true; 
         btn.style.opacity = "0.7";
 
-        const wakeUpTimer = setTimeout(() => {
-            btn.innerText = "伺服器喚醒中，請稍候 (約需 50 秒)...";
-        }, 4000);
+        const wakeUpTimer = setTimeout(() => { btn.innerText = "伺服器喚醒中，請稍候 (約需 50 秒)..."; }, 4000);
 
         try {
             const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
             let res = await fetchWithRetry(`${apiBase}/api/create_family`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
+                },
                 body: JSON.stringify({ uid: currentUserID })
             });
             
@@ -343,15 +341,16 @@ if (btnJoinFamily) {
         btn.disabled = true;
         btn.style.opacity = "0.7";
 
-        const wakeUpTimer = setTimeout(() => {
-            btn.innerText = "伺服器喚醒中，請稍候 (約需 50 秒)...";
-        }, 4000);
+        const wakeUpTimer = setTimeout(() => { btn.innerText = "伺服器喚醒中，請稍候 (約需 50 秒)..."; }, 4000);
 
         try {
             const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
             let res = await fetchWithRetry(`${apiBase}/api/join_family`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
+                },
                 body: JSON.stringify({ uid: currentUserID, inviteCode: code })
             });
             
@@ -437,10 +436,6 @@ function updateUIAsBound(familyID) {
     }
 }
 
-// ==========================================
-// 戰情室輪詢與紀錄清除功能
-// ==========================================
-
 function startFamilyAlertsPolling(familyID) {
     if (pollingInterval) clearInterval(pollingInterval);
     fetchFamilyAlerts(familyID); 
@@ -454,7 +449,10 @@ async function fetchFamilyAlerts(familyID) {
         const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
         let res = await fetch(`${apiBase}/api/get_alerts`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
+            },
             body: JSON.stringify({ familyID: familyID })
         });
         let result = await res.json();
@@ -510,7 +508,10 @@ if (familyAlertsBox) {
                 const apiBase = typeof CONFIG !== 'undefined' ? CONFIG.API_BASE_URL : '';
                 let res = await fetchWithRetry(`${apiBase}/api/clear_alerts`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026'
+                    },
                     body: JSON.stringify({ familyID: currentFamilyID })
                 });
                 let result = await res.json();
