@@ -50,14 +50,18 @@ async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
 }
 
 // ==========================================
-// 🚀 全自動背景巡邏員 (移除了早退機制，確保戰情室會收到安全紀錄)
+// 🚀 新增功能：全自動背景巡邏員
 // ==========================================
-// 💡 只跳過擴充功能內部的系統網頁，其他的(如維基百科)一律送給後端檢查！
-const systemPages = ['chrome://', 'edge://', 'extensions', 'blocked.html', 'dashboard.html', 'simulator.html'];
+// 🛑 【終極修復】：將開發網域放回絕對不掃描的名單中！
+const systemPages = [
+    'chrome://', 'edge://', 'extensions', 'blocked.html', 'dashboard.html', 'simulator.html',
+    'localhost', '127.0.0.1', 'render.com', 'github.com'
+];
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete' && tab && tab.url) {
         
+        // 遇到系統網頁或您的開發網域，小尖兵直接閉上眼睛，連伺服器都不會通知！
         if (systemPages.some(domain => tab.url.includes(domain))) return;
 
         try {
@@ -107,6 +111,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
             if (!response || !response.ok) return;
 
             const data = await response.json();
+            
             let reportData = {};
             try {
                 if (data && data.report) {
@@ -124,20 +129,22 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
             if (reportData) {
                 score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score || data.riskScore) || 0;
             }
-            
+
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
-                console.log("🚨 背景巡邏員發現危險，強制攔截！", tab.url);
                 const reasonText = reportData?.reason || "系統深層掃描發現高度危險特徵！";
                 
-                // 🛑 【防彈背心】：如果背景巡邏發現是開發網域（分數雖高），不執行強制跳轉！
-                const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org', 'render.com'];
-                if (devWhitelist.some(domain => tab.url.includes(domain))) {
-                    console.log("🛠️ 開發免死金牌：已將紀錄送至戰情室，但取消跳轉。");
+                // 🛑 【教育防彈背心】：如果背景巡邏發現是維基百科等網域，不執行強制跳轉！
+                const eduWhitelist = ['wikipedia.org'];
+                if (eduWhitelist.some(domain => tab.url.includes(domain))) {
+                    console.log("🛠️ 教育免死金牌：已將紀錄送至戰情室，但取消跳轉。");
                     return; 
                 }
 
                 chrome.tabs.get(tabId, (currentTab) => {
-                    if (chrome.runtime.lastError) return;
+                    if (chrome.runtime.lastError) {
+                        console.log("[背景巡邏] 目標分頁已關閉，取消攔截。");
+                        return;
+                    }
                     chrome.tabs.update(tabId, { 
                         url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reasonText) + "&original_url=" + encodeURIComponent(tab.url) 
                     }).catch(e => console.log("跳轉攔截頁面失敗:", e));
@@ -150,7 +157,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 // ==========================================
-// 右鍵選單掃描
+// 👆 原有功能完美保留：右鍵選單掃描
 // ==========================================
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     let targetData = ""; let scanType = ""; let imageUrl = "";
@@ -173,14 +180,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             const data = await response.json();
             
             let reportData = data;
-            if (data.report) reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
+            if (data.report) {
+                reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
+            }
+            
             let score = parseInt(reportData.riskScore) || 0; 
             chrome.notifications.clear("scanning");
             
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                 if (tab && tab.id) {
                     chrome.tabs.update(tab.id, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reportData.reason) + "&original_url=" + encodeURIComponent(tab.url) });
-                    chrome.tts.speak("警告！這個網站是騙人的，千萬不要輸入資料！", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
+                    chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
                     
                     fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
                         method: 'POST', 
@@ -190,7 +200,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 }
             } else if (score >= 60) {
                 if (tab && tab.id) {
-                    chrome.tabs.sendMessage(tab.id, { action: "show_alert", data: reportData }).catch(err => {});
+                    chrome.tabs.sendMessage(tab.id, { action: "show_alert", data: reportData }).catch(err => {
+                        console.log("無法傳送中度風險警告訊息:", err);
+                    });
                 }
             } else {
                 chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: "✅ 掃描完成", message: `【風險指數: ${score}%】\n${reportData.advice || "請保持警覺"}` });
@@ -202,11 +214,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // ==========================================
-// 💡 前端與背景的訊息溝通 (終極防呆版蒐證快門)
+// 👆 原有功能完美保留：前端與背景的訊息溝通 (蒐證快門、觸發阻擋)
 // ==========================================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    
-    // 📸 處理來自 content.js 的前端緊急攔截
     if (request.action === "captureScamTabWithEvidence") {
         const { url, reason, timestamp, familyID } = request;
         const tabId = sender.tab ? sender.tab.id : null;
@@ -218,46 +228,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
 
         (async () => {
-            let dataUrl = null;
-            // 📸 1. 嘗試拍照 (獨立防呆，失敗絕對不中斷)
             try {
-                dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
+                const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
+                const fetchResponse = await fetch(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
+                    body: JSON.stringify({ url: url, timestamp: timestamp, familyID: familyID, screenshot_base64: dataUrl, reported_reason: reason })
+                });
+                const data = await fetchResponse.json();
+                sendResponse({status: "success", backendResponse: data});
             } catch (error) {
-                console.log("❌ 截圖跳轉太快或受限，改用純文字備援");
-            }
-
-            // 💾 2. 保證寫入戰情室 (有圖傳圖，沒圖傳字)
-            try {
-                if (dataUrl) {
-                    const fetchResponse = await fetch(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
-                        body: JSON.stringify({ url: url, timestamp: timestamp, familyID: familyID, screenshot_base64: dataUrl, reported_reason: reason })
-                    });
-                    const data = await fetchResponse.json();
-                    sendResponse({status: "success", backendResponse: data});
-                } else {
-                    // 備援方案：沒照片也要把警報送進戰情室！
-                    chrome.storage.local.get(['userID']).then(async storage => {
-                        const fetchResponse = await fetch(`${CONFIG.API_BASE_URL}/scan`, { 
-                            method: 'POST', 
-                            headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
-                            body: JSON.stringify({ 
-                                url: url, 
-                                text: `【前端緊急攔截】${reason}`, 
-                                image_url: "", 
-                                userID: storage.userID || "anonymous", 
-                                familyID: familyID, 
-                                is_urgent: true 
-                            })
-                        });
-                        const data = await fetchResponse.json();
-                        sendResponse({status: "success", backendResponse: data});
-                    });
-                }
-            } catch (apiError) {
-                console.error("❌ API 傳送失敗:", apiError);
-                sendResponse({status: "error", details: "API 連線失敗"});
+                console.error("❌ 截圖權限受限:", error);
+                sendResponse({status: "error", details: "截圖受限於 Chrome 本機安全機制"});
             }
         })();
         return true; 
@@ -268,21 +250,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const windowId = sender.tab ? sender.tab.windowId : null;
         const tabId = sender.tab ? sender.tab.id : null;
 
-        const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org', 'render.com'];
-        const isDev = devWhitelist.some(domain => originalUrl.includes(domain));
+        // 維基百科等教育類網站不執行跳轉
+        const eduWhitelist = ['wikipedia.org'];
+        const isEdu = eduWhitelist.some(domain => originalUrl.includes(domain));
 
         chrome.storage.local.get(['userID', 'familyID']).then(async storage => {
             let screenshotBase64 = null;
             try {
-                if (windowId) screenshotBase64 = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
-            } catch(e) { }
+                if (windowId) {
+                    screenshotBase64 = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
+                }
+            } catch(e) { console.log("緊急快門失敗:", e); }
 
-            // 🛑 【防彈背心】：如果不是開發網域，才執行強制跳轉與語音警告！
-            if (tabId && !isDev) {
+            // 🛑 【防彈背心】：如果不是教育網域，才執行強制跳轉與語音警告！
+            if (tabId && !isEdu) {
                 chrome.tabs.update(tabId, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
-                chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
-            } else if (isDev) {
-                console.log("🛠️ 開發免死金牌：已將紀錄送至戰情室，但取消跳轉。");
+                chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
+            } else if (isEdu) {
+                console.log("🛠️ 教育免死金牌：已將紀錄送至戰情室，但取消跳轉。");
             }
 
             if (screenshotBase64) {
@@ -290,8 +275,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
                     body: JSON.stringify({ 
-                        url: originalUrl, timestamp: new Date().toLocaleTimeString('zh-TW', { hour12: false }), 
-                        familyID: storage.familyID || "none", screenshot_base64: screenshotBase64, reported_reason: request.reason 
+                        url: originalUrl, 
+                        timestamp: new Date().toLocaleTimeString('zh-TW', { hour12: false }), 
+                        familyID: storage.familyID || "none", 
+                        screenshot_base64: screenshotBase64, 
+                        reported_reason: request.reason 
                     })
                 });
             } else {

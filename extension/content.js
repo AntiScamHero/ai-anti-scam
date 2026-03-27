@@ -93,6 +93,14 @@ function getSafePageText(rootElement = document.body) {
     return extractedText.join(' ');
 }
 
+// 🛑 【終極修復】：將開發環境加入絕對不掃描的名單 (防止自己掃自己的無限迴圈)
+function isDevEnvironment() {
+    try {
+        const devDomains = ['github.com', 'localhost', '127.0.0.1', 'render.com'];
+        return devDomains.some(domain => window.location.hostname.includes(domain));
+    } catch(e) { return false; }
+}
+
 // ==========================================
 // 🌐 網站信譽與分類系統 (可動態更新)
 // ==========================================
@@ -212,9 +220,9 @@ async function scanScamWords() {
                          window.location.href.includes('dashboard.html') ||
                          window.location.href.includes('blocked.html') ||
                          window.location.href.includes('simulator.html');
-    if (isSystemPage) return;
-
-    // 💡 已移除提早退出的「免死金牌」，現在 localhost 與 Wikipedia 也會照常送出掃描紀錄給戰情室！
+                         
+    // 💡 遇到系統或開發環境，完全放棄掃描，避免產生多餘紀錄
+    if (isSystemPage || isDevEnvironment()) return;
     
     const siteInfo = await getSiteReputation();
     const { category, reputation, riskThreshold, scanMode } = siteInfo;
@@ -382,20 +390,20 @@ function observeElements() {
 }
 
 // ==========================================
-// 🚨 模組 3：觸發蒐證攔截視窗 (終極防彈背心版)
+// 🚨 模組 3：觸發蒐證攔截視窗 
 // ==========================================
 async function triggerSafeBlock(reason, reportData = null) {
     if (hasTriggeredBlock) return;
     if (sessionStorage.getItem('temp_whitelist_' + window.location.href)) return;
+    if (isDevEnvironment()) return; // 開發環境完全不介入
 
     hasTriggeredBlock = true;
     console.log("🛡️ AI 防詐盾牌：發現威脅，定住畫面並按下快門...", reason);
 
-    // 🛑 【防彈背心啟動】：判斷是否為開發環境，如果是，就不冰凍畫面！
-    const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org', 'render.com'];
-    const isDev = devWhitelist.some(domain => window.location.hostname.includes(domain));
+    // 🛑 【教育防彈背心】：維基百科等教育類網站，傳戰情室但不跳轉！
+    const isEduSite = ['wikipedia.org'].some(domain => window.location.hostname.includes(domain));
 
-    if (!isDev && document.body) {
+    if (!isEduSite && document.body) {
         document.body.style.pointerEvents = 'none';
         document.body.style.userSelect = 'none';
         document.body.style.border = '5px solid rgba(255, 77, 79, 0.5)';
@@ -425,9 +433,8 @@ async function triggerSafeBlock(reason, reportData = null) {
         console.error("❌ 自動蒐證快門失敗:", error);
     }
 
-    // 🛑 【防彈背心發威】：如果是您的開發網域，資料傳送完後就強制退出，絕對不跳轉！
-    if (isDev) {
-        console.log("🛠️ 觸發開發者防彈背心：已將警報送至戰情室，但不強制跳轉畫面。");
+    if (isEduSite) {
+        console.log("🛠️ 觸發教育防彈背心：已將警報送至戰情室，但不強制跳轉畫面。");
         return; 
     }
 
@@ -459,6 +466,7 @@ document.addEventListener('mousemove', () => { lastActivityTime = Date.now(); },
 document.addEventListener('keydown', () => { lastActivityTime = Date.now(); }, { passive: true });
 
 function scheduleIdleScan() {
+    if (isDevEnvironment()) return; // 💡 開發環境排程中止
     if (Date.now() - lastActivityTime > 300000) {
         setTimeout(scheduleIdleScan, 5000);
         return;
@@ -488,6 +496,7 @@ function scheduleIdleScan() {
 // ==========================================
 let lastDynamicScanTime = Date.now();
 const dynamicObserver = new MutationObserver((mutations) => {
+    if (isDevEnvironment()) return;
     if (Date.now() - lastDynamicScanTime < 5000) return; 
     
     let significantChange = false;
@@ -584,13 +593,14 @@ if (window.self === window.top) {
     const isSystemPage = window.location.protocol === 'chrome-extension:' ||
                          window.location.href.includes('dashboard.html') ||
                          window.location.href.includes('blocked.html') ||
-                         window.location.href.includes('simulator.html'); // 拔除 localhost 的忽略，讓系統能掃描
-    if (!isSystemPage) {
+                         window.location.href.includes('simulator.html'); 
+                         
+    if (!isSystemPage && !isDevEnvironment()) {
         new BehaviorAnalyzer(); 
         if (document.body) dynamicObserver.observe(document.body, { childList: true, subtree: true });
         scheduleIdleScan();
         console.log("🛡️ AI 防詐盾牌：無塵室安全萃取與動態防護系統已上線");
     } else {
-        console.log("🛡️ AI 防詐盾牌：已偵測到友軍系統頁面，關閉自動掃描");
+        console.log("🛡️ AI 防詐盾牌：已偵測到系統或開發頁面，關閉自動掃描");
     }
 }
