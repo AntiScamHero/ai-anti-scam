@@ -525,6 +525,25 @@ def scan_url():
 
         if is_bad_text or is_bad_image_url:
             report_dict = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": [dna_tag], "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
+            
+            # 👇 --- 新增：把前置攔截的紀錄也存進資料庫並發送推播 ---
+            if firebase_initialized:
+                try:
+                    timestamp = get_tw_time()
+                    db.reference('scan_history').push({
+                        'url': target_url, 
+                        'report': json.dumps(report_dict, ensure_ascii=False), 
+                        'userID': user_id, 
+                        'familyID': family_id, 
+                        'timestamp': timestamp
+                    })
+                    socketio.emit('new_scan_result', {
+                        'url': target_url, 'riskScore': 95, 'reason': report_dict['reason'], 'timestamp': timestamp
+                    }, room=family_id)
+                except Exception as e:
+                    print(f"⚠️ 寫入前置攔截紀錄失敗: {e}", flush=True)
+            # 👆 --------------------------------------------------
+
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
     safe_url_key = re.sub(r'[.#$\[\]]', '_', target_url)[:120] if target_url else "no_url"
