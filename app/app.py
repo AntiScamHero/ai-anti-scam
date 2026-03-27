@@ -71,20 +71,15 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # ==========================================
 # 🛡️ 核心升級：防盜刷 API 守門員
 # ==========================================
-# 這個金鑰必須跟前端 config.js 的 EXTENSION_SECRET 保持完全一致！
 API_SECRET = os.getenv("EXTENSION_SECRET", "ai_shield_secure_2026")
 
 @app.before_request
 def check_extension_secret():
-    # 1. 允許不需 Token 的公開路由 (首頁狀態、LINE 回呼) 與 CORS 預檢請求
     if request.path in ['/', '/callback'] or request.method == 'OPTIONS':
         return
-    
-    # 2. 允許 Socket.IO 的即時連線
     if request.path.startswith('/socket.io/'):
         return
 
-    # 3. 嚴格審查：檢查請求 Header 是否帶有正確的密語
     provided_secret = request.headers.get('X-Extension-Secret')
     if provided_secret != API_SECRET:
         client_ip = request.remote_addr
@@ -372,8 +367,36 @@ def scan_url():
     
     is_urgent = data.get('is_urgent', False)
 
-    decoded_extras = ""
+    # 👇 --- [修復關鍵] 接收照片並立即產生證據 ID ---
+    screenshot_base64 = data.get('image')
+    evidence_id = ""
+    
+    if screenshot_base64 and firebase_initialized:
+        try:
+            if ',' in screenshot_base64:
+                screenshot_base64 = screenshot_base64.split(',')[1]
+            decoded_image = base64.b64decode(screenshot_base64)
+            
+            bucket = storage.bucket()
+            file_name = f"evidence/{family_id}/{uuid.uuid4().hex}.jpg"
+            blob = bucket.blob(file_name)
+            
+            blob.upload_from_string(decoded_image, content_type='image/jpeg')
+            blob.make_public()
+            
+            ev_ref = db.reference('scam_evidence').push({
+                'url': target_url,
+                'evidence_image_url': blob.public_url,
+                'familyID': family_id,
+                'timestamp': get_tw_time(),
+                'reason': "手動掃描快照"
+            })
+            evidence_id = ev_ref.key
+        except Exception as e:
+            print(f"⚠️ 手動截圖上傳失敗: {e}", flush=True)
+    # 👆 ------------------------------------------
 
+    decoded_extras = ""
     try:
         if '%' in raw_text: decoded_extras += urllib.parse.unquote(raw_text) + " "
         if '%' in target_url: decoded_extras += urllib.parse.unquote(target_url) + " "
@@ -419,7 +442,7 @@ def scan_url():
     if not target_url and not image_url and not raw_text.strip():
         return jsonify({"status": "error", "riskScore": 0, "riskLevel": "參數異常", "reason": "未提供內容", "masked_text": ""}), 200
 
-    if image_url:
+    if image_url and not screenshot_base64:
         img_lower = image_url.lower()
         if not image_url.startswith('http') and not image_url.startswith('data:'):
             report = {"riskScore": 65, "riskLevel": "中度危險", "scamDNA": ["異常圖片"], "reason": "偵測到無效或惡意的圖片 URL 格式"}
@@ -520,29 +543,29 @@ def scan_url():
         is_bad_text = re.search(pattern, raw_text, re.IGNORECASE)
         is_bad_image_url = False
         
-        if image_url and not image_url.startswith('data:image'):
+        if image_url and not screenshot_base64 and not image_url.startswith('data:image'):
             is_bad_image_url = re.search(pattern, image_url, re.IGNORECASE)
 
         if is_bad_text or is_bad_image_url:
             report_dict = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": [dna_tag], "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
             
-            # 👇 --- 新增：把前置攔截的紀錄也存進資料庫並發送推播 ---
             if firebase_initialized:
                 try:
                     timestamp = get_tw_time()
+                    # 👇 完美綁定證據 ID！
                     db.reference('scan_history').push({
                         'url': target_url, 
                         'report': json.dumps(report_dict, ensure_ascii=False), 
                         'userID': user_id, 
                         'familyID': family_id, 
-                        'timestamp': timestamp
+                        'timestamp': timestamp,
+                        'evidenceID': evidence_id 
                     })
                     socketio.emit('new_scan_result', {
                         'url': target_url, 'riskScore': 95, 'reason': report_dict['reason'], 'timestamp': timestamp
                     }, room=family_id)
                 except Exception as e:
                     print(f"⚠️ 寫入前置攔截紀錄失敗: {e}", flush=True)
-            # 👆 --------------------------------------------------
 
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
@@ -582,8 +605,9 @@ def scan_url():
             with app.app_context(): 
                 timestamp = get_tw_time()
                 try:
+                    # 👇 完美綁定證據 ID！
                     db.reference('scan_history').push({
-                        'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp
+                        'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp, 'evidenceID': evidence_id
                     })
                     if target_url:
                         db.reference(f'url_cache/{safe_url_key}').set(report_str)
@@ -714,7 +738,6 @@ def send_family_broadcast():
     socketio.emit('family_urgent_broadcast', {'message': message}, room=family_id)
     return jsonify({"status": "success", "message": "已成功發送親情廣播！"})
 
-# 🚨 升級：AI 演練室救急備胎機制
 @app.route('/api/simulate_scam', methods=['POST'])
 def simulate_scam():
     data = request.json or {}
@@ -724,21 +747,16 @@ def simulate_scam():
     
     def generate():
         try:
-            # 💡 正常模式：嘗試呼叫真實的 AI
             for text_chunk in stream_scam_simulation(chat_history, scenario_type, user_message):
                 yield f"data: {json.dumps({'text': text_chunk})}\n\n"
             yield "data: [DONE]\n\n"
             
         except Exception as e:
-            # 🚨 救急模式：如果真實 AI 出錯（例如 API 金鑰沒設定、額度用完）
-            # 會自動觸發這段「假 AI 打字機」，保證 Demo 順利，絕對不開天窗！
             print(f"⚠️ 真實 AI 發生錯誤: {e}，自動切換備用演練回覆", flush=True)
-            
             fallback_reply = f"【系統備用回覆】您好，您剛才說「{user_message[:10]}...」。因為目前 AI 伺服器連線異常，這是一則自動防護演練回覆。提醒您：切勿點擊不明連結或匯款！"
-            
             for char in fallback_reply:
                 yield f"data: {json.dumps({'text': char})}\n\n"
-                time.sleep(0.05) # 模擬 AI 打字延遲
+                time.sleep(0.05) 
             yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
