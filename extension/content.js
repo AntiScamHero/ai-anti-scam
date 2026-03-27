@@ -44,7 +44,6 @@ function extractHighRiskText(text, maxLength = 4000) {
 // ==========================================
 // 🔐 核心升級：無塵室等級的安全文字萃取器 (Safe Text Extractor)
 // ==========================================
-// 這個函數向 Google 審查員證明：我們絕對不會碰到使用者的密碼與隱藏機密
 function getSafePageText(rootElement = document.body) {
     if (!rootElement) return "";
 
@@ -53,7 +52,6 @@ function getSafePageText(rootElement = document.body) {
     
     let extractedText = [];
     
-    // 使用 TreeWalker 精準遍歷 DOM，遇到敏感元素直接物理跳過
     const walker = document.createTreeWalker(
         rootElement,
         NodeFilter.SHOW_TEXT,
@@ -62,29 +60,21 @@ function getSafePageText(rootElement = document.body) {
                 let parent = node.parentElement;
                 if (!parent) return NodeFilter.FILTER_REJECT;
 
-                // 1. 排除非文字標籤與輸入框
                 if (dangerousTags.includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
 
-                // 2. 向上檢查是否身處危險的容器中 (例如偽裝成 div 的密碼框)
                 let curr = parent;
                 while(curr && curr !== rootElement) {
-                    // 檢查 Class 特徵
                     let className = (curr.className && typeof curr.className === 'string') ? curr.className.toLowerCase() : '';
                     if (dangerousClasses.some(cls => className.includes(cls))) {
                         return NodeFilter.FILTER_REJECT;
                     }
-                    
-                    // 檢查是否帶有 password 屬性
                     if (curr.getAttribute('type') === 'password' || curr.getAttribute('type') === 'hidden') {
                         return NodeFilter.FILTER_REJECT;
                     }
-
-                    // 檢查 CSS 隱藏元素 (詐騙網頁常把惡意程式碼藏在看不見的地方，但也可能藏著合法使用者的 Token)
                     const style = window.getComputedStyle(curr);
                     if (style.display === 'none' || style.opacity === '0' || style.visibility === 'hidden') {
                         return NodeFilter.FILTER_REJECT;
                     }
-
                     curr = curr.parentElement;
                 }
                 return NodeFilter.FILTER_ACCEPT;
@@ -148,11 +138,10 @@ async function getSiteReputation() {
 }
 
 // ==========================================
-// 🔍 區域限定掃描 (導入 Safe Text Extractor)
+// 🔍 區域限定掃描 
 // ==========================================
 function getScannableText() {
     const host = window.location.hostname;
-    
     if (host.includes('youtube.com') || host.includes('youtu.be')) {
         let texts = [];
         const desc = document.querySelector('#description-inline-expander, #description, ytd-text-inline-expander');
@@ -161,7 +150,6 @@ function getScannableText() {
         comments.forEach(c => texts.push(getSafePageText(c)));
         return texts.join('\n');
     }
-    
     if (host.includes('facebook.com')) {
         let texts = [];
         const posts = document.querySelectorAll('[data-ad-comet-preview="message"], div[data-testid="post_message"]');
@@ -170,8 +158,6 @@ function getScannableText() {
         comments.forEach(c => texts.push(getSafePageText(c)));
         return texts.join('\n');
     }
-    
-    // 預設全頁掃描，全面啟用無塵室過濾
     return getSafePageText(document.body);
 }
 
@@ -227,6 +213,12 @@ async function scanScamWords() {
                          window.location.href.includes('blocked.html') ||
                          window.location.href.includes('simulator.html');
     if (isSystemPage) return;
+
+    // 🛑 【免死金牌】：開發環境與維基百科，絕對不掃描！避免誤傷開發者
+    const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org'];
+    if (devWhitelist.some(domain => window.location.hostname.includes(domain))) {
+        return; 
+    }
     
     const siteInfo = await getSiteReputation();
     const { category, reputation, riskThreshold, scanMode } = siteInfo;
@@ -285,11 +277,12 @@ async function scanScamWords() {
         }
     }
     
-    totalRiskScore = Math.max(0, totalRiskScore);
+    // 💯 【邏輯修復】：強制最高只能 100 分，最低 0 分
+    totalRiskScore = Math.min(100, Math.max(0, totalRiskScore));
     currentGlobalRiskScore = totalRiskScore; 
     
     if (totalRiskScore >= riskThreshold) {
-        let blockReason = `偵測到多重風險特徵 (總分 ${totalRiskScore} 分，門檻 ${riskThreshold})：${matchedKeywords.join('、')}`;
+        let blockReason = `偵測到多重風險特徵 (危險指數 ${totalRiskScore} 分，門檻 ${riskThreshold})：${matchedKeywords.join('、')}`;
         if (trustedFootprints.length > 0) blockReason += `\n(已扣除信任特徵：${trustedFootprints.join('、')})`;
         
         triggerSafeBlock(blockReason, { riskScore: totalRiskScore, reason: blockReason, advice: "請勿輸入個人資料", scamDNA: matchedKeywords });
@@ -330,7 +323,6 @@ class BehaviorAnalyzer {
             mutations.forEach((mutation) => {
                 mutation.addedNodes.forEach((node) => {
                     if (node.nodeType === 1) { 
-                        // 套用無塵室過濾
                         const text = getSafePageText(node) || '';
                         const style = window.getComputedStyle(node);
                         if ((style.position === 'fixed' || style.position === 'absolute') && 

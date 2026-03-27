@@ -62,7 +62,6 @@ const whitelist = [
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'complete' && tab && tab.url) {
         
-        // 白名單或系統頁面不掃描
         if (whitelist.some(domain => tab.url.includes(domain))) return;
         if (tab.url.includes("blocked.html") || tab.url.includes("dashboard.html")) return;
 
@@ -82,7 +81,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
                     }
                 });
                 pageText = inject[0]?.result || "";
-            } catch (err) { } // 忽略無法注入腳本的頁面錯誤
+            } catch (err) { } 
 
             let screenshotBase64 = null;
             try {
@@ -90,9 +89,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
                 if (tab.windowId) {
                     screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 30 });
                 }
-            } catch (imgErr) { } // 忽略背景截圖失敗
+            } catch (imgErr) { } 
 
-            // 💡 強化：捕捉伺服器未開啟的連線錯誤，不再拋出紅字
             let response;
             try {
                 response = await fetch(`${CONFIG.API_BASE_URL}/scan`, {
@@ -108,38 +106,34 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
                 });
             } catch (fetchErr) {
                 console.warn(`[背景巡邏] 伺服器未連線 (${CONFIG.API_BASE_URL})，暫停掃描。`);
-                return; // 直接安靜退出，不觸發底下的 catch
+                return; 
             }
 
             if (!response || !response.ok) return;
 
             const data = await response.json();
             
-            // 💡 終極裝甲：超強容錯 JSON 解析
             let reportData = {};
             try {
                 if (data && data.report) {
                     reportData = typeof data.report === 'string' ? JSON.parse(data.report) : data.report;
                     if (typeof reportData === 'string') reportData = JSON.parse(reportData); 
                 } else if (data) {
-                    reportData = data; // 如果沒有 report 屬性，就直接把外層當作報告
+                    reportData = data; 
                 }
             } catch (parseErr) {
                 console.warn("[背景巡邏] AI 報告解析失敗，已啟動備援資料", parseErr);
                 reportData = data || {}; 
             }
 
-            // 確保 score 一定是數字，否則給 0
             let score = 0;
             if (reportData) {
                 score = parseInt(reportData.riskScore || reportData.RiskScore || reportData.risk_score || data.riskScore) || 0;
             }
-            // 🚨 自動發現危險：無情攔截！
             if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
                 console.log("🚨 背景巡邏員發現危險，強制攔截！", tab.url);
                 const reasonText = reportData?.reason || "系統深層掃描發現高度危險特徵！";
                 
-                // 💡 強化：先檢查分頁是否還活著，避免報錯
                 chrome.tabs.get(tabId, (currentTab) => {
                     if (chrome.runtime.lastError) {
                         console.log("[背景巡邏] 目標分頁已關閉，取消攔截。");
@@ -250,22 +244,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const windowId = sender.tab ? sender.tab.windowId : null;
         const tabId = sender.tab ? sender.tab.id : null;
 
+        // 🛑 【新增免死金牌】：開發環境與維基百科免死金牌
+        const devWhitelist = ['github.com', 'localhost', '127.0.0.1', 'wikipedia.org'];
+        if (devWhitelist.some(domain => originalUrl.includes(domain))) {
+            console.log("🛠️ 觸發免死金牌，放行開發環境:", originalUrl);
+            return true; 
+        }
+
         chrome.storage.local.get(['userID', 'familyID']).then(async storage => {
             let screenshotBase64 = null;
-            // 📸 1. 光速按下快門，把詐騙畫面拍下來
             try {
                 if (windowId) {
                     screenshotBase64 = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 30 });
                 }
             } catch(e) { console.log("緊急快門失敗:", e); }
 
-            // 🛑 2. 拍完照後，無情地跳轉到紅色攔截頁面
             if (tabId) {
                 chrome.tabs.update(tabId, { url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(request.reason) + "&original_url=" + encodeURIComponent(originalUrl) });
             }
             chrome.tts.speak("警告！警告！爸，這個網站是騙人的，千萬不要輸入資料！請立刻點擊螢幕上的綠色按鈕聯絡我。", { 'lang': 'zh-TW', 'rate': 1.0, 'pitch': 1.0 });
 
-            // 💾 3. 呼叫蒐證專用 API，保證照片與紀錄 100% 寫入戰情室
             if (screenshotBase64) {
                 fetchWithRetry(`${CONFIG.API_BASE_URL}/api/submit_evidence`, {
                     method: 'POST',
@@ -279,7 +277,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     })
                 });
             } else {
-                // 萬一截圖失敗，改送一般掃描 (is_urgent: false 強制存入資料庫)
                 fetchWithRetry(`${CONFIG.API_BASE_URL}/scan`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json', 'X-Extension-Secret': CONFIG.EXTENSION_SECRET },
