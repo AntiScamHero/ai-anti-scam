@@ -579,7 +579,6 @@ def scan_url():
             if firebase_initialized:
                 try:
                     timestamp = get_tw_time()
-                    # 👇 保證連動新產生的 evidence_id
                     db.reference('scan_history').push({
                         'url': target_url, 
                         'report': json.dumps(report_dict, ensure_ascii=False), 
