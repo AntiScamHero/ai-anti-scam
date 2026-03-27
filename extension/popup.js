@@ -102,12 +102,26 @@ if (scanBtnElement) {
         try {
             let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-            // 🚨 終極防呆裝甲：防止在擴充功能設定頁截圖導致崩潰
+            // 🚨 終極防呆裝甲 1：防止在擴充功能設定頁截圖導致崩潰
             if (!tab || !tab.id || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) {
                 if (loadingDiv) loadingDiv.style.display = "none";
                 resetBtn(scanBtn);
                 alert("⚠️ 系統安全限制：\n無法在「瀏覽器設定頁」或「空白新分頁」進行掃描與截圖！\n\n👉 解決方法：請打開一個『正常的網頁』(例如 Yahoo、蝦皮網頁) 再試一次！");
                 return;
+            }
+
+            // 🚨 終極防呆裝甲 2：新增本機檔案 (file://) 權限檢查
+            if (tab.url.startsWith('file://')) {
+                const isAllowed = await new Promise(resolve => {
+                    chrome.extension.isAllowedFileSchemeAccess(resolve);
+                });
+                
+                if (!isAllowed) {
+                    if (loadingDiv) loadingDiv.style.display = "none";
+                    resetBtn(scanBtn);
+                    alert("⚠️ 權限不足：\nChrome 預設禁止掃描本機檔案 (file://)。\n\n👉 解決方法：請至擴充功能管理頁 (chrome://extensions/)，找到本擴充功能並點擊「詳細資訊」，開啟「允許存取檔案網址」即可！\n\n💡 或是直接打開一個真實的外部網頁 (如 Yahoo 首頁) 進行測試！");
+                    return; // 必須阻斷，否則後續截圖仍會失敗
+                }
             }
 
             if (isWhitelisted(tab.url)) {
@@ -141,19 +155,16 @@ if (scanBtnElement) {
 
             let safePageText = maskSensitiveData(pageText);
             
-            // 📸 --- 【新增截圖邏輯開始】 ---
+            // 📸 --- 【截圖邏輯】 ---
             let screenshotBase64 = null;
             try {
-                // 擷取當前畫面，並壓縮品質避免打爆後端
                 screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, {
                     format: 'jpeg',
-                    quality: 40 // 建議設 40-50 即可，足夠 AI 辨識且傳輸快
+                    quality: 40
                 });
             } catch (imgErr) {
                 console.warn("截圖失敗 (可能因為在擴充功能頁面或權限不足):", imgErr);
-                // 截圖失敗不中斷流程，沒圖一樣可以送純文字給 AI 掃描
             }
-            // 📸 --- 【新增截圖邏輯結束】 ---
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); 
@@ -166,11 +177,10 @@ if (scanBtnElement) {
                         'Content-Type': 'application/json', 
                         'X-Extension-Secret': typeof CONFIG !== 'undefined' ? CONFIG.EXTENSION_SECRET : 'ai_shield_secure_2026' 
                     },
-                    // 📦 【修改】將截圖 (image) 包進 payload 一起送給後端
                     body: JSON.stringify({ 
                         url: tab.url, 
                         text: safePageText, 
-                        image: screenshotBase64, // <-- 關鍵！把照片送出去
+                        image: screenshotBase64, 
                         userID: currentUserID, 
                         familyID: currentFamilyID 
                     }),
