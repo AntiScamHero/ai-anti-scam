@@ -254,9 +254,14 @@ if (scanBtnElement) {
                 if (score < 30) {
                     if (appBody) appBody.className = "theme-safe";
                     if (headerTitle) headerTitle.innerText = "✅ 檢測通過：安全網頁";
-                } else if (score >= thresholdHigh) {
+               } else if (score >= thresholdHigh) {
                     if (appBody) appBody.className = "theme-danger";
                     if (headerTitle) headerTitle.innerText = "❌ 極度危險！請立即離開！";
+                    
+                    // 👇 新增這段：召喚防詐小尖兵，強制把危險網頁替換成攔截畫面！
+                    chrome.tabs.update(tab.id, { 
+                        url: chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reportData.reason) + "&original_url=" + encodeURIComponent(tab.url) 
+                    });
                 } else {
                     if (appBody) appBody.className = "theme-warning";
                     if (headerTitle) headerTitle.innerText = "⚠️ 警告：請提高警覺";
