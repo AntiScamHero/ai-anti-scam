@@ -72,41 +72,57 @@
         .pin-input { flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #555; background: #1a1a1a; color: #fff; font-size: 20px; text-align: center; letter-spacing: 10px; outline: none; width: 100%; box-sizing: border-box; }
         .pin-input:focus { border-color: #ff9800; box-shadow: 0 0 8px rgba(255,152,0,0.5); }
 
-        /* 💬 小尖兵與小玲對話神還原 UI */
+        /* ==============================================
+           💬 長輩友善版：對話神還原 UI (特寫放大 + 大字體) 
+           ============================================== */
         .chat-simulator-wrapper { background: #111; border: 1px solid #333; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
-        .chat-header { font-size: 16px; color: #ffeb3b; font-weight: bold; margin-bottom: 10px; text-align: center; border-bottom: 1px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
+        .chat-header { font-size: 18px; color: #ffeb3b; font-weight: bold; margin-bottom: 15px; text-align: center; border-bottom: 1px solid #333; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
         
-        .chat-status { font-size: 12px; color: #4adcff; animation: pulse-text 1.5s infinite; }
+        .chat-status { font-size: 14px; color: #4adcff; animation: pulse-text 1.5s infinite; }
         @keyframes pulse-text { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
 
-        .chat-container { height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px; scroll-behavior: smooth; }
-        .chat-container::-webkit-scrollbar { width: 6px; }
-        .chat-container::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        /* 加高對話框，適應變大的圖片與字體 */
+        .chat-container { height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; padding-right: 5px; scroll-behavior: smooth; }
+        .chat-container::-webkit-scrollbar { width: 8px; }
+        .chat-container::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
         
-        .msg-row { display: flex; gap: 10px; align-items: flex-start; animation: fadeIn 0.4s ease-in-out; }
+        .msg-row { display: flex; gap: 12px; align-items: flex-start; animation: fadeIn 0.4s ease-in-out; }
         .msg-row.left { flex-direction: row; }
         .msg-row.right { flex-direction: row-reverse; }
 
-        /* 大頭貼設計 (支援 emoji 與圖片) */
-        .msg-avatar { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.4); border: 2px solid #555; }
+        /* 一般角色 (Emoji) 的大頭貼稍微放大 */
+        .msg-avatar { width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.4); border: 2px solid #555; }
         .avatar-scammer { background: #1a1a2e; border-color: #ff4d4f; }
         .avatar-victim { background: #1b5e20; border-color: #4caf50; }
         
-        /* 🤖 專屬小尖兵/小玲圖片大頭貼 */
-        img.img-avatar { object-fit: contain; background: #fff; padding: 2px; }
+        /* 🤖 專屬小尖兵/小玲圖片大頭貼 (超巨大特寫版！) */
+        img.img-avatar { 
+            width: 85px !important; 
+            height: 85px !important; 
+            object-fit: cover;             /* 填滿圓圈 */
+            object-position: center 10%;   /* 💡 魔法屬性：自動聚焦在人物上半身(臉部) */
+            background: #fff; 
+            padding: 0;                    /* 移除內距讓人物更大 */
+            border-width: 3px !important;  /* 加粗邊框 */
+        }
 
-        .msg-content { display: flex; flex-direction: column; max-width: 75%; }
+        .msg-content { display: flex; flex-direction: column; max-width: 72%; }
         .msg-row.left .msg-content { align-items: flex-start; }
         .msg-row.right .msg-content { align-items: flex-end; }
 
-        .msg-name { font-size: 13px; color: #888; margin-bottom: 4px; padding: 0 5px; font-weight: bold; }
-        .msg-bubble { padding: 12px 16px; border-radius: 18px; font-size: 16px; line-height: 1.5; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        /* 名字字體放大 */
+        .msg-name { font-size: 15px; color: #aaa; margin-bottom: 6px; padding: 0 5px; font-weight: bold; letter-spacing: 1px;}
+        
+        /* 對話泡泡字體放大，讓長輩看得舒服 */
+        .msg-bubble { padding: 15px 20px; border-radius: 20px; font-size: 18px; line-height: 1.5; box-shadow: 0 3px 8px rgba(0,0,0,0.3); font-weight: bold; letter-spacing: 0.5px;}
         
         .bubble-scammer { background: #2c3e50; color: white; border-top-left-radius: 4px; border: 1px solid #4a5568;}
         .bubble-victim { background: #4caf50; color: white; border-top-right-radius: 4px; }
-        .bubble-system { background: rgba(255, 235, 59, 0.1); border: 1px solid #ffeb3b; color: #ffeb3b; font-size: 16px; font-weight: bold; border-radius: 12px; border-top-left-radius: 4px;}
+        .bubble-system { background: rgba(255, 235, 59, 0.1); border: 2px solid #ffeb3b; color: #ffeb3b; font-size: 18px; border-radius: 15px; border-top-left-radius: 4px;}
         
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        #reason-box, #dna-box, #tags-container, #advice, #original-url { display: none; }
     </style>
 </head>
 <body>
@@ -136,6 +152,8 @@
             </div>
             
             <a href="tel:165" class="btn-165" id="call-btn">📞 有疑慮？撥打 165 反詐騙專線</a>
+
+            <div id="reason-box"></div><div id="dna-box"></div><div id="tags-container"></div><div id="advice"></div>
 
             <div class="info-box" id="cooldown-box" style="border-color: #ffeb3b; box-shadow: 0 0 15px rgba(255, 235, 59, 0.1);">
                 
@@ -169,6 +187,7 @@
 
     <div class="url-display">
         <span id="target-url">載入中...</span>
+        <span id="original-url"></span>
     </div>
 
     <div id="desktop-modal" class="modal-overlay">
