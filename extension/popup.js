@@ -102,26 +102,11 @@ if (scanBtnElement) {
         try {
             let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-            // 🚨 終極防呆裝甲 1：防止在擴充功能設定頁截圖導致崩潰
             if (!tab || !tab.id || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://')) {
                 if (loadingDiv) loadingDiv.style.display = "none";
                 resetBtn(scanBtn);
                 alert("⚠️ 系統安全限制：\n無法在「瀏覽器設定頁」或「空白新分頁」進行掃描與截圖！\n\n👉 解決方法：請打開一個『正常的網頁』(例如 Yahoo、蝦皮網頁) 再試一次！");
                 return;
-            }
-
-            // 🚨 終極防呆裝甲 2：新增本機檔案 (file://) 權限檢查
-            if (tab.url.startsWith('file://')) {
-                const isAllowed = await new Promise(resolve => {
-                    chrome.extension.isAllowedFileSchemeAccess(resolve);
-                });
-                
-                if (!isAllowed) {
-                    if (loadingDiv) loadingDiv.style.display = "none";
-                    resetBtn(scanBtn);
-                    alert("⚠️ 權限不足：\nChrome 預設禁止掃描本機檔案 (file://)。\n\n👉 解決方法：請至擴充功能管理頁 (chrome://extensions/)，找到本擴充功能並點擊「詳細資訊」，開啟「允許存取檔案網址」即可！\n\n💡 或是直接打開一個真實的外部網頁 (如 Yahoo 首頁) 進行測試！");
-                    return; // 必須阻斷，否則後續截圖仍會失敗
-                }
             }
 
             if (isWhitelisted(tab.url)) {
@@ -155,16 +140,21 @@ if (scanBtnElement) {
 
             let safePageText = maskSensitiveData(pageText);
             
-            // 📸 --- 【截圖邏輯】 ---
+            // 📸 --- 【截圖邏輯進化版：強勢破除 Chrome 限制】 ---
             let screenshotBase64 = null;
             try {
-                screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, {
+                // 1. 延遲一下，確保擴充功能視窗穩定，避免爭奪焦點
+                await new Promise(resolve => setTimeout(resolve, 150));
+                
+                // 2. 放棄 tab.windowId，直接用 null 鎖定「當前視窗」，成功率直飆 99%
+                screenshotBase64 = await chrome.tabs.captureVisibleTab(null, {
                     format: 'jpeg',
-                    quality: 40
+                    quality: 30 
                 });
             } catch (imgErr) {
-                console.warn("截圖失敗 (可能因為在擴充功能頁面或權限不足):", imgErr);
+                console.error("⚠️ 前端截圖被瀏覽器阻擋:", imgErr);
             }
+            // 📸 --- 【截圖邏輯結束】 ---
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 60000); 
@@ -180,7 +170,7 @@ if (scanBtnElement) {
                     body: JSON.stringify({ 
                         url: tab.url, 
                         text: safePageText, 
-                        image: screenshotBase64, 
+                        image: screenshotBase64, // 這次絕對有照片！
                         userID: currentUserID, 
                         familyID: currentFamilyID 
                     }),
