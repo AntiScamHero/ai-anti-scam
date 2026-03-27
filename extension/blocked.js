@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const manualLeaveBtn = document.getElementById('manual-leave-btn');
     if (manualLeaveBtn) {
         manualLeaveBtn.addEventListener('click', safeLeaveAction);
-        let autoLeaveTimer = 20; // 配合看劇時間
+        let autoLeaveTimer = 15; // 配合看劇時間
         manualLeaveBtn.innerText = `安全離開 (${autoLeaveTimer} 秒後自動跳離)`;
         
         autoLeaveInterval = setInterval(() => {
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (bypassBtn) {
         bypassBtn.disabled = true;
-        let timeLeft = 20;
+        let timeLeft = 15;
         bypassBtn.addEventListener('mousedown', stopAutoLeave);
 
         const timer = setInterval(() => {
