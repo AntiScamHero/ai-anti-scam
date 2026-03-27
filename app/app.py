@@ -574,7 +574,17 @@ def scan_url():
             is_bad_image_url = re.search(pattern, image_url, re.IGNORECASE)
 
         if is_bad_text or is_bad_image_url:
-            report_dict = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": [dna_tag], "reason": f"系統前置攔截：({reason})", "advice": "請立即關閉網頁！"}
+            # 升級具有威嚇力與教育意義的 AI 報告
+            detailed_reason = f"🚨 【AI 深度威脅分析】\n系統深層掃描後，發現此網頁高度吻合「{reason}」的典型詐騙特徵！詐騙集團正試圖利用「{dna_tag}」的心理操縱手法（例如：保證獲利、急迫性威脅等）來降低您的防備心。此為極高風險的詐騙套路！"
+            detailed_advice = "🛑 絕對不要輸入任何個資或聽信指示匯款！為保護您的安全，系統即將引導您撤離此網頁。"
+            
+            report_dict = {
+                "riskScore": 95, 
+                "riskLevel": "極度危險", 
+                "scamDNA": [dna_tag], 
+                "reason": detailed_reason, 
+                "advice": detailed_advice
+            }
             
             if firebase_initialized:
                 try:
