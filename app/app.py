@@ -1,45 +1,48 @@
 import os
-import logging
+import sys
+import io
 from flask import Flask
-from extensions import socketio, limiter, firebase_initialized
+from flask_cors import CORS
+from flask_socketio import join_room
+
+# 1️⃣ 引入我們寫好的擴充套件
+from extensions import limiter, socketio
+# 2️⃣ 引入剛剛那份幾百行的「計算紙」藍圖
 from routes import api_bp
-# 如果你有用到跨域請求，可以取消下面這行的註解
-# from flask_cors import CORS
 
-def create_app():
-    app = Flask(__name__)
-    
-    # 基本安全設定
-    app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "ai_shield_secure_2026")
-    # CORS(app) 
+os.environ["PYTHONUTF8"] = "1"
+os.environ["PYTHONIOENCODING"] = "utf-8"
+if sys.stdout.encoding != 'utf-8': 
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr.encoding != 'utf-8': 
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-    # 🟢 啟用基礎日誌：若 LINE 推播失敗，終端機會明確告訴你原因
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    app.logger.setLevel(logging.INFO)
+# 建立主程式
+app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-    # 初始化擴充套件
-    limiter.init_app(app)
-    
-    # 註冊藍圖 (API 路由)
-    app.register_blueprint(api_bp)
-    
-    # 初始化 SocketIO (支援戰情室即時連線)
-    socketio.init_app(app, cors_allowed_origins="*")
-    
-    return app
+# 綁定擴充套件
+limiter.init_app(app)
+socketio.init_app(app)
 
-# 建立應用程式實例
-app = create_app()
+# 註冊我們分出去的幾百行 API 藍圖
+app.register_blueprint(api_bp)
+
+# SocketIO 的連線邏輯 (必須綁在主程式層級)
+@socketio.on('join_family_room')
+def handle_join_family_room(data):
+    family_id = data.get('familyID')
+    if family_id:
+        join_room(family_id)
+        print(f"💻 [戰情室連線成功] 大螢幕已鎖定家庭群組: {family_id}", flush=True)
 
 if __name__ == "__main__":
-    # 從環境變數取得 Port，預設 5000
     port = int(os.environ.get("PORT", 5000))
+    print("\n" + "="*50)
+    print("🚀 系統啟動中...")
+    print(f"👉 請打開瀏覽器點擊這個連結測試：http://127.0.0.1:{port}/")
+    print("="*50 + "\n", flush=True)
     
-    app.logger.info(f"🚀 AI 防詐盾牌伺服器啟動中... Port: {port}")
-    if firebase_initialized:
-        app.logger.info("✅ Firebase 已連線 (100%免費版)")
-    else:
-        app.logger.warning("⚠️ Firebase 未連線，請確認金鑰設定")
-        
-    # 🟢 關閉 debug 模式，確保發生錯誤時系統仍能優雅回傳 500 JSON，不會讓網頁噴出一堆可怕的程式碼
+    # 🟢 注意這裡！必須縮排在 if __name__ == "__main__": 裡面！
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
