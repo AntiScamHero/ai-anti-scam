@@ -363,7 +363,12 @@ document.getElementById('log-table-body').addEventListener('click', async (e) =>
         }
         
         const data = await res.json();
-        const finalImage = data.evidence_image_url || data.screenshot_base64;
+        
+        // 🛑 核心修復：如果拿到的是 Base64 代碼，而且它前面沒有 data:image... 開頭，就幫它補上！
+        let finalImage = data.evidence_image_url || data.screenshot_base64;
+        if (finalImage && !finalImage.startsWith('http') && !finalImage.startsWith('data:image')) {
+            finalImage = 'data:image/jpeg;base64,' + finalImage;
+        }
         
         if (data.status === 'success' && finalImage) {
             showEvidenceModal(finalImage, reason);
