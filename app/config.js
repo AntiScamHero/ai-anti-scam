@@ -2,7 +2,8 @@
  * AI 防詐盾牌 - 全域設定檔
  */
 const CONFIG = {
-    // 🔗 後端 API 網址 (已更新為 Render 正式上線網址)
+    // 🟢 Demo 測試期間，請務必指向你的本機伺服器！
+    // (等比賽結束要正式上線時，再改回 https://ai-anti-scam.onrender.com)
     API_BASE_URL: 'https://ai-anti-scam.onrender.com', 
     
     // ⚙️ 效能與記憶體控制參數
@@ -14,10 +15,13 @@ const CONFIG = {
     RISK_THRESHOLD_HIGH: 70,         // 高風險閾值 (觸發攔截)
     RISK_THRESHOLD_MEDIUM: 40,       // 中風險閾值 (觸發警告)
     MAX_RETRIES: 3,                  // API 失敗最高重試次數
-    POLLING_INTERVAL_MS: 5000        // 家庭戰情室即時更新頻率
+    POLLING_INTERVAL_MS: 5000,       // 家庭戰情室即時更新頻率
+
+    // 🔐 核心防禦：防盜刷擴充功能專屬金鑰 (這行絕對不能少！)
+    EXTENSION_SECRET: 'ai_shield_secure_2026'
 };
 
-// 💡 修正後的匯出邏輯：同時支援 網頁(window) 與 背景腳本(self)
+// 💡 同時支援 網頁(window) 與 背景腳本(self)
 if (typeof self !== 'undefined') {
     self.CONFIG = CONFIG;
 }
