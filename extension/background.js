@@ -307,7 +307,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 let score = parseInt(reportData.riskScore) || 0;
                 
                 if (score >= CONFIG.RISK_THRESHOLD_HIGH) {
-                    chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: "🚨 圖片含有詐騙風險！", message: reportData.reason });
+                    // ✂️ 【介面瘦身】：註解掉這行，取消右下角的 Chrome 系統小視窗通知，避免畫面太亂！
+                    // chrome.notifications.create({ type: "basic", iconUrl: "icon.png", title: "🚨 圖片含有詐騙風險！", message: reportData.reason });
                 } else if (score >= 60 && sender.tab && sender.tab.id) {
                     chrome.tabs.sendMessage(sender.tab.id, { action: "show_alert", data: reportData }).catch(() => {});
                 }
