@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # 新增 Blueprint (藍圖) 與 current_app
 from flask import Blueprint, request, jsonify, Response, current_app
 from werkzeug.exceptions import HTTPException 
-# 🛑 【免付費修改 1】：拿掉 storage，只保留免費的 db
+# 🛑 【免付費修改】：拿掉 storage，只保留免費的 db
 from firebase_admin import db
 
 from linebot.v3 import WebhookHandler
@@ -37,7 +37,7 @@ from extensions import limiter, socketio, firebase_initialized
 
 load_dotenv()
 
-# 建立藍圖 (Blueprint)，這就是我們的「計算紙」
+# 建立藍圖 (Blueprint)
 api_bp = Blueprint('api', __name__)
 
 # ==========================================
@@ -206,10 +206,7 @@ def submit_evidence():
 
         image_url = ""
         
-        # 🛑 【免付費修改 2】：整理好照片代碼準備存入資料庫
-        if ',' in screenshot_base64:
-            screenshot_base64 = screenshot_base64.split(',')[1]
-
+        # 🛑 【破圖修復】：直接將完整的 Base64 (含檔頭) 存入資料庫，不進行切割！
         ref = db.reference('scam_evidence').push({
             'url': url,
             'evidence_image_url': image_url, 
@@ -314,11 +311,8 @@ def scan_url():
     
     if screenshot_base64 and firebase_initialized:
         cloud_img_url = ""
-        # 🛑 【免付費修改 3】：掃描網址時略過 Storage，直接寫入資料庫
+        # 🛑 【破圖修復】：掃描網址時略過 Storage，直接寫入資料庫 (保留完整檔頭，不切開)
         try:
-            if ',' in screenshot_base64:
-                screenshot_base64 = screenshot_base64.split(',')[1]
-                
             ev_ref = db.reference('scam_evidence').push({
                 'url': target_url,
                 'evidence_image_url': cloud_img_url,
@@ -331,7 +325,7 @@ def scan_url():
         except Exception as e:
             print(f"⚠️ 資料庫寫入失敗: {e}", flush=True)
 
-    # 👇👇👇 【關鍵修復】：新增上傳小幫手，讓所有「提早秒殺攔截」的危險都會寫入戰情室！
+    # 👇👇👇 【強制上傳小幫手】：讓所有「提早秒殺攔截」的危險都會寫入戰情室！
     def log_threat_to_db(rep_dict):
         if firebase_initialized:
             try:
