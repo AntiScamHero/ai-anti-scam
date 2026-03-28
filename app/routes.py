@@ -40,6 +40,10 @@ load_dotenv()
 # 建立藍圖 (Blueprint)
 api_bp = Blueprint('api', __name__)
 
+# 🌟 全域變數：雙層冷卻系統，防止重複洗版與推播
+last_alert_time = {}       # 用於戰情室快照與掃描紀錄 (10秒冷卻)
+last_line_alert_time = {}  # 專門用於 LINE 緊急推播 (30秒冷卻)
+
 # ==========================================
 # 🛡️ 核心升級：防盜刷 API 守門員
 # ==========================================
@@ -212,6 +216,13 @@ def submit_evidence():
         family_id = data.get('familyID', 'none')
         reason = data.get('reported_reason', '前端智慧攔截')
 
+        # 🌟 防重複邏輯：戰情室快照 10 秒過濾
+        url_key = re.sub(r'[^a-zA-Z0-9_-]', '_', url)[:120]
+        now = time.time()
+        if url_key in last_alert_time and now - last_alert_time[url_key] < 10:
+            return jsonify({"status": "success", "message": "重複攔截，忽略快照"})
+
+        last_alert_time[url_key] = now
         image_url = ""
         
         # 🛑 【破圖修復】：直接將完整的 Base64 (含檔頭) 存入資料庫，不進行切割！
@@ -241,13 +252,16 @@ def submit_evidence():
         })
         
         if family_id != 'none':
-            send_dynamic_line_alert(
-                family_id=family_id, 
-                url=url, 
-                reason=reason, 
-                risk_score=99, 
-                scam_dna=["系統強制警示"]
-            )
+            # 👇 LINE 推播套用專屬 30 秒冷卻
+            if url_key not in last_line_alert_time or (now - last_line_alert_time[url_key] > 30):
+                send_dynamic_line_alert(
+                    family_id=family_id, 
+                    url=url, 
+                    reason=reason, 
+                    risk_score=99, 
+                    scam_dna=["系統強制警示"]
+                )
+                last_line_alert_time[url_key] = now
         
         socketio.emit('new_evidence_submitted', {
             'url': url, 'evidenceID': ref.key, 'timestamp': timestamp
@@ -319,7 +333,11 @@ def scan_url():
     screenshot_base64 = data.get('image')
     evidence_id = ""
     
-    if screenshot_base64 and firebase_initialized:
+    # 🌟 核心優化：檢查 10 秒冷卻時間，避免戰情室洗版
+    now = time.time()
+    is_debounced = safe_url_key in last_alert_time and now - last_alert_time[safe_url_key] < 10
+    
+    if screenshot_base64 and firebase_initialized and not is_debounced:
         cloud_img_url = ""
         try:
             ev_ref = db.reference('scam_evidence').push({
@@ -331,6 +349,7 @@ def scan_url():
                 'reason': "手動掃描快照"
             })
             evidence_id = ev_ref.key
+            last_alert_time[safe_url_key] = now # 更新冷卻時間
         except Exception as e:
             print(f"⚠️ 資料庫寫入失敗: {e}", flush=True)
 
@@ -347,14 +366,16 @@ def scan_url():
         if firebase_initialized:
             try:
                 ts = get_tw_time()
-                db.reference('scan_history').push({
-                    'url': target_url, 
-                    'report': json.dumps(rep_dict, ensure_ascii=False), 
-                    'userID': user_id, 
-                    'familyID': family_id, 
-                    'timestamp': ts,
-                    'evidenceID': evidence_id 
-                })
+                # 只有不在冷卻期或是極度高風險時才寫入歷史（保持紀錄乾淨）
+                if not is_debounced or r_score >= 70:
+                    db.reference('scan_history').push({
+                        'url': target_url, 
+                        'report': json.dumps(rep_dict, ensure_ascii=False), 
+                        'userID': user_id, 
+                        'familyID': family_id, 
+                        'timestamp': ts,
+                        'evidenceID': evidence_id 
+                    })
                 
                 if target_url:
                     db.reference(f'url_cache/{safe_url_key}').set(json.dumps(rep_dict, ensure_ascii=False))
@@ -363,15 +384,21 @@ def scan_url():
                     'url': target_url, 'riskScore': r_score, 'reason': rep_dict.get('reason', ''), 'timestamp': ts
                 }, room=family_id)
                 
+                # 👇 LINE 警報改用專屬的 30 秒冷卻計時器！完全脫鉤！
                 if r_score >= 70:
-                    print(f"🚨 [警報達標] 危險指數 {r_score} 分，準備發送防護網推播！", flush=True)
-                    send_dynamic_line_alert(
-                        family_id=family_id, 
-                        url=target_url, 
-                        reason=rep_dict.get('reason', ''),
-                        risk_score=r_score,
-                        scam_dna=rep_dict.get('scamDNA', ['危險'])
-                    )
+                    current_time = time.time()
+                    if safe_url_key not in last_line_alert_time or (current_time - last_line_alert_time[safe_url_key] > 30):
+                        print(f"🚨 [警報達標] 危險指數 {r_score} 分，準備發送防護網推播！", flush=True)
+                        send_dynamic_line_alert(
+                            family_id=family_id, 
+                            url=target_url, 
+                            reason=rep_dict.get('reason', ''),
+                            risk_score=r_score,
+                            scam_dna=rep_dict.get('scamDNA', ['危險'])
+                        )
+                        last_line_alert_time[safe_url_key] = current_time # 更新 LINE 推播時間
+                    else:
+                        print(f"🤫 [推播冷卻中] 危險指數 {r_score} 分，但 30 秒內已通知過，暫停推播。", flush=True)
                 else:
                     print(f"🟢 [安全略過] 危險指數 {r_score} 分，不發送 LINE 推播", flush=True)
                     
@@ -513,7 +540,7 @@ def scan_url():
         
         if not is_genuine_white_listed(parse_u):
             if check_165_blacklist(parse_u):
-                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比تدائي成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
+                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
                 log_threat_to_db(report_dict) 
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
