@@ -180,57 +180,19 @@ if (scanBtnElement) {
 
                 let thresholdHigh = typeof CONFIG !== 'undefined' ? CONFIG.RISK_THRESHOLD_HIGH : 70;
                 
-                // 👇 【核心修改】暴力改色 ＋ 倒數跳轉機制
+                // 👇 【核心修改】直接跳轉全螢幕防護頁面，拔除倒數計時器
                 if (score < 30) {
                     if (appBody) appBody.className = "theme-safe";
                     if (headerTitle) headerTitle.innerText = "✅ 檢測通過：安全網頁";
                 } else if (score >= thresholdHigh) {
-                    if (appBody) appBody.className = "theme-danger";
                     
-                    // 強制把頂部標題列變成血紅色
-                    if (headerTitle) {
-                        headerTitle.innerText = "❌ 極度危險！請立即撤離！";
-                        headerTitle.style.color = "#ffffff";
-                        if (headerTitle.parentElement) {
-                            headerTitle.parentElement.style.background = "linear-gradient(90deg, #d32f2f 0%, #b71c1c 100%)";
-                        }
-                    }
-
-                    // 強制把分析原因的框框變成顯眼的紅色警告框
-                    const reasonEl = document.getElementById('report-reason');
-                    if (reasonEl) {
-                        reasonEl.style.color = "#d32f2f";
-                        reasonEl.style.fontWeight = "bold";
-                        reasonEl.style.backgroundColor = "#ffebee";
-                        reasonEl.style.padding = "12px";
-                        reasonEl.style.borderRadius = "8px";
-                        reasonEl.style.border = "2px solid #ffcdd2";
-                        reasonEl.style.lineHeight = "1.6";
-                    }
+                    // 🚨 手動掃描抓到詐騙：直接切換到全螢幕攔截頁面 (內建誤判按鈕)，並關閉小面板
+                    let blockedUrl = chrome.runtime.getURL("blocked.html") + 
+                                     "?reason=" + encodeURIComponent(reportData.reason || "系統深層掃描發現高度危險特徵！") + 
+                                     "&original_url=" + encodeURIComponent(tab.url);
                     
-                    // 啟動倒數機制
-                    scanBtn.dataset.isEscape = "true";
-                    let countdown = 5; // 👈 這裡設定 5 秒，足夠看完詳細的 AI 報告
-                    scanBtn.innerText = `🚨 危險！${countdown} 秒後自動跳轉至安全網頁`;
-                    scanBtn.style.background = "linear-gradient(90deg, #FF4444 0%, #CC0000 100%)";
-                    scanBtn.style.color = "white";
-                    scanBtn.style.border = "none";
-                    scanBtn.style.boxShadow = "0 0 20px rgba(255, 68, 68, 0.8)";
-                    scanBtn.disabled = false; // 讓使用者可以點擊提早離開
-                    
-                    const timerId = setInterval(async () => {
-                        countdown--;
-                        if (countdown > 0) {
-                            scanBtn.innerText = `🚨 危險！${countdown} 秒後自動跳轉至安全網頁`;
-                        } else {
-                            clearInterval(timerId);
-                            try {
-                                let [t] = await chrome.tabs.query({ active: true, currentWindow: true });
-                                chrome.tabs.update(t.id, { url: "https://www.google.com" });
-                                window.close();
-                            } catch(e) {}
-                        }
-                    }, 1000);
+                    chrome.tabs.update(tab.id, { url: blockedUrl }).catch(e => console.log("跳轉失敗:", e));
+                    window.close(); // 自動關閉小面板，讓畫面保持乾淨
                     
                 } else {
                     if (appBody) appBody.className = "theme-warning";
