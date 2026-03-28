@@ -44,4 +44,4 @@ if __name__ == "__main__":
     print(f"👉 請打開瀏覽器點擊這個連結測試：http://127.0.0.1:{port}/")
     print("="*50 + "\n", flush=True)
     
-    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
+socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)

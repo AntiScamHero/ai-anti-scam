@@ -129,7 +129,8 @@ def call_openai(client, system_prompt, user_content):
         ],
         response_format={"type": "json_object"},
         max_tokens=150,
-        temperature=0.0
+        temperature=0.0,
+        timeout=8.0  # 👉 新增這行：強制 8 秒沒回應就判定超時，立刻觸發你的備援機制
     )
 
 def parse_response(response):
