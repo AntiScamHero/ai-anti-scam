@@ -47,7 +47,8 @@ API_SECRET = os.getenv("EXTENSION_SECRET", "ai_shield_secure_2026")
 
 @api_bp.before_app_request
 def check_extension_secret():
-    if request.path in ['/', '/callback'] or request.method == 'OPTIONS':
+    # 加入了 /test_line 讓瀏覽器可以直接訪問測試！
+    if request.path in ['/', '/callback', '/test_line'] or request.method == 'OPTIONS':
         return
     if request.path.startswith('/socket.io/'):
         return
@@ -942,3 +943,26 @@ def get_contact():
         pass
         
     return jsonify({"status": "fail", "contact": "tel:165"})
+
+# ==========================================
+# 🚨 LINE 暴力獨立測試專區 
+# ==========================================
+@api_bp.route('/test_line', methods=['GET'])
+def test_line_bot():
+    try:
+        target_id = os.getenv("LINE_USER_ID")
+        if not target_id: return "❌ 測試失敗：抓不到 LINE_USER_ID！", 400
+        
+        print(f"👉 準備發送測試訊息給: {target_id}", flush=True)
+        
+        with ApiClient(configuration) as api_client:
+            MessagingApi(api_client).push_message(
+                PushMessageRequest(
+                    to=target_id, 
+                    messages=[TextMessage(text="✅ 【AI防詐盾牌測試】看見此訊息代表 LINE 金鑰與設定完全正常！")]
+                )
+            )
+        return "✅ 測試訊息已送出！請檢查手機 LINE！", 200
+    except Exception as e:
+        print(f"❌ 測試發送崩潰: {e}", flush=True)
+        return f"❌ 發送失敗: {e}", 500
