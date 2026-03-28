@@ -366,25 +366,28 @@ def scan_url():
         if firebase_initialized:
             try:
                 ts = get_tw_time()
-                # 只有不在冷卻期或是極度高風險時才寫入歷史（保持紀錄乾淨）
-                if not is_debounced or r_score >= 70:
+                
+                # 🛑 【核心修正】：嚴格執行 10 秒冷卻！只要是重複的，連文字紀錄都不寫，確保戰情室乾淨且不破圖！
+                if not is_debounced:
                     db.reference('scan_history').push({
                         'url': target_url, 
                         'report': json.dumps(rep_dict, ensure_ascii=False), 
                         'userID': user_id, 
                         'familyID': family_id, 
                         'timestamp': ts,
-                        'evidenceID': evidence_id 
+                        'evidenceID': evidence_id  # 確保這時候一定有照片 ID
                     })
+                    
+                    # WebSocket 即時通知戰情室 (只在非冷卻期發送)
+                    socketio.emit('new_scan_result', {
+                        'url': target_url, 'riskScore': r_score, 'reason': rep_dict.get('reason', ''), 'timestamp': ts
+                    }, room=family_id)
                 
+                # 網址快取 Cache 還是照樣更新
                 if target_url:
                     db.reference(f'url_cache/{safe_url_key}').set(json.dumps(rep_dict, ensure_ascii=False))
 
-                socketio.emit('new_scan_result', {
-                    'url': target_url, 'riskScore': r_score, 'reason': rep_dict.get('reason', ''), 'timestamp': ts
-                }, room=family_id)
-                
-                # 👇 LINE 警報改用專屬的 30 秒冷卻計時器！完全脫鉤！
+                # 👇 LINE 警報維持專屬的 30 秒冷卻計時器 (獨立運作)
                 if r_score >= 70:
                     current_time = time.time()
                     if safe_url_key not in last_line_alert_time or (current_time - last_line_alert_time[safe_url_key] > 30):
@@ -404,7 +407,7 @@ def scan_url():
                     
             except Exception as e:
                 print(f"⚠️ 寫入攔截紀錄失敗: {e}", flush=True)
-    # 👆👆👆 
+    # 👆👆👆
 
     decoded_extras = ""
     try:
