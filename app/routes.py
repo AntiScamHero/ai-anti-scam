@@ -291,6 +291,9 @@ def scan_url():
     target_url = str(target_url) if target_url else ''
     if len(target_url) > 2000: target_url = target_url[:2000]
     
+    # 🌟 【修改 1】：將 safe_url_key 提早到這裡定義
+    safe_url_key = re.sub(r'[^a-zA-Z0-9_-]', '_', target_url)[:120] if target_url else "no_url"
+
     raw_text = data.get('text')
     raw_text = str(raw_text) if raw_text else ''
     if len(raw_text) > 2500: raw_text = raw_text[:2500]
@@ -338,6 +341,11 @@ def scan_url():
                     'timestamp': ts,
                     'evidenceID': evidence_id 
                 })
+                
+                # 🌟 【修改 2】：只要有攔截結果，立刻強制寫入快取，徹底防堵小尖兵閃退！
+                if target_url:
+                    db.reference(f'url_cache/{safe_url_key}').set(json.dumps(rep_dict, ensure_ascii=False))
+
                 socketio.emit('new_scan_result', {
                     'url': target_url, 'riskScore': rep_dict.get('riskScore', 0), 'reason': rep_dict.get('reason', ''), 'timestamp': ts
                 }, room=family_id)
@@ -442,8 +450,8 @@ def scan_url():
     if not is_white_listed and firebase_initialized and target_url:
         try:
             host = urlparse(target_url.lower().strip()).hostname or target_url
-            safe_domain_key = re.sub(r'[^a-zA-Z0-9_-]', '_', host)
-            cloud_whitelist = db.reference(f'trusted_domains/{safe_domain_key}').get()
+            safe_domain_key_for_whitelist = re.sub(r'[^a-zA-Z0-9_-]', '_', host)
+            cloud_whitelist = db.reference(f'trusted_domains/{safe_domain_key_for_whitelist}').get()
             if cloud_whitelist:
                 is_white_listed = True
                 print(f"🛡️ 觸發雲端動態白名單放行: {host}", flush=True)
@@ -542,10 +550,10 @@ def scan_url():
                 "advice": detailed_advice
             }
             
-            log_threat_to_db(report_dict) # 👈 強制上傳
+            log_threat_to_db(report_dict) # 👈 強制上傳，快取也會一併寫入
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
     
-    safe_url_key = re.sub(r'[^a-zA-Z0-9_-]', '_', target_url)[:120] if target_url else "no_url"
+    # 這裡已經移除了重複定義 safe_url_key 的程式碼，因為上面已經宣告過了
     
     if firebase_initialized and target_url and not image_url and not is_urgent and not is_white_listed:
         try:
@@ -605,11 +613,7 @@ def scan_url():
             with app.app_context(): # ✅ 建立安全的背景執行環境
                 # 🛑 【核心修復 2-2】：改用統一的強制上傳小幫手
                 log_threat_to_db(report_dict)
-                try:
-                    if target_url:
-                        db.reference(f'url_cache/{safe_url_key}').set(report_str)
-                except Exception as e:
-                    print(f"⚠️ 寫入掃描紀錄失敗: {e}", flush=True)
+                # 因為 log_threat_to_db 現在已經會幫忙寫入快取了，所以下面這段原本寫快取的程式碼就可以省略，避免重複寫入！
 
         socketio.start_background_task(background_tasks) 
 
