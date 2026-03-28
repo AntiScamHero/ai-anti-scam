@@ -1,5 +1,5 @@
 /**
- * AI 防詐盾牌 - 核心控制邏輯 (直接跳轉安全網頁版 + 強制變色)
+ * AI 防詐盾牌 - 核心控制邏輯 (黃金 3 秒緩衝版)
  */
 
 let currentUserID = "";
@@ -69,11 +69,13 @@ if (scanBtnElement) {
     scanBtnElement.addEventListener('click', async () => {
         const scanBtn = document.getElementById('scan-btn');
         
-        // 👇 如果已經是逃生狀態，允許手動點擊直接逃生！
+        // 👇 如果已經是逃生狀態，允許手動點擊提早進入防護網！
         if (scanBtn.dataset.isEscape === "true") {
             try {
                 let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                chrome.tabs.update(tab.id, { url: "https://www.google.com" });
+                let reasonText = scanBtn.dataset.blockReason || "系統深層掃描發現高度危險特徵！";
+                let blockedUrl = chrome.runtime.getURL("blocked.html") + "?reason=" + encodeURIComponent(reasonText) + "&original_url=" + encodeURIComponent(tab.url);
+                chrome.tabs.update(tab.id, { url: blockedUrl }).catch(e => {});
                 window.close();
             } catch(e) {}
             return;
@@ -180,19 +182,56 @@ if (scanBtnElement) {
 
                 let thresholdHigh = typeof CONFIG !== 'undefined' ? CONFIG.RISK_THRESHOLD_HIGH : 70;
                 
-                // 👇 【核心修改】直接跳轉全螢幕防護頁面，拔除倒數計時器
                 if (score < 30) {
                     if (appBody) appBody.className = "theme-safe";
                     if (headerTitle) headerTitle.innerText = "✅ 檢測通過：安全網頁";
                 } else if (score >= thresholdHigh) {
+                    if (appBody) appBody.className = "theme-danger";
                     
-                    // 🚨 手動掃描抓到詐騙：直接切換到全螢幕攔截頁面 (內建誤判按鈕)，並關閉小面板
-                    let blockedUrl = chrome.runtime.getURL("blocked.html") + 
-                                     "?reason=" + encodeURIComponent(reportData.reason || "系統深層掃描發現高度危險特徵！") + 
-                                     "&original_url=" + encodeURIComponent(tab.url);
+                    if (headerTitle) {
+                        headerTitle.innerText = "❌ 極度危險！請立即撤離！";
+                        headerTitle.style.color = "#ffffff";
+                        if (headerTitle.parentElement) {
+                            headerTitle.parentElement.style.background = "linear-gradient(90deg, #d32f2f 0%, #b71c1c 100%)";
+                        }
+                    }
+
+                    const reasonEl = document.getElementById('report-reason');
+                    if (reasonEl) {
+                        reasonEl.style.color = "#d32f2f";
+                        reasonEl.style.fontWeight = "bold";
+                        reasonEl.style.backgroundColor = "#ffebee";
+                        reasonEl.style.padding = "12px";
+                        reasonEl.style.borderRadius = "8px";
+                    }
                     
-                    chrome.tabs.update(tab.id, { url: blockedUrl }).catch(e => console.log("跳轉失敗:", e));
-                    window.close(); // 自動關閉小面板，讓畫面保持乾淨
+                    // 👇 💡 黃金 3 秒鐘：讓長輩有時間看清楚分析原因，再導向全螢幕攔截頁面！
+                    scanBtn.dataset.isEscape = "true";
+                    scanBtn.dataset.blockReason = reportData.reason || "極度危險"; 
+                    let countdown = 3; 
+                    scanBtn.innerText = `🚨 危險！${countdown} 秒後進入防護網`;
+                    scanBtn.style.background = "linear-gradient(90deg, #FF4444 0%, #CC0000 100%)";
+                    scanBtn.style.color = "white";
+                    scanBtn.style.border = "none";
+                    scanBtn.style.boxShadow = "0 0 20px rgba(255, 68, 68, 0.8)";
+                    scanBtn.disabled = false; // 讓使用者可以點擊提早進入防護網
+                    
+                    const timerId = setInterval(async () => {
+                        countdown--;
+                        if (countdown > 0) {
+                            scanBtn.innerText = `🚨 危險！${countdown} 秒後進入防護網`;
+                        } else {
+                            clearInterval(timerId);
+                            try {
+                                let [t] = await chrome.tabs.query({ active: true, currentWindow: true });
+                                let blockedUrl = chrome.runtime.getURL("blocked.html") + 
+                                                 "?reason=" + encodeURIComponent(reportData.reason || "極度危險！") + 
+                                                 "&original_url=" + encodeURIComponent(t.url);
+                                chrome.tabs.update(t.id, { url: blockedUrl });
+                                window.close(); // 自動關閉小面板
+                            } catch(e) {}
+                        }
+                    }, 1000);
                     
                 } else {
                     if (appBody) appBody.className = "theme-warning";

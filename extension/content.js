@@ -1,5 +1,5 @@
 /**
- * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (究極完美進化版)
+ * 🏆 AI 防詐盾牌 - 網頁雙效守護者 (極簡無干擾版)
  * 核心特色：動態網站信譽分級 + 區域限定掃描 + 上下文權重 + 信任護城河扣分 + 條件式圖片掃描 + 自動蒐證快門 + 🛡️ 隱私權物理隔離萃取
  */
 
@@ -292,28 +292,9 @@ async function scanScamWords() {
         return;
     }
     
-    if (totalRiskScore >= riskThreshold * 0.6 && totalRiskScore < riskThreshold) {
-        if (!document.getElementById('ai-fraud-mid-risk')) {
-            showMidRiskWarning(totalRiskScore, matchedKeywords.concat(trustedFootprints));
-        }
-    }
+    // 💡 已徹底拔除中度風險的右下角浮動警告 (showMidRiskWarning)，讓畫面保持乾淨！
     
     observeElements();
-}
-
-function showMidRiskWarning(score, keywords) {
-    const div = document.createElement('div');
-    div.id = 'ai-fraud-mid-risk';
-    div.style.cssText = 'position:fixed; bottom:20px; right:20px; background:#ff9800; color:white; padding:12px 16px; border-radius:8px; z-index:999999; font-family:sans-serif; font-size:14px; box-shadow:0 2px 10px rgba(0,0,0,0.2); max-width:300px;';
-    div.innerHTML = `
-        <div style="font-weight:bold;">⚠️ 中度風險警告</div>
-        <div>此頁面風險分數 ${score} 分，請留意勿提供個資。</div>
-        <div style="font-size:12px; margin-top:5px; color:#ffe0b2;">觸發特徵：${keywords.join(', ')}</div>
-        <button id="closeMidRisk" style="margin-top:8px; background:white; border:none; border-radius:4px; padding:4px 8px; cursor:pointer; color:#ff9800; font-weight:bold;">關閉</button>
-    `;
-    document.body.appendChild(div);
-    document.getElementById('closeMidRisk').onclick = () => div.remove();
-    setTimeout(() => div.remove(), 10000);
 }
 
 // ==========================================
@@ -353,7 +334,7 @@ const linkObserver = new IntersectionObserver((entries) => {
                 const linkUrl = new URL(link.href);
                 if (badDomains.some(domain => linkUrl.hostname.includes(domain))) {
                     link.style.cssText = 'color: #ff0000 !important; font-weight: bold; text-decoration: underline wavy red; background-color: #ffe6e6;';
-                    triggerSafeBlock("發現 165 黑名單釣魚連結：" + linkUrl.hostname);
+                    triggerSafeBlock("發現釣魚連結：" + linkUrl.hostname);
                 }
             } catch (e) {}
             linkObserver.unobserve(link);
@@ -370,7 +351,7 @@ const imageObserver = new IntersectionObserver(async (entries) => {
                 try {
                     chrome.runtime.sendMessage({ action: "scanImageInBackground", imageUrl: img.src, pageUrl: window.location.href });
                 } catch (error) {
-                    console.warn("⚠️ 擴充功能已更新，請重新整理此網頁。");
+                    // 💡 靜音處理：不印出警告黃字，保持主控台乾淨！
                 }
             }
             imageObserver.unobserve(img);
@@ -539,50 +520,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         alert(`🛡️ 已成功為您注入 ${injectedCount} 筆反制假資料！`);
         sendResponse({status: "success"});
-    }
-});
-
-// ==========================================
-// ⚠️ 升級功能 3：接收背景警告指令 (浮動警告視窗)
-// ==========================================
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-    if (request.action === "show_alert") {
-        if (document.getElementById("ai-fraud-alert-box")) return;
-
-        let alertDiv = document.createElement("div");
-        alertDiv.id = "ai-fraud-alert-box";
-        alertDiv.style.cssText = "position:fixed; bottom:20px; right:20px; background:#ff4d4f; color:white; padding:15px 20px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:999999; font-family:sans-serif; font-size:16px; font-weight:bold; max-width:300px;";
-
-        let title = document.createElement("div");
-        title.innerText = "⚠️ AI 防詐盾牌警告";
-        title.style.fontSize = "18px";
-        title.style.marginBottom = "8px";
-
-        let content = document.createElement("div");
-        let riskScore = request.data.riskScore !== undefined ? request.data.riskScore : "未知";
-        let reason = request.data.reason || "系統偵測到潛在風險";
-        content.innerText = `此網頁存在中度風險 (${riskScore}分)，疑似包含詐騙特徵，請小心操作！\n原因：${reason}`;
-        content.style.fontSize = "14px";
-        content.style.lineHeight = "1.4";
-
-        let closeBtn = document.createElement("button");
-        closeBtn.innerText = "我知道了";
-        closeBtn.style.marginTop = "10px";
-        closeBtn.style.padding = "5px 10px";
-        closeBtn.style.border = "none";
-        closeBtn.style.borderRadius = "4px";
-        closeBtn.style.backgroundColor = "white";
-        closeBtn.style.color = "#ff4d4f";
-        closeBtn.style.cursor = "pointer";
-        closeBtn.style.fontWeight = "bold";
-        closeBtn.style.width = "100%";
-
-        closeBtn.onclick = function() { alertDiv.remove(); };
-
-        alertDiv.appendChild(title);
-        alertDiv.appendChild(content);
-        alertDiv.appendChild(closeBtn);
-        document.body.appendChild(alertDiv);
     }
 });
 
