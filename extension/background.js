@@ -55,7 +55,7 @@ async function fetchWithRetry(url, options, maxRetries = CONFIG.MAX_RETRIES) {
 // 🛑 【終極修復】：將開發網域放回絕對不掃描的名單中！
 const systemPages = [
     'chrome://', 'edge://', 'extensions', 'blocked.html', 'dashboard.html', 'simulator.html',
-    'localhost', '127.0.0.1', 'render.com', 'github.com'
+    'render.com', 'github.com'
 ];
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
