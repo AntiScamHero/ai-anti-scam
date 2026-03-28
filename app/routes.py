@@ -16,7 +16,8 @@ from dotenv import load_dotenv
 # 新增 Blueprint (藍圖) 與 current_app
 from flask import Blueprint, request, jsonify, Response, current_app
 from werkzeug.exceptions import HTTPException 
-from firebase_admin import db, storage
+# 🛑 【免付費修改 1】：拿掉 storage，只保留免費的 db
+from firebase_admin import db
 
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
@@ -205,21 +206,11 @@ def submit_evidence():
 
         image_url = ""
         
-        try:
-            if ',' in screenshot_base64:
-                screenshot_base64 = screenshot_base64.split(',')[1]
-            decoded_image = base64.b64decode(screenshot_base64)
-            
-            bucket = storage.bucket()
-            file_name = f"evidence/{family_id}/{uuid.uuid4().hex}.jpg"
-            blob = bucket.blob(file_name)
-            
-            blob.upload_from_string(decoded_image, content_type='image/jpeg')
-            blob.make_public()
-            image_url = blob.public_url
-        except Exception as e:
-            print(f"⚠️ 圖片上傳 Storage 失敗: {e}", flush=True)
+        # 🛑 【免付費修改 2】：略過 Storage，整理好照片代碼準備存入資料庫
+        if ',' in screenshot_base64:
+            screenshot_base64 = screenshot_base64.split(',')[1]
 
+        # 將照片純文字寫入免費資料庫
         ref = db.reference('scam_evidence').push({
             'url': url,
             'evidence_image_url': image_url, 
@@ -324,23 +315,11 @@ def scan_url():
     
     if screenshot_base64 and firebase_initialized:
         cloud_img_url = ""
+        # 🛑 【免付費修改 3】：掃描網址時一樣略過 Storage，直接寫入資料庫
         try:
             if ',' in screenshot_base64:
-                pure_base64 = screenshot_base64.split(',')[1]
-            else:
-                pure_base64 = screenshot_base64
-            decoded_image = base64.b64decode(pure_base64)
-            
-            bucket = storage.bucket()
-            file_name = f"evidence/{family_id}/{uuid.uuid4().hex}.jpg"
-            blob = bucket.blob(file_name)
-            blob.upload_from_string(decoded_image, content_type='image/jpeg')
-            blob.make_public()
-            cloud_img_url = blob.public_url
-        except Exception as e:
-            print(f"⚠️ Storage 上傳失敗: {e}", flush=True)
-
-        try:
+                screenshot_base64 = screenshot_base64.split(',')[1]
+                
             ev_ref = db.reference('scam_evidence').push({
                 'url': target_url,
                 'evidence_image_url': cloud_img_url,
