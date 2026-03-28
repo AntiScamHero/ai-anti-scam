@@ -559,29 +559,33 @@ def scan_url():
             pass
 
     if is_urgent:
+        # 🌟 核心修復：在主線程捕捉「真實的」 Flask App 實例
+        app = current_app._get_current_object()
+        
         def handle_urgent():
-            # 🛑 【核心修復 2-1】：移除 app_context 避免崩潰，改用直接執行
-            socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
-            send_dynamic_line_alert(
-                family_id=family_id, 
-                url=target_url, 
-                reason="【觸發強制防護盾】" + web_text[:50], 
-                risk_score=100, 
-                scam_dna=["系統強制警示"]
-            )
-            
-            try:
-                report_dict = {
-                    "riskScore": 100,
-                    "riskLevel": "極度危險",
-                    "scamDNA": ["系統強制警示"],
-                    "reason": f"【前端緊急攔截】{web_text[:50]}",
-                    "advice": "防詐盾牌已在第一時間自動為您阻擋此危險網頁。"
-                }
-                # 改用統一的強制上傳小幫手
-                log_threat_to_db(report_dict)
-            except Exception as e:
-                print(f"⚠️ 緊急攔截紀錄寫入失敗: {e}", flush=True)
+            with app.app_context(): # ✅ 建立安全的背景執行環境，絕不崩潰！
+                # 🛑 【核心修復 2-1】：改用直接執行
+                socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
+                send_dynamic_line_alert(
+                    family_id=family_id, 
+                    url=target_url, 
+                    reason="【觸發強制防護盾】" + web_text[:50], 
+                    risk_score=100, 
+                    scam_dna=["系統強制警示"]
+                )
+                
+                try:
+                    report_dict = {
+                        "riskScore": 100,
+                        "riskLevel": "極度危險",
+                        "scamDNA": ["系統強制警示"],
+                        "reason": f"【前端緊急攔截】{web_text[:50]}",
+                        "advice": "防詐盾牌已在第一時間自動為您阻擋此危險網頁。"
+                    }
+                    # 改用統一的強制上傳小幫手
+                    log_threat_to_db(report_dict)
+                except Exception as e:
+                    print(f"⚠️ 緊急攔截紀錄寫入失敗: {e}", flush=True)
 
         socketio.start_background_task(handle_urgent) 
         return jsonify({"status": "success"})
@@ -594,14 +598,18 @@ def scan_url():
     score = int(report_dict.get('riskScore', 0))
 
     if firebase_initialized:
+        # 🌟 核心修復：在主線程捕捉「真實的」 Flask App 實例
+        app = current_app._get_current_object()
+        
         def background_tasks():
-            # 🛑 【核心修復 2-2】：移除 app_context，改用統一的強制上傳小幫手
-            log_threat_to_db(report_dict)
-            try:
-                if target_url:
-                    db.reference(f'url_cache/{safe_url_key}').set(report_str)
-            except Exception as e:
-                print(f"⚠️ 寫入掃描紀錄失敗: {e}", flush=True)
+            with app.app_context(): # ✅ 建立安全的背景執行環境
+                # 🛑 【核心修復 2-2】：改用統一的強制上傳小幫手
+                log_threat_to_db(report_dict)
+                try:
+                    if target_url:
+                        db.reference(f'url_cache/{safe_url_key}').set(report_str)
+                except Exception as e:
+                    print(f"⚠️ 寫入掃描紀錄失敗: {e}", flush=True)
 
         socketio.start_background_task(background_tasks) 
 
