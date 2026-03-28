@@ -84,11 +84,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
             let screenshotBase64 = null;
             try {
-                await new Promise(resolve => setTimeout(resolve, 500)); 
-                if (tab.windowId) {
+                // 🛑 核心修復：Chrome 嚴格規定，必須是「使用者當下正在看的分頁 (active: true)」才能拍照！
+                if (tab.active && tab.windowId) {
+                    await new Promise(resolve => setTimeout(resolve, 800)); // 稍微多等 0.3 秒，確保詐騙畫面完全顯示
                     screenshotBase64 = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'jpeg', quality: 30 });
                 }
-            } catch (imgErr) { } 
+            } catch (imgErr) { 
+                console.log("背景自動截圖受限:", imgErr); 
+            }
 
             let response;
             try {
