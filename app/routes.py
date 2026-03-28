@@ -501,7 +501,7 @@ def scan_url():
                 for domain in TRUSTED_DOMAINS:
                     if domain in host and not host.endswith("." + domain) and host != domain:
                         report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["偽裝官方"], "reason": f"偽裝網域 (試圖欺騙 {domain})", "advice": "請勿點擊或輸入任何資料！"}
-                        log_threat_to_db(report_dict) # 👈 強制上傳 (解決你的 Yahoo bug!)
+                        log_threat_to_db(report_dict) # 👈 強制上傳
                         return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             except: 
                 pass
@@ -552,44 +552,36 @@ def scan_url():
             cached = db.reference(f'url_cache/{safe_url_key}').get()
             if cached:
                 c_data = json.loads(cached) if isinstance(cached, str) else cached
+                # 👇 【核心修復 1】：就算是用快取秒殺，也要通報戰情室！
+                log_threat_to_db(c_data)
                 return jsonify({**c_data, "report": json.dumps(c_data, ensure_ascii=False), "masked_text": web_text})
         except Exception as e: 
             pass
 
     if is_urgent:
         def handle_urgent():
-            with current_app.app_context(): 
-                socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
-                send_dynamic_line_alert(
-                    family_id=family_id, 
-                    url=target_url, 
-                    reason="【觸發強制防護盾】" + web_text[:50], 
-                    risk_score=100, 
-                    scam_dna=["系統強制警示"]
-                )
-                
-                try:
-                    report_dict = {
-                        "riskScore": 100,
-                        "riskLevel": "極度危險",
-                        "scamDNA": ["系統強制警示"],
-                        "reason": f"【前端緊急攔截】{web_text[:50]}",
-                        "advice": "防詐盾牌已在第一時間自動為您阻擋此危險網頁。"
-                    }
-                    timestamp = get_tw_time()
-                    db.reference('scan_history').push({
-                        'url': target_url, 
-                        'report': json.dumps(report_dict, ensure_ascii=False), 
-                        'userID': user_id, 
-                        'familyID': family_id, 
-                        'timestamp': timestamp,
-                        'evidenceID': evidence_id 
-                    })
-                    socketio.emit('new_scan_result', {
-                        'url': target_url, 'riskScore': 100, 'reason': report_dict['reason'], 'timestamp': timestamp
-                    }, room=family_id)
-                except Exception as e:
-                    print(f"⚠️ 緊急攔截紀錄寫入失敗: {e}", flush=True)
+            # 🛑 【核心修復 2-1】：移除 app_context 避免崩潰，改用直接執行
+            socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
+            send_dynamic_line_alert(
+                family_id=family_id, 
+                url=target_url, 
+                reason="【觸發強制防護盾】" + web_text[:50], 
+                risk_score=100, 
+                scam_dna=["系統強制警示"]
+            )
+            
+            try:
+                report_dict = {
+                    "riskScore": 100,
+                    "riskLevel": "極度危險",
+                    "scamDNA": ["系統強制警示"],
+                    "reason": f"【前端緊急攔截】{web_text[:50]}",
+                    "advice": "防詐盾牌已在第一時間自動為您阻擋此危險網頁。"
+                }
+                # 改用統一的強制上傳小幫手
+                log_threat_to_db(report_dict)
+            except Exception as e:
+                print(f"⚠️ 緊急攔截紀錄寫入失敗: {e}", flush=True)
 
         socketio.start_background_task(handle_urgent) 
         return jsonify({"status": "success"})
@@ -603,29 +595,13 @@ def scan_url():
 
     if firebase_initialized:
         def background_tasks():
-            with current_app.app_context(): 
-                timestamp = get_tw_time()
-                try:
-                    db.reference('scan_history').push({
-                        'url': target_url, 'report': report_str, 'userID': user_id, 'familyID': family_id, 'timestamp': timestamp, 'evidenceID': evidence_id
-                    })
-                    if target_url:
-                        db.reference(f'url_cache/{safe_url_key}').set(report_str)
-                except Exception as e:
-                    print(f"⚠️ 寫入掃描紀錄失敗: {e}", flush=True)
-                
-                socketio.emit('new_scan_result', {
-                    'url': target_url, 'riskScore': score, 'reason': report_dict.get('reason'), 'timestamp': timestamp
-                }, room=family_id)
-
-                if score >= 75:
-                    send_dynamic_line_alert(
-                        family_id=family_id, 
-                        url=target_url, 
-                        reason=report_dict.get('reason', '未知風險'),
-                        risk_score=score,
-                        scam_dna=report_dict.get('scamDNA', ["高風險套路"])
-                    )
+            # 🛑 【核心修復 2-2】：移除 app_context，改用統一的強制上傳小幫手
+            log_threat_to_db(report_dict)
+            try:
+                if target_url:
+                    db.reference(f'url_cache/{safe_url_key}').set(report_str)
+            except Exception as e:
+                print(f"⚠️ 寫入掃描紀錄失敗: {e}", flush=True)
 
         socketio.start_background_task(background_tasks) 
 
