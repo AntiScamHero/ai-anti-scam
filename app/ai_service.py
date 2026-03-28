@@ -66,7 +66,6 @@ def analyze_risk_with_ai(target_url, web_text, image_url, is_jailbreak_attempt):
         return fallback_analysis(target_url, web_text, image_url, "系統尚未設定 AZURE 金鑰")
 
     try:
-        # 注意：這裡已經修復，絕對沒有 proxie 錯字
         client = AzureOpenAI(
             api_key=api_key,
             api_version="2025-01-01-preview", 
@@ -130,36 +129,54 @@ def call_openai(client, system_prompt, user_content):
         response_format={"type": "json_object"},
         max_tokens=150,
         temperature=0.0,
-        timeout=8.0  # 👉 新增這行：強制 8 秒沒回應就判定超時，立刻觸發你的備援機制
+        timeout=8.0  # 確保遇到網路卡頓強制跳脫
     )
 
 def parse_response(response):
-    result_str = response.choices[0].message.content or "{}"
-    result_str = result_str.strip()
-    
-    if result_str.startswith("```json"):
-        result_str = result_str[7:]
-    elif result_str.startswith("```"):
-        result_str = result_str[3:]
-        
-    if result_str.endswith("```"):
-        result_str = result_str[:-3]
-        
-    result_str = result_str.strip()
-    
     try:
-        result_json = json.loads(result_str)
-    except json.JSONDecodeError:
-        print("⚠️ AI 回傳格式非有效 JSON，啟動預設安全防護")
-        result_json = {}
-    
-    return {
-        "riskScore": int(result_json.get("riskScore", 15)),
-        "riskLevel": result_json.get("riskLevel", "安全無虞"),
-        "scamDNA": result_json.get("scamDNA", ["未知套路"]), 
-        "reason": result_json.get("reason", "未發現明顯的詐騙特徵，屬於一般網頁。"),
-        "advice": result_json.get("advice", "請維持一般上網警覺即可。")
-    }
+        result_str = response.choices[0].message.content or "{}"
+        result_str = result_str.strip()
+        
+        if result_str.startswith("```json"):
+            result_str = result_str[7:]
+        elif result_str.startswith("```"):
+            result_str = result_str[3:]
+            
+        if result_str.endswith("```"):
+            result_str = result_str[:-3]
+            
+        result_str = result_str.strip()
+        
+        try:
+            result_json = json.loads(result_str)
+        except json.JSONDecodeError:
+            print(f"⚠️ AI 回傳格式非有效 JSON: {result_str[:50]}...", flush=True)
+            result_json = {}
+            
+        # 🟢 究極防呆：確保風險分數絕對是數字，就算 AI 回傳字串也不會讓伺服器崩潰
+        raw_score = result_json.get("riskScore", 15)
+        try:
+            safe_score = int(raw_score)
+        except (ValueError, TypeError):
+            safe_score = 15
+            print(f"⚠️ riskScore 轉換失敗，已重置為預設值。原始資料: {raw_score}", flush=True)
+
+        return {
+            "riskScore": safe_score,
+            "riskLevel": result_json.get("riskLevel", "安全無虞"),
+            "scamDNA": result_json.get("scamDNA", ["未知套路"]), 
+            "reason": result_json.get("reason", "未發現明顯的詐騙特徵，屬於一般網頁。"),
+            "advice": result_json.get("advice", "請維持一般上網警覺即可。")
+        }
+    except Exception as e:
+        print(f"❌ 嚴重解析錯誤: {e}", flush=True)
+        return {
+            "riskScore": 15,
+            "riskLevel": "安全無虞",
+            "scamDNA": ["解析失敗"],
+            "reason": "系統分析時發生異常，已啟動預設防護。",
+            "advice": "請維持一般上網警覺。"
+        }
 
 def fallback_analysis(target_url, web_text, image_url, error_msg):
     raw_combined = f"{web_text or ''} {target_url or ''} {image_url or ''}"
@@ -242,7 +259,8 @@ def stream_scam_simulation(chat_history, scenario_type, user_message):
             model=model_name,
             messages=messages,
             temperature=0.8,
-            stream=True
+            stream=True,
+            timeout=10.0  # 🟢 加入超時防護，避免卡死伺服器
         )
         for chunk in response:
             if len(chunk.choices) > 0 and chunk.choices[0].delta.content:

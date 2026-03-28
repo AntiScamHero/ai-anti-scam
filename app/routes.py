@@ -134,7 +134,10 @@ def get_dynamic_advice(scam_dna_list):
         return "『剛剛上網有沒有遇到什麼奇怪的畫面，或是要求輸入密碼的網頁呀？』"
 
 def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=None):
+    print(f"📡 [LINE推播啟動] 目標家庭: {family_id}, 危險指數: {risk_score}", flush=True)
+    
     if not firebase_initialized or family_id == 'none': 
+        print(f"⚠️ [推播取消] Firebase 未連線或未綁定 family_id ({family_id})", flush=True)
         return
     
     if scam_dna is None:
@@ -175,8 +178,12 @@ def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=Non
                         messages=[TextMessage(text=msg)]
                     )
                 )
+            print(f"✅ [LINE推播成功] 已發送緊急通知至綁定帳號！", flush=True)
+        else:
+            print(f"⚠️ [推播失敗] 無法找到對應的 LINE_ID，請檢查綁定狀態", flush=True)
+            
     except Exception as e:
-        print(f"LINE 動態推播失敗: {e}", flush=True)
+        print(f"❌ [LINE推播異常] 動態推播發生錯誤: {e}", flush=True)
 
 @api_bp.route('/', methods=['GET'])
 def health_check():
@@ -291,7 +298,6 @@ def scan_url():
     target_url = str(target_url) if target_url else ''
     if len(target_url) > 2000: target_url = target_url[:2000]
     
-    # 🌟 【修改 1】：將 safe_url_key 提早到這裡定義
     safe_url_key = re.sub(r'[^a-zA-Z0-9_-]', '_', target_url)[:120] if target_url else "no_url"
 
     raw_text = data.get('text')
@@ -314,7 +320,6 @@ def scan_url():
     
     if screenshot_base64 and firebase_initialized:
         cloud_img_url = ""
-        # 🛑 【破圖修復】：掃描網址時略過 Storage，直接寫入資料庫 (保留完整檔頭，不切開)
         try:
             ev_ref = db.reference('scam_evidence').push({
                 'url': target_url,
@@ -328,8 +333,16 @@ def scan_url():
         except Exception as e:
             print(f"⚠️ 資料庫寫入失敗: {e}", flush=True)
 
-    # 👇👇👇 【強制上傳小幫手】：讓所有「提早秒殺攔截」的危險都會寫入戰情室！
+    # 👇👇👇 【強制上傳小幫手】：包含型態轉換與推播日誌
     def log_threat_to_db(rep_dict):
+        # 🟢 強制轉型，避免字串引發崩潰
+        try:
+            r_score = int(rep_dict.get('riskScore', 0))
+        except (ValueError, TypeError):
+            r_score = 0
+            
+        rep_dict['riskScore'] = r_score
+
         if firebase_initialized:
             try:
                 ts = get_tw_time()
@@ -342,21 +355,25 @@ def scan_url():
                     'evidenceID': evidence_id 
                 })
                 
-                # 🌟 【修改 2】：只要有攔截結果，立刻強制寫入快取，徹底防堵小尖兵閃退！
                 if target_url:
                     db.reference(f'url_cache/{safe_url_key}').set(json.dumps(rep_dict, ensure_ascii=False))
 
                 socketio.emit('new_scan_result', {
-                    'url': target_url, 'riskScore': rep_dict.get('riskScore', 0), 'reason': rep_dict.get('reason', ''), 'timestamp': ts
+                    'url': target_url, 'riskScore': r_score, 'reason': rep_dict.get('reason', ''), 'timestamp': ts
                 }, room=family_id)
-                if rep_dict.get('riskScore', 0) >= 70:
+                
+                if r_score >= 70:
+                    print(f"🚨 [警報達標] 危險指數 {r_score} 分，準備發送防護網推播！", flush=True)
                     send_dynamic_line_alert(
                         family_id=family_id, 
                         url=target_url, 
                         reason=rep_dict.get('reason', ''),
-                        risk_score=rep_dict.get('riskScore', 0),
+                        risk_score=r_score,
                         scam_dna=rep_dict.get('scamDNA', ['危險'])
                     )
+                else:
+                    print(f"🟢 [安全略過] 危險指數 {r_score} 分，不發送 LINE 推播", flush=True)
+                    
             except Exception as e:
                 print(f"⚠️ 寫入攔截紀錄失敗: {e}", flush=True)
     # 👆👆👆 
@@ -411,37 +428,37 @@ def scan_url():
         img_lower = image_url.lower()
         if not image_url.startswith('http') and not image_url.startswith('data:'):
             report = {"riskScore": 65, "riskLevel": "中度危險", "scamDNA": ["異常圖片"], "reason": "偵測到無效或惡意的圖片 URL 格式"}
-            log_threat_to_db(report) # 👈 強制上傳
+            log_threat_to_db(report)
             return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
             
         if any(ext in img_lower for ext in ['.svg', '.webp', '.bmp', '.tiff', '.gif']) or 'image/webp' in img_lower or 'image/svg' in img_lower:
             report = {"riskScore": 65, "riskLevel": "中度危險", "scamDNA": ["異常格式"], "reason": "使用罕見或易藏惡意腳本的圖片格式"}
-            log_threat_to_db(report) # 👈 強制上傳
+            log_threat_to_db(report)
             return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
             
         suspicious_img_kws = ['qr', 'barcode', 'win', 'prize', 'lottery', 'base64', 'promo', 'award', 'bonus', 'text', 'gift', 'scam', 'free', '中獎', '保證獲利']
         if any(kw in urllib.parse.unquote(img_lower) for kw in suspicious_img_kws):
             report = {"riskScore": 85, "riskLevel": "高度危險", "scamDNA": ["圖片誘惑/QR"], "reason": "偵測到可疑的 QR Code 或圖片誘惑特徵"}
-            log_threat_to_db(report) # 👈 強制上傳
+            log_threat_to_db(report)
             return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
 
         if raw_text and len(raw_text.strip()) > 0:
             report = {"riskScore": 80, "riskLevel": "高度危險", "scamDNA": ["多模態夾擊"], "reason": "偵測到圖文夾雜的混合規避手法"}
-            log_threat_to_db(report) # 👈 強制上傳
+            log_threat_to_db(report)
             return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
             
         report = {"riskScore": 75, "riskLevel": "高度危險", "scamDNA": ["可疑圖片內容"], "reason": "防堵圖片隱藏中獎文字規避"}
-        log_threat_to_db(report) # 👈 強制上傳
+        log_threat_to_db(report)
         return jsonify({**report, "report": json.dumps(report, ensure_ascii=False), "masked_text": raw_text})
 
     if target_url:
         if '@' in target_url:
             report = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": ["域名欺騙"], "reason": "偵測到 Userinfo 繞過欺騙", "advice": "切勿點擊"}
-            log_threat_to_db(report) # 👈 強制上傳
+            log_threat_to_db(report)
             return jsonify({**report, "report": json.dumps(report), "masked_text": ""})
         if re.search(r'[а-яА-Я]', target_url): 
             report = {"riskScore": 95, "riskLevel": "極度危險", "scamDNA": ["域名欺騙"], "reason": "偵測到同形異義字欺騙", "advice": "切勿點擊"}
-            log_threat_to_db(report) # 👈 強制上傳
+            log_threat_to_db(report)
             return jsonify({**report, "report": json.dumps(report), "masked_text": ""})
 
     web_text = mask_sensitive_data(raw_text)
@@ -495,13 +512,13 @@ def scan_url():
         
         if not is_genuine_white_listed(parse_u):
             if check_165_blacklist(parse_u):
-                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比對成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
-                log_threat_to_db(report_dict) # 👈 強制上傳
+                report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["黑名單警示"], "reason": "🚨 165 官方資料庫比تدائي成功：此為已知詐騙網站！", "advice": "請立即關閉網頁！"}
+                log_threat_to_db(report_dict) 
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
             if check_google_safe_browsing(parse_u):
                 report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["Google黑名單警示"], "reason": "🚨 Google 官方安全大腦攔截：此為高風險惡意/釣魚網站！", "advice": "請立即關閉網頁！"}
-                log_threat_to_db(report_dict) # 👈 強制上傳
+                log_threat_to_db(report_dict)
                 return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             
             try:
@@ -509,7 +526,7 @@ def scan_url():
                 for domain in TRUSTED_DOMAINS:
                     if domain in host and not host.endswith("." + domain) and host != domain:
                         report_dict = {"riskScore": 100, "riskLevel": "極度危險", "scamDNA": ["偽裝官方"], "reason": f"偽裝網域 (試圖欺騙 {domain})", "advice": "請勿點擊或輸入任何資料！"}
-                        log_threat_to_db(report_dict) # 👈 強制上傳
+                        log_threat_to_db(report_dict)
                         return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
             except: 
                 pass
@@ -550,38 +567,24 @@ def scan_url():
                 "advice": detailed_advice
             }
             
-            log_threat_to_db(report_dict) # 👈 強制上傳，快取也會一併寫入
+            log_threat_to_db(report_dict) 
             return jsonify({**report_dict, "report": json.dumps(report_dict, ensure_ascii=False), "masked_text": web_text})
-    
-    # 這裡已經移除了重複定義 safe_url_key 的程式碼，因為上面已經宣告過了
     
     if firebase_initialized and target_url and not image_url and not is_urgent and not is_white_listed:
         try:
             cached = db.reference(f'url_cache/{safe_url_key}').get()
             if cached:
                 c_data = json.loads(cached) if isinstance(cached, str) else cached
-                # 👇 【核心修復 1】：就算是用快取秒殺，也要通報戰情室！
                 log_threat_to_db(c_data)
                 return jsonify({**c_data, "report": json.dumps(c_data, ensure_ascii=False), "masked_text": web_text})
         except Exception as e: 
             pass
 
     if is_urgent:
-        # 🌟 核心修復：在主線程捕捉「真實的」 Flask App 實例
         app = current_app._get_current_object()
-        
         def handle_urgent():
-            with app.app_context(): # ✅ 建立安全的背景執行環境，絕不崩潰！
-                # 🛑 【核心修復 2-1】：改用直接執行
+            with app.app_context(): 
                 socketio.emit('emergency_alert', {'url': target_url, 'reason': web_text[:50]}, room=family_id)
-                send_dynamic_line_alert(
-                    family_id=family_id, 
-                    url=target_url, 
-                    reason="【觸發強制防護盾】" + web_text[:50], 
-                    risk_score=100, 
-                    scam_dna=["系統強制警示"]
-                )
-                
                 try:
                     report_dict = {
                         "riskScore": 100,
@@ -590,7 +593,6 @@ def scan_url():
                         "reason": f"【前端緊急攔截】{web_text[:50]}",
                         "advice": "防詐盾牌已在第一時間自動為您阻擋此危險網頁。"
                     }
-                    # 改用統一的強制上傳小幫手
                     log_threat_to_db(report_dict)
                 except Exception as e:
                     print(f"⚠️ 緊急攔截紀錄寫入失敗: {e}", flush=True)
@@ -602,18 +604,20 @@ def scan_url():
     is_jailbreak_attempt = any(k in raw_text.lower() for k in jailbreak_keywords)
 
     report_dict = analyze_risk_with_ai(target_url, web_text, image_url, is_jailbreak_attempt)
+    
+    # 🟢 最後一道防線：確保送回給前端的 JSON 型態乾淨正確
+    try:
+        report_dict['riskScore'] = int(report_dict.get('riskScore', 0))
+    except (ValueError, TypeError):
+        report_dict['riskScore'] = 0
+        
     report_str = json.dumps(report_dict, ensure_ascii=False)
-    score = int(report_dict.get('riskScore', 0))
 
     if firebase_initialized:
-        # 🌟 核心修復：在主線程捕捉「真實的」 Flask App 實例
         app = current_app._get_current_object()
-        
         def background_tasks():
-            with app.app_context(): # ✅ 建立安全的背景執行環境
-                # 🛑 【核心修復 2-2】：改用統一的強制上傳小幫手
+            with app.app_context(): 
                 log_threat_to_db(report_dict)
-                # 因為 log_threat_to_db 現在已經會幫忙寫入快取了，所以下面這段原本寫快取的程式碼就可以省略，避免重複寫入！
 
         socketio.start_background_task(background_tasks) 
 
