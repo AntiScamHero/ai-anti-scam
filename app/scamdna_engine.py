@@ -183,9 +183,11 @@ def find_keyword_hits(text: str, keywords):
 def find_regex_hits(text: str, patterns):
     raw = normalize_text(text)
     hits = []
-    match = re.search(pattern, raw, re.I)
-if match:
-    hits.append(match.group()) # 儲存網頁上實際出現的那段話
+    for pattern in patterns:
+        try:
+            match = re.search(pattern, raw, re.I)
+            if match:
+                hits.append(match.group()) # 儲存網頁上實際出現的那段話
         except re.error:
             continue
     return hits
