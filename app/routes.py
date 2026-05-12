@@ -83,127 +83,6 @@ api_bp = Blueprint("api", __name__)
 last_alert_time = {}
 last_line_alert_time = {}
 
-# ==========================================
-# 第一名競賽優化：統一評分 / Demo 保底 / 可解釋輸出
-# ==========================================
-DEMO_MODE = str(os.getenv("AI_SHIELD_DEMO_MODE", "false")).strip().lower() in {"1", "true", "yes", "on"}
-SCORING_VERSION = "first-place-v1"
-SCORE_WEIGHTS = {"rules": 0.60, "behavior": 0.20, "ai": 0.20}
-
-
-def explain_from_report(report, max_items=5):
-    if not isinstance(report, dict):
-        return []
-
-    existing = report.get("explain") or report.get("explanation") or []
-    if isinstance(existing, str):
-        existing = [existing]
-    items = [str(x).strip() for x in existing if str(x).strip()] if isinstance(existing, list) else []
-
-    reason = str(report.get("reason") or "").strip()
-    if reason:
-        for part in re.split(r"[；;。\n]+", reason):
-            part = part.strip()
-            if part and part not in items:
-                items.append(part)
-
-    dna = report.get("scamDNA") or []
-    if isinstance(dna, str):
-        dna = [dna]
-    if dna:
-        tag_line = "命中心理詐騙 DNA：" + "、".join([str(x) for x in dna[:3]])
-        if tag_line not in items:
-            items.insert(0, tag_line)
-
-    return items[:max_items] or ["未發現明顯高風險訊號。"]
-
-
-def merge_component_reports(*reports):
-    candidates = []
-    for name, report in reports:
-        if isinstance(report, dict):
-            normalized = normalize_report_dict(report)
-            candidates.append((name, normalized))
-
-    if not candidates:
-        return normalize_report_dict({
-            "riskScore": 0,
-            "riskLevel": "低風險",
-            "scamDNA": ["無"],
-            "reason": "沒有可用的分析結果。",
-            "advice": "請重新掃描或補充更多文字 / 網址資訊。",
-        })
-
-    winning_name, winning = max(candidates, key=lambda item: clamp_score(item[1].get("riskScore")))
-    component_scores = {name: clamp_score(report.get("riskScore")) for name, report in candidates}
-
-    explain = []
-    for name, report in sorted(candidates, key=lambda item: clamp_score(item[1].get("riskScore")), reverse=True):
-        if clamp_score(report.get("riskScore")) <= 0:
-            continue
-        for item in explain_from_report(report, 3):
-            line = f"{name}：{item}"
-            if line not in explain:
-                explain.append(line)
-            if len(explain) >= 6:
-                break
-        if len(explain) >= 6:
-            break
-
-    final = {
-        **winning,
-        "riskScore": clamp_score(winning.get("riskScore")),
-        "riskLevel": score_to_level(clamp_score(winning.get("riskScore"))),
-        "componentScores": component_scores,
-        "scoringContract": {
-            "version": SCORING_VERSION,
-            "finalScoreRule": "final_score = max(frontend_hint, ScamDNA, URL/domain rules, text rules, AI)",
-            "weightsForExplanation": SCORE_WEIGHTS,
-            "thresholds": {"low": "0-39", "medium": "40-69", "high": "70-100"},
-        },
-        "winningEngine": winning_name,
-        "explain": explain or explain_from_report(winning),
-    }
-    return final
-
-
-def get_demo_report_if_enabled(data):
-    if not DEMO_MODE and not get_bool(data.get("demoMode"), False):
-        return None
-
-    text = str(data.get("text") or "")
-    url = str(data.get("url") or "")
-    scenario = str(data.get("demoScenario") or "parcel").lower()
-
-    if scenario in {"safe", "official"}:
-        return {
-            "riskScore": 8,
-            "riskLevel": "低風險",
-            "scamDNA": ["無"],
-            "reason": "Demo 模式：官方或一般資訊頁，未要求驗證碼、信用卡或匯款。",
-            "advice": "可正常瀏覽；若後續要求輸入敏感資料請重新掃描。",
-            "explain": ["Demo 保底資料：低風險安全頁", "沒有危險操作要求"],
-        }
-
-    demo_reason = "Demo 模式：偵測到假包裹 / 付款驗證 / 限時壓力等高風險組合。"
-    if "投資" in text or "USDT" in text or scenario == "investment":
-        demo_reason = "Demo 模式：偵測到保證獲利、加 LINE、虛擬貨幣或老師帶單等投資詐騙特徵。"
-
-    return {
-        "riskScore": 96,
-        "riskLevel": "高風險",
-        "scamDNA": ["限時壓力", "偽裝官方", "規避查緝"],
-        "reason": demo_reason,
-        "advice": "請立即停止操作，不要輸入信用卡、驗證碼或帳密；建議先打電話給家人或官方客服確認。",
-        "explain": [
-            "Demo 保底資料：即使現場網路或 Azure 異常，也能穩定展示完整流程",
-            "偵測到限時壓力與付款 / 驗證話術",
-            "系統會在輸入個資前攔截並通知家屬",
-        ],
-        "demoMode": True,
-        "demoOriginalUrl": url,
-    }
-
 
 # ==========================================
 # API 安全設定（競賽封版）
@@ -269,6 +148,9 @@ MAX_INSTALL_ID_LENGTH = int(os.getenv("MAX_INSTALL_ID_LENGTH", "96"))
 
 PUBLIC_PATHS = {
     "/",
+    "/health",
+    "/healthz",
+    "/api/health",
     "/callback",
     "/test_line",
     "/api/auth/install",
@@ -371,9 +253,7 @@ def normalize_report_dict(report):
         or 0
     )
 
-    # 第一名封版：全系統統一風險分級，避免「中高風險 / 極度危險 / 安全無虞」混用。
-    # 對外簡報、Dashboard、blocked 頁全部用：低風險 / 中風險 / 高風險。
-    risk_level = score_to_level(score)
+    risk_level = report.get("riskLevel") or score_to_level(score)
     scam_dna = report.get("scamDNA") or ["未知套路"]
 
     if isinstance(scam_dna, str):
@@ -382,22 +262,18 @@ def normalize_report_dict(report):
     if not isinstance(scam_dna, list) or not scam_dna:
         scam_dna = ["未知套路"]
 
-    base_reason = safe_truncate(report.get("reason") or "未提供原因", 220)
-    base_advice = safe_truncate(report.get("advice") or "請保持警覺。", 260)
-    normalized_base = {
+    return {
         "riskScore": score,
         "riskLevel": risk_level,
         "scamDNA": scam_dna[:5],
-        "reason": base_reason,
-        "advice": base_advice,
-        "explain": explain_from_report({**report, "riskScore": score, "scamDNA": scam_dna[:5], "reason": base_reason}),
+        "reason": safe_truncate(report.get("reason") or "未提供原因", 220),
+        "advice": safe_truncate(report.get("advice") or "請保持警覺。", 260),
         **{
             key: value
             for key, value in report.items()
-            if key not in ["riskScore", "RiskScore", "risk_score", "riskLevel", "scamDNA", "reason", "advice", "explain", "explanation"]
+            if key not in ["riskScore", "RiskScore", "risk_score", "riskLevel", "scamDNA", "reason", "advice"]
         },
     }
-    return normalized_base
 
 
 def score_to_level(score):
@@ -1642,6 +1518,23 @@ def health_check():
     })
 
 
+@api_bp.route("/health", methods=["GET", "HEAD"])
+@api_bp.route("/healthz", methods=["GET", "HEAD"])
+@api_bp.route("/api/health", methods=["GET", "HEAD"])
+def health_check_extra():
+    if request.method == "HEAD":
+        return "", 200
+
+    return jsonify({
+        "status": "success",
+        "message": "OK",
+        "time": get_tw_time(),
+        "env": APP_ENV,
+        "authRequired": REQUIRE_ACCESS_TOKEN,
+        "firebaseReady": firebase_initialized,
+    }), 200
+
+
 @api_bp.route("/api/auth/install", methods=["POST"])
 @limiter.limit("30 per minute")
 def auth_install():
@@ -1711,10 +1604,6 @@ def submit_evidence():
 
     data = get_json_body()
     identity = get_request_identity(data)
-
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
 
     url = str(data.get("url") or "未知網址")
     screenshot_base64 = data.get("screenshot_base64")
@@ -1803,10 +1692,6 @@ def get_evidence():
     data = get_json_body()
     identity = get_request_identity(data)
 
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
-
     requested_family_id = normalize_family_id(data.get("familyID") or identity["familyID"])
     evidence_id = data.get("evidenceID")
 
@@ -1859,10 +1744,6 @@ def scan_url():
     data = get_json_body()
     identity = get_request_identity(data)
 
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
-
     target_url = str(data.get("url") or "")[:2000]
     raw_text = str(data.get("text") or "")[:5000]
     image_url = str(data.get("image_url") or "")[:2000]
@@ -1871,16 +1752,6 @@ def scan_url():
     user_id = str(data.get("userID") or identity["userID"] or "anonymous")
     family_id = str(data.get("familyID") or identity["familyID"] or "none")
     is_urgent = get_bool(data.get("is_urgent"), False)
-    frontend_risk_score = clamp_score(data.get("frontendRiskScore") or data.get("localRiskScore") or 0)
-    frontend_risk_report = None
-    if frontend_risk_score > 0:
-        frontend_risk_report = {
-            "riskScore": frontend_risk_score,
-            "riskLevel": score_to_level(frontend_risk_score),
-            "scamDNA": data.get("frontendRiskTags") or ["前端本地規則"],
-            "reason": data.get("frontendReason") or "前端內容腳本已先偵測到可疑關鍵字、外連或頁面行為。",
-            "advice": "請等待後端覆核；若達高風險門檻，系統會在輸入資料前攔截。",
-        }
 
     safe_url_key = re.sub(r"[^a-zA-Z0-9_-]", "_", target_url or "no_url")[:120]
     current_time = time.time()
@@ -2196,13 +2067,6 @@ def scan_url():
         ai_report["reason"] = "白名單網站內仍出現重大詐騙話術，已啟動覆核攔截。"
         ai_report["scamDNA"] = list(dict.fromkeys(ai_report.get("scamDNA", []) + ["白名單覆核"]))[:3]
 
-    ai_report = merge_component_reports(
-        ("前端本地掃描", frontend_risk_report),
-        ("ScamDNA", scamdna_report),
-        ("文字規則", text_rule_report),
-        ("Azure OpenAI", ai_report),
-    )
-
     log_threat_to_db(
         ai_report,
         target_url=target_url,
@@ -2224,10 +2088,6 @@ def scan_url():
 def whitelist_check():
     data = get_json_body()
     identity = get_request_identity(data)
-
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
 
     url = data.get("url") or data.get("domain") or ""
     domain = normalize_domain(data.get("domain") or url)
@@ -2253,10 +2113,6 @@ def report_false_positive():
 
     data = get_json_body()
     identity = get_request_identity(data)
-
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
 
     url = data.get("url") or ""
     domain = normalize_domain(data.get("domain") or url)
@@ -2341,10 +2197,6 @@ def create_family():
     data = get_json_body()
     identity = get_request_identity(data)
 
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
-
     if REQUIRE_ACCESS_TOKEN and not identity.get("tokenPayload"):
         return public_error("缺少或無效的 accessToken。", 401)
 
@@ -2422,10 +2274,6 @@ def join_family():
     data = get_json_body()
     identity = get_request_identity(data)
 
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
-
     if REQUIRE_ACCESS_TOKEN and not identity.get("tokenPayload"):
         return public_error("缺少或無效的 accessToken。", 401)
 
@@ -2491,10 +2339,6 @@ def get_alerts():
     data = get_json_body()
     identity = get_request_identity(data)
 
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
-
     family_id = str(data.get("familyID") or identity["familyID"] or "none").strip().upper()
 
     if not family_id or family_id == "NONE":
@@ -2538,10 +2382,6 @@ def clear_alerts():
 
     data = get_json_body()
     identity = get_request_identity(data)
-
-    demo_report = get_demo_report_if_enabled(data)
-    if demo_report:
-        return make_report_response(demo_report, mask_sensitive_data(str(data.get("text") or "")))
 
     family_id = str(data.get("familyID") or identity["familyID"] or "none").strip().upper()
 
