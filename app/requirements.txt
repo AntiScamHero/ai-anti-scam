@@ -1,3 +1,11 @@
 flask==3.0.3
 flask-cors==4.0.1
 requests==2.32.3
+python-dotenv
+gunicorn
+gevent
+gevent-websocket
+Flask-SocketIO
+firebase-admin
+line-bot-sdk
+Flask-Limiter
