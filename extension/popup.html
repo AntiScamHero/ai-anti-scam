@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 防詐盾牌</title>
+
+    <script src="config.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-sub: #666666;
+            --border: #eeeeee;
+            --panel-bg: #fafafa;
+            --shield-blue: #1a73e8;
+            --shield-green-1: #34c759;
+            --shield-green-2: #1e8e3e;
+            --danger: #ff4444;
+            --warning: #ffbb33;
+            --safe: #00c851;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #121212;
+                --card-bg: #1e1e1e;
+                --text-main: #e0e0e0;
+                --text-sub: #aaaaaa;
+                --border: #333333;
+                --panel-bg: #2a2a2a;
+                --shadow: rgba(0, 0, 0, 0.35);
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 380px;
+            margin: 0;
+            padding: 15px;
+            font-family: "Microsoft JhengHei", "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .app-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px var(--shadow);
+            border: 1px solid var(--border);
+            transition: 0.3s ease;
+        }
+
+        h2 {
+            margin: 0 0 15px;
+            padding: 12px;
+            color: white;
+            background-color: var(--shield-blue);
+            font-size: 18px;
+            text-align: center;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px var(--shadow);
+            letter-spacing: 1px;
+            cursor: default;
+        }
+
+        .subtle-text {
+            color: var(--text-sub);
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 0 0 14px;
+            text-align: center;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.18s ease, opacity 0.18s ease, filter 0.18s ease;
+            margin-bottom: 12px;
+        }
+
+        button:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #scan-btn {
+            background: linear-gradient(135deg, #333333 0%, #000000 100%);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            #scan-btn {
+                background: linear-gradient(135deg, #555555 0%, #222222 100%);
+                border: 1px solid #444444;
+            }
+        }
+
+        .btn-blue {
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+        }
+
+        .btn-green {
+            background: linear-gradient(135deg, var(--shield-green-1) 0%, var(--shield-green-2) 100%);
+        }
+
+        .btn-red {
+            background: linear-gradient(135deg, #ff6b6b 0%, #c62828 100%);
+        }
+
+        .btn-gray {
+            background: #5f6368;
+        }
+
+        #loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            font-weight: bold;
+            color: var(--text-sub);
+            font-size: 14px;
+        }
+
+        #loading .spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--shield-blue);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #score-container {
+            display: none;
+            background: rgba(26, 115, 232, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .score-title {
+            font-size: 28px;
+            font-weight: 900;
+            margin-bottom: 12px;
+            transition: 0.5s;
+        }
+
+        .progress-wrapper {
+            width: 100%;
+            position: relative;
+        }
+
+        .progress-bg {
+            width: 100%;
+            height: 10px;
+            background-color: var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 10px;
+            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.5s;
+            background: var(--safe);
+        }
+
+        .risk-label {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--text-sub);
+            font-weight: bold;
+        }
+
+        #report-container {
+            display: none;
+            background: var(--panel-bg);
+            padding: 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            margin-bottom: 15px;
+        }
+
+        .report-row {
+            margin-bottom: 10px;
+        }
+
+        .report-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .report-label {
+            font-size: 13px;
+            color: var(--text-sub);
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .report-value {
+            font-size: 14px;
+            color: var(--text-main);
+            line-height: 1.6;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .section {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            margin-top: 14px;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 900;
+            margin-bottom: 10px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .invite-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        #invite_input {
+            flex: 1;
+            min-width: 0;
+            padding: 11px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            color: var(--text-main);
+            font-size: 18px;
+            font-weight: 900;
+            text-align: center;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            outline: none;
+        }
+
+        #invite_input:focus {
+            border-color: var(--shield-blue);
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+        }
+
+        #btn_join_family {
+            width: auto;
+            min-width: 110px;
+            margin-bottom: 0;
+            background: linear-gradient(135deg, #34c759 0%, #1e8e3e 100%);
+        }
+
+        .family-status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(26, 115, 232, 0.08);
+            color: var(--text-sub);
+            font-size: 13px;
+            line-height: 1.6;
+            word-break: break-word;
+        }
+
+        .family-status strong {
+            color: var(--text-main);
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .quick-actions button {
+            margin-bottom: 0;
+            font-size: 13px;
+            padding: 10px;
+        }
+
+        #dimensions-section,
+        #keyword-section {
+            display: none;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 8px;
+            border-radius: 999px;
+            background: rgba(255, 68, 68, 0.1);
+            color: #ff6b6b;
+            border: 1px solid rgba(255, 68, 68, 0.35);
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .notice {
+            font-size: 12px;
+            color: var(--text-sub);
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+
+        .footer-links {
+            margin-top: 14px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .footer-links a {
+            flex: 1;
+            text-align: center;
+            text-decoration: none;
+            color: var(--shield-blue);
+            background: rgba(26, 115, 232, 0.08);
+            border: 1px solid rgba(26, 115, 232, 0.2);
+            border-radius: 8px;
+            padding: 10px 8px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .footer-links a:hover {
+            filter: brightness(1.1);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+
+        .ai-advisor-card {
+            display: none;
+            margin: 12px 0 15px;
+            padding: 14px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(26,115,232,0.10), rgba(0,200,81,0.08));
+            border: 1px solid rgba(26,115,232,0.22);
+            box-shadow: 0 8px 22px rgba(26,115,232,0.08);
+        }
+
+        .ai-advisor-card.show {
+            display: block;
+        }
+
+        .ai-advisor-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+            font-size: 15px;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }
+
+        .ai-advisor-face {
+            display: inline-grid;
+            place-items: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            font-size: 20px;
+        }
+
+        .ai-advisor-msg {
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.65;
+        }
+
+        .ai-advisor-small {
+            margin-top: 8px;
+            color: var(--text-sub);
+            font-size: 12.5px;
+            font-weight: 700;
+            line-height: 1.55;
+        }
+
+        .popup-citations {
+            display: none;
+            margin: 10px 0 15px;
+            background: rgba(47,179,68,.08);
+            border: 1px solid rgba(47,179,68,.25);
+            border-radius: 12px;
+            padding: 12px;
+            color: var(--text-main);
+            font-size: 13px;
+            line-height: 1.5;
+            font-weight: 700;
+        }
+
+        .popup-citations-title {
+            color: #1e8e3e;
+            font-weight: 900;
+            margin-bottom: 6px;
+        }
+
+        .popup-citations-list {
+            margin: 0;
+            padding-left: 18px;
+            display: grid;
+            gap: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-card" id="app-body">
+        <h2 id="header-title">🛡️ AI 防詐盾牌</h2>
+
+        <p class="subtle-text">
+            手動掃描目前頁面、反白文字、圖片或連結前，請先確認自己沒有正在輸入信用卡、密碼或驗證碼。
+        </p>
+
+        <button id="scan-btn" type="button">
+            🔍 掃描目前頁面
+        </button>
+
+        <div id="loading">
+            <span class="spinner"></span>
+            AI 防詐大腦分析中...
+        </div>
+
+        <div id="score-container">
+            <div class="score-title" id="score-title">-- 分</div>
+
+            <div class="progress-wrapper">
+                <div class="progress-bg">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+            </div>
+
+            <div class="risk-label" id="risk-label">等待掃描結果</div>
+        </div>
+
+
+
+        <div class="ai-advisor-card" id="ai-advisor-card" aria-live="polite">
+            <div class="ai-advisor-head">
+                <span class="ai-advisor-face" id="ai-advisor-face">🤖</span>
+                <span>AI 安全顧問</span>
+            </div>
+            <div class="ai-advisor-msg" id="ai-advisor-message">AI 正在整理安全建議。</div>
+            <div class="ai-advisor-small" id="ai-advisor-small">完成檢查後，我會用白話告訴你該怎麼做。</div>
+        </div>
+
+        <div class="popup-citations" id="popup-official-citations" aria-label="官方佐證來源">
+            <div class="popup-citations-title">📚 官方佐證資料</div>
+            <ul class="popup-citations-list" id="popup-official-citations-list"></ul>
+        </div>
+
+        <div id="report-container">
+            <div class="report-row">
+                <div class="report-label">風險等級</div>
+                <div class="report-value" id="risk-level">--</div>
+            </div>
+
+            <div class="report-row">
+                <div class="report-label">AI 判斷原因</div>
+                <div class="report-value" id="risk-reason">--</div>
+            </div>
+
+            <div class="report-row">
+                <div class="report-label">安全建議</div>
+                <div class="report-value" id="risk-advice">--</div>
+            </div>
+        </div>
+
+        <div class="section" id="dimensions-section">
+            <div class="section-title">🧠 心理操縱特徵</div>
+            <div class="tag-list" id="scam-dna-tags"></div>
+        </div>
+
+        <div class="section" id="keyword-section">
+            <div class="section-title">🔎 命中關鍵線索</div>
+            <div class="tag-list" id="keyword-tags"></div>
+        </div>
+
+        <div class="section" id="family-section">
+            <div class="section-title">👨‍👩‍👧 家庭防護網</div>
+
+            <div class="invite-row">
+                <input
+                    id="invite_input"
+                    type="text"
+                    maxlength="6"
+                    placeholder="輸入邀請碼"
+                    autocomplete="off"
+                    inputmode="text"
+                    aria-label="家庭邀請碼"
+                >
+
+                <button id="btn_join_family" type="button">
+                    綁定
+                </button>
+            </div>
+
+            <div class="family-status" id="family-status">
+                目前狀態：<strong>尚未綁定家庭群組</strong>
+            </div>
+
+            <div class="quick-actions">
+                <button id="btn_create_family" class="btn-blue" type="button">
+                    建立家庭
+                </button>
+
+                <button id="btn_open_dashboard" class="btn-gray" type="button">
+                    戰情室
+                </button>
+            </div>
+
+            <div class="notice">
+                綁定後，高風險攔截會同步到家庭戰情室；正式版會透過短效 token 驗證家庭權限。
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">⚙️ 快速工具</div>
+
+            <div class="quick-actions">
+                <button id="btn_safe_exit" class="btn-green" type="button">
+                    安全離開
+                </button>
+
+                <button id="btn_report_page" class="btn-red" type="button">
+                    回報此頁
+                </button>
+            </div>
+        </div>
+
+        <div class="footer-links">
+            <a href="simulator.html" target="_blank" rel="noopener noreferrer">
+                防詐演練
+            </a>
+
+            <a href="welcome.html" target="_blank" rel="noopener noreferrer">
+                使用教學
+            </a>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

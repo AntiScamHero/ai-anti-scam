@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 防詐盾牌｜手機快篩 Demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, #f7fbff 0%, #edf4ff 100%);
+      color: #172033;
+    }
+    .app {
+      width: min(460px, 100%);
+      margin: 0 auto;
+      min-height: 100vh;
+      padding: 22px 18px 34px;
+    }
+    .hero {
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 22px;
+      box-shadow: 0 14px 34px rgba(33, 74, 140, .12);
+      border: 1px solid rgba(46, 100, 190, .12);
+      margin-bottom: 16px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #e9f2ff;
+      color: #1c5fb8;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { line-height: 1.6; margin: 0; color: #526075; }
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 18px;
+      border: 1px solid rgba(46, 100, 190, .12);
+      box-shadow: 0 10px 24px rgba(33, 74, 140, .08);
+      margin-bottom: 14px;
+    }
+    label { display: block; font-weight: 800; margin-bottom: 8px; }
+    input, textarea {
+      width: 100%;
+      border: 1px solid #cfd8e8;
+      border-radius: 14px;
+      padding: 13px;
+      font-size: 15px;
+      outline: none;
+      background: #fbfdff;
+    }
+    textarea { min-height: 150px; resize: vertical; }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .primary { background: #1b64d8; color: #fff; }
+    .secondary { background: #eef4ff; color: #1b64d8; }
+    .danger { background: #ffe9e9; color: #c62828; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .result {
+      display: none;
+      border-left: 7px solid #94a3b8;
+    }
+    .result.high { border-left-color: #e53935; }
+    .result.mid { border-left-color: #f59e0b; }
+    .result.low { border-left-color: #22c55e; }
+    .score {
+      font-size: 42px;
+      font-weight: 1000;
+      margin: 6px 0;
+    }
+    .level { font-size: 20px; font-weight: 900; }
+    .case {
+      background: #f8fbff;
+      border: 1px solid #dbe7ff;
+      border-radius: 14px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .case b { color: #1b64d8; }
+    .muted { font-size: 13px; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="badge">手機端原型 Demo</div>
+      <h1>AI 防詐盾牌</h1>
+      <p>貼上可疑簡訊、LINE 訊息或網址，系統會用 ScamDNA + 案例比對快速判斷風險。</p>
+    </section>
+
+    <section class="card">
+      <label for="apiUrl">API 位置</label>
+      <input id="apiUrl" value="http://127.0.0.1:5000/api/analyze" />
+      <p class="muted" style="margin-top:8px;">手機與電腦同 Wi-Fi 時，可改成 http://你的電腦IP:5000/api/analyze</p>
+    </section>
+
+    <section class="card">
+      <label for="targetUrl">可疑網址（可不填）</label>
+      <input id="targetUrl" placeholder="例如：https://example.com/pay" />
+
+      <label for="message" style="margin-top:14px;">可疑內容</label>
+      <textarea id="message" placeholder="貼上簡訊、LINE 訊息或網頁文字...">您的包裹配送失敗，請立即補繳運費並輸入信用卡資料。</textarea>
+
+      <button class="primary" id="scanBtn">立即掃描</button>
+    </section>
+
+    <section class="card result" id="resultCard">
+      <div class="level" id="riskLevel">--</div>
+      <div class="score"><span id="riskScore">--</span><span style="font-size:18px;"> / 100</span></div>
+      <p id="reason">尚未掃描</p>
+      <p id="advice" style="margin-top:10px;font-weight:700;"></p>
+
+      <div id="cases"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button class="secondary" id="voiceZhBtn">國語提醒</button>
+        <button class="secondary" id="voiceTwBtn">台語提醒 Demo</button>
+      </div>
+      <button class="danger" id="notifyBtn">一鍵通知家人（Demo）</button>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function setResultClass(level) {
+      const card = $("resultCard");
+      card.classList.remove("high", "mid", "low");
+      if (/高|極度|危險/.test(level)) card.classList.add("high");
+      else if (/中|可疑/.test(level)) card.classList.add("mid");
+      else card.classList.add("low");
+    }
+
+    function speak(text, lang = "zh-TW") {
+      if (!("speechSynthesis" in window)) {
+        alert("這台裝置不支援語音播放。");
+        return;
+      }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = lang;
+      utter.rate = 0.9;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utter);
+    }
+
+    function renderCases(cases = []) {
+      const box = $("cases");
+      box.innerHTML = "";
+      if (!Array.isArray(cases) || !cases.length) return;
+
+      const title = document.createElement("p");
+      title.style.marginTop = "14px";
+      title.style.fontWeight = "900";
+      title.textContent = "相似詐騙案例比對";
+      box.appendChild(title);
+
+      cases.slice(0, 2).forEach(item => {
+        const div = document.createElement("div");
+        div.className = "case";
+        div.innerHTML = `
+          <b>${item.type || "未知類型"}</b>
+          <p>${item.title || ""}</p>
+          <p class="muted">相似度：${item.similarity ?? "--"}｜命中特徵：${(item.matched_signals || []).join("、") || "無"}</p>
+        `;
+        box.appendChild(div);
+      });
+    }
+
+    $("scanBtn").addEventListener("click", async () => {
+      const apiUrl = $("apiUrl").value.trim();
+      const text = $("message").value.trim();
+      const url = $("targetUrl").value.trim();
+
+      $("scanBtn").textContent = "掃描中...";
+      $("scanBtn").disabled = true;
+
+      try {
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, url, title: "mobile-demo" })
+        });
+
+        const data = await res.json();
+
+        const score = data.riskScore ?? data.score ?? 0;
+        const level = data.riskLevel ?? data.risk_level ?? "低風險";
+
+        $("resultCard").style.display = "block";
+        setResultClass(level);
+        $("riskScore").textContent = score;
+        $("riskLevel").textContent = level;
+        $("reason").textContent = data.reason || "無回傳理由";
+        $("advice").textContent = data.advice || "請先暫停操作並詢問家人。";
+        renderCases(data.similarCases || data.signals?.similarCases || []);
+
+      } catch (err) {
+        $("resultCard").style.display = "block";
+        setResultClass("高風險");
+        $("riskScore").textContent = "--";
+        $("riskLevel").textContent = "連線失敗";
+        $("reason").textContent = "無法連線到後端 API，請確認電腦與手機在同一 Wi-Fi，且 Flask 後端已啟動。";
+        $("advice").textContent = String(err);
+      } finally {
+        $("scanBtn").textContent = "立即掃描";
+        $("scanBtn").disabled = false;
+      }
+    });
+
+    $("voiceZhBtn").addEventListener("click", () => {
+      speak("這個內容可能有詐騙風險，請不要輸入信用卡、驗證碼或匯款，先問家人確認。", "zh-TW");
+    });
+
+    $("voiceTwBtn").addEventListener("click", () => {
+      speak("這是台語提醒示範。這個內容可能是詐騙，請先不要操作，問家人確認。", "zh-TW");
+    });
+
+    $("notifyBtn").addEventListener("click", () => {
+      alert("Demo：已通知家人。正式版可串接 LINE Push 或家庭 Dashboard。");
+    });
+  </script>
+</body>
+</html>

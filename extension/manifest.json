@@ -1,0 +1,81 @@
+{
+  "manifest_version": 3,
+  "name": "AI 防詐盾牌",
+  "version": "3.5.2",
+  "version_name": "3.5.2-mobile-demo-skip-fix",
+  "description": "AI 防詐盾牌競賽封版：結合 AI 語意分析、家庭戰情室、短效權杖、隱私化證據保全與防詐演練的 Chrome 防護工具。",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "notifications",
+    "storage",
+    "scripting",
+    "contextMenus",
+    "tts",
+    "alarms"
+  ],
+  "optional_permissions": [
+    "clipboardRead"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "blocked.html",
+        "dashboard.html",
+        "welcome.html",
+        "simulator.html",
+        "config.js",
+        "blocked.js",
+        "voice.js",
+        "scenarios.js",
+        "socket.io.min.js",
+        "*.mp3",
+        "*.wav",
+        "hero.png",
+        "icon.png",
+        "icon16.png",
+        "icon48.png",
+        "icon128.png",
+        "ling.png",
+        "mobile_demo.html",
+        "rag_cases.json"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI 防詐盾牌"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "config.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "minimum_chrome_version": "116",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}

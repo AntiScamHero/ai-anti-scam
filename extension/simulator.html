@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="ai-shield-skip-scan" content="true">
+  <title>AI 防詐盾牌｜防詐教室</title>
+  <script src="config.js"></script>
+  <script src="scenarios.js"></script>
+  <style>
+    :root{
+      --bg:#eef7ff;--card:#ffffff;--ink:#06254a;--sub:#56708d;--blue:#2477f2;--blue2:#eaf4ff;
+      --green:#22c55e;--green2:#ecfdf5;--red:#ef4444;--red2:#fff1f2;--yellow:#f59e0b;--yellow2:#fff7db;
+      --line:#d9e8fb;--shadow:rgba(35,77,130,.16);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;padding:22px;background:radial-gradient(circle at 8% 5%,rgba(36,119,242,.18),transparent 32%),radial-gradient(circle at 95% 15%,rgba(34,197,94,.18),transparent 28%),var(--bg);font-family:"Microsoft JhengHei","Segoe UI",system-ui,sans-serif;color:var(--ink)}
+    .app{width:min(1060px,100%);margin:0 auto;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:30px;padding:24px;box-shadow:0 24px 60px var(--shadow)}
+    .top{display:grid;grid-template-columns:120px 1fr auto;gap:18px;align-items:center;margin-bottom:18px}
+    .bot{width:118px;height:118px;object-fit:contain;border-radius:26px;background:linear-gradient(135deg,#fff,#eaf4ff);border:1px solid var(--line);filter:drop-shadow(0 12px 20px rgba(36,119,242,.18))}
+    h1{font-size:36px;line-height:1.12;margin:0 0 8px;font-weight:1000;color:var(--ink)}
+    .subtitle{margin:0;font-size:18px;font-weight:800;color:var(--sub);line-height:1.6}.badge{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:10px 14px;background:var(--green2);color:#13803d;border:1px solid rgba(34,197,94,.28);font-weight:1000;white-space:nowrap}
+    .stage{display:grid;grid-template-columns:1.45fr .8fr;gap:18px;align-items:stretch}.panel{background:#f8fbff;border:1px solid var(--line);border-radius:24px;padding:18px}.scenario-title{font-size:24px;font-weight:1000;margin:0 0 8px}.scenario-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.pill{border-radius:999px;padding:7px 10px;font-weight:900;font-size:13px;background:#fff;border:1px solid var(--line);color:var(--sub)}
+    .chat{height:430px;overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth}.message{max-width:82%;padding:13px 15px;border-radius:18px;line-height:1.68;font-size:17px;font-weight:750;white-space:pre-wrap;word-break:break-word}.scammer-msg{align-self:flex-start;background:var(--red2);border:1px solid #fecaca;color:#8a1717;border-top-left-radius:6px}.user-msg{align-self:flex-end;background:#e8f1ff;border:1px solid #bfdbfe;color:#0f4b99;border-top-right-radius:6px}.coach-msg{align-self:center;max-width:94%;background:var(--yellow2);border:1px solid #f7d26a;color:#7a4b00;text-align:left}.system-msg{align-self:center;max-width:94%;background:var(--green2);border:1px solid #bbf7d0;color:#14532d;text-align:center}.typing{opacity:.75}.input-row{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px}textarea{width:100%;min-height:70px;max-height:140px;resize:vertical;border:1px solid #cbdff6;border-radius:18px;padding:14px 16px;font-size:17px;line-height:1.6;font-family:inherit;outline:none}textarea:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(36,119,242,.12)}button{border:0;border-radius:999px;padding:13px 18px;font-size:16px;font-weight:1000;cursor:pointer;transition:transform .14s ease,filter .14s ease,opacity .14s ease}button:hover{transform:translateY(-1px);filter:brightness(1.04)}button:disabled{opacity:.55;cursor:not-allowed;transform:none}.primary{background:linear-gradient(135deg,var(--blue),#0f55c8);color:#fff}.secondary{background:#eef6ff;color:#1459c8;border:1px solid #c7dcff}.green{background:linear-gradient(135deg,var(--green),#15803d);color:#fff}.danger{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.quick button{font-size:14px;padding:11px 10px}.side{display:grid;gap:14px}.score-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:16px}.score-title{font-size:17px;font-weight:1000;margin-bottom:8px}.score-num{font-size:46px;font-weight:1000;color:var(--blue);line-height:1}.score-label{font-weight:900;color:var(--sub);margin-top:3px}.bar{height:12px;border-radius:999px;background:#e2e8f0;overflow:hidden;margin-top:10px}.bar-fill{height:100%;width:50%;background:var(--blue);transition:width .4s ease,background .4s ease}.reason-list{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:8px}.reason-list li{background:#f8fbff;border:1px solid var(--line);border-radius:14px;padding:10px 11px;line-height:1.55;font-weight:800;color:var(--sub)}.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.small{font-size:13px;color:var(--sub);line-height:1.65;margin:8px 0 0;font-weight:750}.hidden{display:none!important}
+    @media(max-width:850px){body{padding:12px}.app{padding:16px;border-radius:22px}.top{grid-template-columns:84px 1fr}.bot{width:82px;height:82px}.badge{grid-column:1/-1;justify-content:center}h1{font-size:28px}.subtitle{font-size:15px}.stage{grid-template-columns:1fr}.chat{height:390px}.quick{grid-template-columns:1fr}.input-row{grid-template-columns:1fr}.message{font-size:16px;max-width:92%}}
+  </style>
+</head>
+<body data-ai-shield-skip-scan="true">
+  <main class="app" aria-label="AI 防詐教室">
+    <header class="top">
+      <img src="hero.png" alt="AI 防詐盾牌機器人" class="bot">
+      <div>
+        <h1>防詐教室</h1>
+        <p class="subtitle">隨機出現真實生活情境。請試著回覆，AI 教練會判斷你的做法是否安全。</p>
+      </div>
+      <div class="badge">🛡️ 本機也能演練</div>
+    </header>
+
+    <section class="stage">
+      <section class="panel" aria-label="演練對話">
+        <div id="scenario-title" class="scenario-title">載入中...</div>
+        <div id="scenario-meta" class="scenario-meta"></div>
+        <div id="chat-box" class="chat" aria-live="polite" aria-relevant="additions text"></div>
+
+        <div class="quick" aria-label="快速安全回應">
+          <button type="button" class="secondary" id="quick-verify">我先查證官方來源</button>
+          <button type="button" class="secondary" id="quick-family">我先問家人</button>
+          <button type="button" class="secondary" id="quick-refuse">我不提供資料</button>
+        </div>
+
+        <div class="input-row">
+          <textarea id="user-input" placeholder="請輸入你的回應，例如：我不會提供驗證碼，我要先打 165 或問家人。"></textarea>
+          <button type="button" id="send-btn" class="primary">送出</button>
+        </div>
+      </section>
+
+      <aside class="side" aria-label="AI 教練判斷">
+        <div class="score-card">
+          <div class="score-title">AI 安全判斷</div>
+          <div id="score-num" class="score-num">--</div>
+          <div id="score-label" class="score-label">等待你的回應</div>
+          <div class="bar"><div id="score-bar" class="bar-fill"></div></div>
+          <ul id="reason-list" class="reason-list"><li>回覆後，AI 會指出安全與風險線索。</li></ul>
+        </div>
+
+        <div class="score-card">
+          <div class="score-title">這題要練什麼？</div>
+          <ul id="lesson-list" class="reason-list"></ul>
+          <p class="small">重點不是背答案，而是練習「先停、查證、問可信任的人」。</p>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="next-btn" class="green">下一題</button>
+          <button type="button" id="restart-btn" class="secondary">重來</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script src="simulator.js"></script>
+</body>
+</html>

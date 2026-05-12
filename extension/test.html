@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 防詐盾牌 - 詐騙誘餌測試頁</title>
+
+    <style>
+        :root {
+            --bg: #fff0f0;
+            --card-bg: #ffffff;
+            --danger: #d32f2f;
+            --danger-dark: #b71c1c;
+            --warning: #ff9800;
+            --line-green: #00c300;
+            --text-main: #333333;
+            --text-sub: #666666;
+            --border: #ffd1d1;
+            --safe-blue: #1a73e8;
+            --shadow: rgba(0, 0, 0, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 40px 18px;
+            font-family: "Segoe UI", "Microsoft JhengHei", system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(211, 47, 47, 0.12), transparent 36%),
+                var(--bg);
+            color: var(--text-main);
+        }
+
+        .page {
+            width: min(980px, 100%);
+            margin: 0 auto;
+        }
+
+        .hero {
+            background: var(--card-bg);
+            border: 2px solid var(--border);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: 0 16px 42px var(--shadow);
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            color: var(--danger);
+            margin: 0 0 12px;
+            font-size: 34px;
+            line-height: 1.28;
+        }
+
+        .subtitle {
+            color: var(--text-sub);
+            font-size: 17px;
+            line-height: 1.7;
+            margin: 0 auto 24px;
+            max-width: 760px;
+        }
+
+        .fake-url {
+            font-size: 18px;
+            color: #555555;
+            background: #fff7f7;
+            border: 1px dashed var(--danger);
+            padding: 14px;
+            border-radius: 12px;
+            word-break: break-all;
+            margin-bottom: 18px;
+        }
+
+        .scam-btn {
+            display: inline-block;
+            padding: 16px 30px;
+            background-color: var(--line-green);
+            color: white;
+            text-decoration: none;
+            font-size: 24px;
+            font-weight: 900;
+            border-radius: 12px;
+            margin-top: 8px;
+            box-shadow: 0 8px 22px rgba(0, 195, 0, 0.35);
+            cursor: pointer;
+            transition: transform 0.18s ease, filter 0.18s ease;
+        }
+
+        .scam-btn:hover {
+            transform: scale(1.04);
+            filter: brightness(0.95);
+        }
+
+        .threat-text {
+            color: var(--danger);
+            font-weight: 900;
+            font-size: 20px;
+            margin-top: 28px;
+            border: 2px dashed var(--danger);
+            display: inline-block;
+            padding: 12px 22px;
+            border-radius: 12px;
+            background: rgba(211, 47, 47, 0.06);
+            line-height: 1.6;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            margin-top: 24px;
+        }
+
+        .test-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 8px 26px var(--shadow);
+        }
+
+        .test-card h2 {
+            color: var(--danger-dark);
+            margin: 0 0 10px;
+            font-size: 20px;
+        }
+
+        .test-card p {
+            color: var(--text-sub);
+            font-size: 15px;
+            line-height: 1.7;
+            margin: 0 0 12px;
+        }
+
+        .sample-box {
+            background: #fff7f7;
+            border: 1px solid #ffc7c7;
+            color: #444444;
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 15px;
+            line-height: 1.75;
+            word-break: break-word;
+        }
+
+        .qr-placeholder {
+            width: 150px;
+            height: 150px;
+            margin: 12px auto 0;
+            background:
+                linear-gradient(90deg, #000 10px, transparent 10px) 0 0 / 20px 20px,
+                linear-gradient(#000 10px, transparent 10px) 0 0 / 20px 20px,
+                #ffffff;
+            border: 8px solid #ffffff;
+            outline: 2px solid #111111;
+            position: relative;
+        }
+
+        .qr-placeholder::after {
+            content: "假 QR";
+            position: absolute;
+            inset: 45px 20px;
+            background: white;
+            color: var(--danger);
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--danger);
+            border-radius: 8px;
+        }
+
+        .safe-panel {
+            background: #eef6ff;
+            border: 1px solid rgba(26, 115, 232, 0.25);
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 24px;
+            color: #174ea6;
+        }
+
+        .safe-panel h2 {
+            margin: 0 0 10px;
+            color: var(--safe-blue);
+            font-size: 21px;
+        }
+
+        .safe-panel ul {
+            margin: 0;
+            padding-left: 22px;
+            line-height: 1.8;
+        }
+
+        .footer-note {
+            margin-top: 20px;
+            text-align: center;
+            color: var(--text-sub);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 760px) {
+            .hero {
+                padding: 24px 18px;
+            }
+
+            h1 {
+                font-size: 27px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .scam-btn {
+                width: 100%;
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page">
+        <section class="hero">
+            <h1>🎉 恭喜中獎！保證獲利，請加賴領取飆股明牌！</h1>
+
+            <p class="subtitle">
+                這是一個安全的本機測試頁，專門用來測試 AI 防詐盾牌是否能偵測高風險話術、
+                假網址、威脅語氣、投資詐騙與釣魚內容。
+            </p>
+
+            <div class="fake-url">
+                請點擊下方官方連結登入：
+                https://www.yahoo.com.lucky-verify-login.net
+            </div>
+
+            <a href="https://www.yahoo.com.lucky-verify-login.net/claim?from=ai-shield-demo" id="demo-block-btn" class="scam-btn">
+                👉 點我領取飆股與獎金 👈
+            </a>
+
+            <div class="threat-text">
+                ⚠️ 若不配合指示，不准報警，否則斷手斷腳！
+            </div>
+        </section>
+
+        <section class="grid" aria-label="詐騙測試案例">
+            <article class="test-card">
+                <h2>案例 1：假投顧飆股</h2>
+                <p>測試關鍵字：保證獲利、飆股、加 LINE、內部消息、指定帳戶。</p>
+                <div class="sample-box">
+                    老師今天有一支內部飆股，保證獲利、穩賺不賠。
+                    請加 LINE 領取明牌，並先匯入保證金到指定帳戶。
+                </div>
+            </article>
+
+            <article class="test-card">
+                <h2>案例 2：假客服解除分期</h2>
+                <p>測試關鍵字：解除分期、ATM、連續扣款、立即處理。</p>
+                <div class="sample-box">
+                    您的訂單被誤設為連續扣款 12 期，請立即前往 ATM 操作解除分期。
+                    若今晚 12 點前未處理，將自動扣款。
+                </div>
+            </article>
+
+            <article class="test-card">
+                <h2>案例 3：假檢警威脅</h2>
+                <p>測試關鍵字：偵查不公開、監管帳戶、法院公證人、洗錢。</p>
+                <div class="sample-box">
+                    你涉嫌洗錢，案件偵查不公開。
+                    請把帳戶資金領出交給法院公證人監管，不准告訴銀行行員。
+                </div>
+            </article>
+
+            <article class="test-card">
+                <h2>案例 4：假 QR Code 付款</h2>
+                <p>測試圖片與 QR Code 風險提示。</p>
+                <div class="sample-box">
+                    請掃描下方 QR Code 重新付款。若重複付款，客服會協助退款。
+                    <div class="qr-placeholder" aria-label="假 QR Code 圖片"></div>
+                </div>
+            </article>
+        </section>
+
+        <section class="safe-panel">
+            <h2>測試時請確認</h2>
+            <ul>
+                <li>Content Script 是否能偵測頁面上的詐騙關鍵字。</li>
+                <li>Popup 手動掃描是否能回傳風險分數。</li>
+                <li>高風險時是否會導向 <strong>blocked.html</strong>。</li>
+                <li>戰情室是否能收到高風險紀錄。</li>
+                <li>白名單放行後是否不再重複攔截同一可信網域。</li>
+            </ul>
+        </section>
+
+        <div class="footer-note">
+            此頁僅供防詐系統測試，不是真實活動頁。請勿輸入任何真實個資、信用卡或驗證碼。
+        </div>
+    </main>
+
+    <!-- 不放 inline script，避免 Chrome Extension CSP 擋住 Demo。點擊上方可疑連結會由 content/background 攔截。 -->
+
+
+</body>
+</html>
