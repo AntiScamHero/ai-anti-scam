@@ -378,83 +378,6 @@
                 scroll-behavior: auto !important;
             }
         }
-
-
-        .ai-advisor-card {
-            display: none;
-            margin: 12px 0 15px;
-            padding: 14px;
-            border-radius: 16px;
-            background: linear-gradient(135deg, rgba(26,115,232,0.10), rgba(0,200,81,0.08));
-            border: 1px solid rgba(26,115,232,0.22);
-            box-shadow: 0 8px 22px rgba(26,115,232,0.08);
-        }
-
-        .ai-advisor-card.show {
-            display: block;
-        }
-
-        .ai-advisor-head {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-main);
-            font-size: 15px;
-            font-weight: 900;
-            margin-bottom: 8px;
-        }
-
-        .ai-advisor-face {
-            display: inline-grid;
-            place-items: center;
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            background: #ffffff;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            font-size: 20px;
-        }
-
-        .ai-advisor-msg {
-            color: var(--text-main);
-            font-size: 14px;
-            font-weight: 800;
-            line-height: 1.65;
-        }
-
-        .ai-advisor-small {
-            margin-top: 8px;
-            color: var(--text-sub);
-            font-size: 12.5px;
-            font-weight: 700;
-            line-height: 1.55;
-        }
-
-        .popup-citations {
-            display: none;
-            margin: 10px 0 15px;
-            background: rgba(47,179,68,.08);
-            border: 1px solid rgba(47,179,68,.25);
-            border-radius: 12px;
-            padding: 12px;
-            color: var(--text-main);
-            font-size: 13px;
-            line-height: 1.5;
-            font-weight: 700;
-        }
-
-        .popup-citations-title {
-            color: #1e8e3e;
-            font-weight: 900;
-            margin-bottom: 6px;
-        }
-
-        .popup-citations-list {
-            margin: 0;
-            padding-left: 18px;
-            display: grid;
-            gap: 4px;
-        }
     </style>
 </head>
 
@@ -485,22 +408,6 @@
             </div>
 
             <div class="risk-label" id="risk-label">等待掃描結果</div>
-        </div>
-
-
-
-        <div class="ai-advisor-card" id="ai-advisor-card" aria-live="polite">
-            <div class="ai-advisor-head">
-                <span class="ai-advisor-face" id="ai-advisor-face">🤖</span>
-                <span>AI 安全顧問</span>
-            </div>
-            <div class="ai-advisor-msg" id="ai-advisor-message">AI 正在整理安全建議。</div>
-            <div class="ai-advisor-small" id="ai-advisor-small">完成檢查後，我會用白話告訴你該怎麼做。</div>
-        </div>
-
-        <div class="popup-citations" id="popup-official-citations" aria-label="官方佐證來源">
-            <div class="popup-citations-title">📚 官方佐證資料</div>
-            <ul class="popup-citations-list" id="popup-official-citations-list"></ul>
         </div>
 
         <div id="report-container">

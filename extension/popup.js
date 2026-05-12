@@ -16,7 +16,6 @@ let currentFamilyID = "none";
 let pollingInterval = null;
 let latestScanReport = null;
 let goldenCountdownTimer = null;
-let thinkingInterval = null;
 let didAutoScanOnOpen = false;
 
 // ==========================================
@@ -160,59 +159,6 @@ function normalizeRiskScore(report) {
     ) || 0;
 }
 
-
-function localPopupRiskAnalysis(url, text, sourceReason = "後端暫時不可用") {
-    const combined = `${url || ""} ${text || ""}`.toLowerCase();
-    const hits = [];
-    let score = 8;
-
-    const rules = [
-        [/包裹|物流|宅配|海關|配送|運費|補繳|重新配送/i, 28, "假包裹或物流補繳話術"],
-        [/信用卡|卡號|cvv|驗證碼|otp|身分證|密碼|網銀|銀行帳號/i, 38, "要求輸入個資、金融資料或驗證碼"],
-        [/保證獲利|穩賺不賠|飆股|內線|投顧|老師|vip|usdt|btc|加密貨幣/i, 42, "假投資或高報酬誘導"],
-        [/法院|檢察官|警察|洗錢|通緝|監管帳戶|偵查不公開/i, 46, "假檢警或權威恐嚇"],
-        [/解除分期|取消分期|atm|扣款|帳戶凍結|盜刷/i, 40, "假客服或金融操作詐騙"],
-        [/中獎|獎金|領取|bonus|claim|gift|prize|iphone/i, 32, "中獎或領獎誘導"],
-        [/加line|加 line|加賴|line id|短網址|bit\.ly|tinyurl|reurl|\.xyz|\.top|\.click/i, 30, "導流或短網址規避偵測"],
-        [/限時|立即|最後一天|逾期|否則|不准報警|不要告訴|保密/i, 22, "急迫或恐嚇語氣"]
-    ];
-
-    for (const [regex, value, label] of rules) {
-        if (regex.test(combined)) {
-            score += value;
-            if (!hits.includes(label)) hits.push(label);
-        }
-    }
-
-    const comboHighRisk =
-        (/包裹|物流|宅配|海關/i.test(combined) && /補繳|運費|信用卡|驗證碼/i.test(combined)) ||
-        (/投資|股票|usdt|btc/i.test(combined) && /保證|獲利|老師|vip|line/i.test(combined)) ||
-        (/法院|檢察官|警察/i.test(combined) && /帳戶|匯款|監管|保密/i.test(combined));
-
-    if (comboHighRisk) {
-        score = Math.max(score, 92);
-        hits.unshift("命中組合式高風險詐騙特徵");
-    }
-
-    score = Math.max(0, Math.min(100, score));
-    const level = score >= getRiskThresholdHigh() ? "高風險" : score >= getRiskThresholdMedium() ? "中風險" : "低風險";
-
-    return {
-        riskScore: score,
-        riskLevel: level,
-        scamDNA: hits.length ? hits.slice(0, 4) : ["未發現明確操縱術"],
-        explain: hits.length ? hits.slice(0, 5) : ["本機 AI 規則未命中明確高風險特徵。"],
-        reason: hits.length ? `本機 AI 判斷：${hits.slice(0, 2).join("、")}。` : "目前未發現明確高風險特徵。",
-        advice: score >= getRiskThresholdHigh()
-            ? "請立即停止操作，不要輸入信用卡、驗證碼、密碼或匯款。"
-            : score >= getRiskThresholdMedium()
-                ? "此頁有可疑特徵，請先查證官方來源，必要時詢問家人或撥打 165。"
-                : "目前未發現明確高風險特徵，但仍請避免在陌生頁面輸入敏感資料。",
-        engine: `本機 AI 備援｜${sourceReason}`,
-        references: []
-    };
-}
-
 async function fetchWithTimeout(url, options = {}, timeoutMs = getRequestTimeoutMs()) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -326,9 +272,9 @@ async function ensureInstallIdentity() {
             return { accessToken: data.accessToken, userID: currentUserID, familyID: currentFamilyID, installID };
         }
 
-        console.warn("Popup 取得短效 token 失敗：", data.message || response.status);
+        // 短效 token 暫時取不到時，Popup 不顯示錯誤；掃描仍會優先嘗試雲端 API，失敗再降級本機判斷。
     } catch (e) {
-        console.warn("Popup 取得短效 token 失敗，請確認 API 是否可用。", e);
+        // 靜默處理：避免把後端授權暫時問題顯示成使用者錯誤。
     }
 
     currentUserID = userID;
@@ -340,14 +286,15 @@ async function getApiHeaders() {
     const headers = { "Content-Type": "application/json" };
     const auth = await ensureInstallIdentity();
 
-    if (auth.accessToken) {
-        headers.Authorization = `Bearer ${auth.accessToken}`;
+    if (auth.accessToken) headers.Authorization = `Bearer ${auth.accessToken}`;
+
+    if (!auth.accessToken && isAuthRequired()) {
+        throw new Error("尚未取得短效 accessToken，請確認後端 API 是否啟動。用於競賽展示時，請先確認 Render 服務已醒來。");
     }
 
-    // Popup 是使用者前台工具：即使後端 token 暫時失敗，也不能把錯誤直接丟給長輩。
-    // 需要後端的功能會自行判斷是否有 token；沒有 token 時改走本機 AI 備援。
     return headers;
 }
+
 // ==========================================
 // UI 狀態
 // ==========================================
@@ -372,79 +319,16 @@ function updateUIAsBound(familyID) {
     }
 }
 
-function startAiThinkingAnimation() {
-    const scanBtn = document.getElementById("scan-btn");
-    if (!scanBtn || scanBtn.dataset.isEscape === "true") return;
-
-    const steps = [
-        "正在讀取網頁...",
-        "正在檢查可疑文字...",
-        "正在比對詐騙特徵...",
-        "正在整理安全建議..."
-    ];
-    let stepIndex = 0;
-
-    scanBtn.disabled = true;
-    scanBtn.textContent = steps[0];
-
-    if (thinkingInterval) clearInterval(thinkingInterval);
-    thinkingInterval = setInterval(() => {
-        stepIndex = (stepIndex + 1) % steps.length;
-        scanBtn.textContent = steps[stepIndex];
-    }, 650);
-}
-
-function stopAiThinkingAnimation() {
-    if (thinkingInterval) {
-        clearInterval(thinkingInterval);
-        thinkingInterval = null;
-    }
-}
-
 function setLoading(isLoading) {
     setDisplayById("loading", isLoading ? "block" : "none");
 
     const scanBtn = document.getElementById("scan-btn");
 
     if (scanBtn && scanBtn.dataset.isEscape !== "true") {
-        if (isLoading) {
-            startAiThinkingAnimation();
-        } else {
-            stopAiThinkingAnimation();
-            scanBtn.disabled = false;
-            scanBtn.textContent = "✨ 重新檢查這個網頁";
-        }
+        scanBtn.disabled = isLoading;
+        scanBtn.textContent = isLoading ? "AI 深度分析中..." : "🔍 掃描目前頁面";
     }
 }
-
-function renderAiAdvisor(reportData, score) {
-    const card = document.getElementById("ai-advisor-card");
-    const face = document.getElementById("ai-advisor-face");
-    const message = document.getElementById("ai-advisor-message");
-    const small = document.getElementById("ai-advisor-small");
-    if (!card || !face || !message || !small) return;
-
-    const explain = Array.isArray(reportData?.explain) ? reportData.explain.filter(Boolean) : [];
-    const dna = Array.isArray(reportData?.scamDNA) ? reportData.scamDNA.filter(Boolean) : [];
-
-    if (score >= getRiskThresholdHigh()) {
-        face.textContent = "🚨";
-        message.textContent = "這個頁面很可疑。請立刻停止操作，不要輸入驗證碼、信用卡、密碼，也不要匯款。";
-    } else if (score >= getRiskThresholdMedium()) {
-        face.textContent = "🤔";
-        message.textContent = "我看到一些不太自然的地方。請先確認來源，必要時問家人或撥打 165。";
-    } else {
-        face.textContent = "😊";
-        message.textContent = "目前沒有看到明顯詐騙特徵，但陌生頁面仍不要輸入敏感資料。";
-    }
-
-    const details = explain.length ? explain.slice(0, 2) : dna.slice(0, 2);
-    small.textContent = details.length
-        ? `我注意到：${details.join("、")}`
-        : "我已完成網址、文字與風險語氣檢查。";
-    card.classList.add("show");
-}
-
 
 function setProgressColor(progressBar, score) {
     if (!progressBar) return;
@@ -480,37 +364,6 @@ function renderTags(containerId, tags) {
     });
 }
 
-
-function normalizeReferences(reportData) {
-    const refs = reportData?.references || reportData?.officialReferences || reportData?.official_references || [];
-    if (!Array.isArray(refs)) return [];
-    return refs.map(ref => {
-        if (!ref) return '';
-        if (typeof ref === 'string') return ref.trim();
-        const title = ref.title || ref.name || ref.source || '官方資料';
-        const note = ref.note || ref.summary || ref.url || '';
-        return note ? `${title}：${note}` : title;
-    }).filter(Boolean).slice(0, 5);
-}
-
-function renderOfficialCitations(reportData) {
-    const box = document.getElementById('popup-official-citations');
-    const list = document.getElementById('popup-official-citations-list');
-    if (!box || !list) return;
-    const refs = normalizeReferences(reportData);
-    list.replaceChildren();
-    if (!refs.length) {
-        box.style.display = 'none';
-        return;
-    }
-    refs.forEach(item => {
-        const li = document.createElement('li');
-        li.textContent = item;
-        list.appendChild(li);
-    });
-    box.style.display = 'block';
-}
-
 function renderScanResult(reportData) {
     latestScanReport = reportData;
 
@@ -542,8 +395,6 @@ function renderScanResult(reportData) {
 
     renderTags("scam-dna-tags", scamDNA);
     renderTags("keyword-tags", scamDNA);
-    renderOfficialCitations(reportData);
-    renderAiAdvisor(reportData, score);
 
     const progressBar = document.getElementById("progress-bar");
 
@@ -603,7 +454,7 @@ function resetScanButton(btn) {
     if (!btn || btn.dataset.isEscape === "true") return;
 
     btn.disabled = false;
-    btn.textContent = "✨ 重新檢查這個網頁";
+    btn.textContent = "🔍 掃描目前頁面";
     btn.style.background = "";
     btn.style.color = "";
     btn.style.border = "";
@@ -770,26 +621,17 @@ async function scanCurrentPage() {
         return;
     }
 
-    let tab = null;
-    let maskedText = "";
-
     try {
         setLoading(true);
 
-        tab = await getActiveTab();
+        const tab = await getActiveTab();
 
         if (!tab || !tab.id || !tab.url) {
             throw new Error("無法取得目前分頁。");
         }
 
         const rawText = await getCurrentPageText(tab.id);
-        maskedText = maskSensitiveData(rawText);
-        const auth = await ensureInstallIdentity();
-
-        // 沒有 token 時不要硬打後端，避免出現「缺少授權金鑰」或紅色錯誤。
-        if (!auth.accessToken && isAuthRequired()) {
-            throw new Error("後端授權暫時不可用，改用本機 AI 判斷");
-        }
+        const maskedText = maskSensitiveData(rawText);
 
         const response = await fetchWithRetry(`${getApiBaseUrl()}/scan`, {
             method: "POST",
@@ -797,8 +639,8 @@ async function scanCurrentPage() {
             body: JSON.stringify({
                 url: tab.url,
                 text: maskedText,
-                userID: currentUserID || auth.userID || "anonymous",
-                familyID: currentFamilyID || auth.familyID || "none",
+                userID: currentUserID || "anonymous",
+                familyID: currentFamilyID || "none",
                 scan_source: "popup_auto_or_manual"
             })
         });
@@ -819,30 +661,14 @@ async function scanCurrentPage() {
         const reportData = safeParseReport(data);
         renderScanResult(reportData);
     } catch (error) {
-        try {
-            if (!tab) tab = await getActiveTab();
-            if (!maskedText && tab?.id) {
-                const rawText = await getCurrentPageText(tab.id);
-                maskedText = maskSensitiveData(rawText);
-            }
-
-            const fallbackReport = localPopupRiskAnalysis(
-                tab?.url || "",
-                maskedText,
-                error?.message || "後端暫時不可用"
-            );
-
-            renderScanResult(fallbackReport);
-            showToast("已改用本機 AI 判斷，不影響檢查。", "info");
-        } catch (fallbackError) {
-            console.warn("Popup 本機 AI 判斷失敗：", fallbackError);
-            showToast("目前無法檢查，請先不要輸入個資或驗證碼。", "error");
-        }
+        console.error("掃描錯誤", error);
+        showToast(`掃描失敗：${error.message}`, "error");
     } finally {
         setLoading(false);
         resetScanButton(scanBtn);
     }
 }
+
 // ==========================================
 // 家庭防護網：建立 / 加入 / 輪詢
 // ==========================================
@@ -1048,59 +874,35 @@ async function reportCurrentPage() {
         }
 
         const report = latestScanReport || {};
-        const localRecord = {
-            url: tab.url,
-            title: tab.title || "",
-            reportedAt: new Date().toISOString(),
-            userID: currentUserID || "anonymous",
-            familyID: currentFamilyID || "none",
-            riskScore: normalizeRiskScore(report),
-            ai_reason: report.reason || "",
-            status: "local_saved",
-            action_type: "popup_local_first_report"
-        };
+        const auth = await ensureInstallIdentity();
 
-        // 1) 一定先本機成功，避免 token 或後端錯誤讓使用者覺得按鈕壞掉。
-        try {
-            const storage = await chrome.storage.local.get(["aiShieldUserReports"]);
-            const reports = Array.isArray(storage.aiShieldUserReports) ? storage.aiShieldUserReports : [];
-            reports.unshift(localRecord);
-            await chrome.storage.local.set({ aiShieldUserReports: reports.slice(0, 100) });
-        } catch (storageError) {
-            console.warn("本機回報紀錄寫入失敗：", storageError);
+        const response = await fetchWithRetry(`${getApiBaseUrl()}/api/report_false_positive`, {
+            method: "POST",
+            headers: await getApiHeaders(),
+            body: JSON.stringify({
+                url: tab.url,
+                userID: auth.userID,
+                familyID: auth.familyID || currentFamilyID || "none",
+                riskScore: normalizeRiskScore(report),
+                ai_reason: report.reason || "",
+                reported_reason: "Popup 手動回報此頁可能為誤判",
+                scope: "personal",
+                action_type: "popup_manual_false_positive"
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.status !== "success") {
+            throw new Error(data.message || "回報失敗");
         }
 
-        showToast("AI 已記錄這個可疑頁，會納入後續判斷。", "success");
-
-        // 2) 背景同步：有 token 才送，失敗不打斷使用者。
-        try {
-            const auth = await ensureInstallIdentity();
-            if (!auth.accessToken) return;
-
-            await fetchWithTimeout(`${getApiBaseUrl()}/api/report_false_positive`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${auth.accessToken}`
-                },
-                body: JSON.stringify({
-                    url: tab.url,
-                    userID: auth.userID || currentUserID || "anonymous",
-                    familyID: auth.familyID || currentFamilyID || "none",
-                    riskScore: normalizeRiskScore(report),
-                    ai_reason: report.reason || "",
-                    reported_reason: "使用者從 Popup 回報此頁需要 AI 後續判斷",
-                    scope: "personal",
-                    action_type: "popup_local_first_report"
-                })
-            }, 5000);
-        } catch (syncError) {
-            console.log("AI 防詐盾牌：回報已本機保存，後端稍後再同步。", syncError?.message || syncError);
-        }
+        showToast("已送出回報，並進入白名單修正流程。", "success");
     } catch (error) {
         showToast(`回報失敗：${error.message}`, "error");
     }
 }
+
 function openDashboard() {
     chrome.tabs.create({
         url: chrome.runtime.getURL("dashboard.html")
@@ -1236,7 +1038,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
         await ensureInstallIdentity();
     } catch (e) {
-        showToast(e.message || "身分初始化失敗，請稍後重試。", "error");
+        console.debug("Popup 身分初始化暫時不可用，稍後掃描會自動降級處理。", e);
     }
 
     const storage = await chrome.storage.local.get(["userID", "familyID"]);
@@ -1257,12 +1059,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         currentFamilyID
     });
 
-    // 開啟 Popup 後自動檢查一次目前網頁；失敗時靜默降級，不干擾使用者。
+    // Popup 開啟後自動檢查一次；雲端 API 優先，失敗時靜默改用本機 AI 備援。
     if (!didAutoScanOnOpen) {
         didAutoScanOnOpen = true;
         setTimeout(() => {
             scanCurrentPage().catch(error => {
-                console.warn("Popup 自動掃描失敗：", error);
+                console.debug("Popup 自動掃描已靜默處理：", error);
             });
         }, 250);
     }
