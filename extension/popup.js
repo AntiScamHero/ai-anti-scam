@@ -209,6 +209,54 @@ async function fetchWithRetry(url, options, maxRetries = getMaxRetries()) {
     throw lastError || new Error("fetchWithRetry failed");
 }
 
+function uniqueUrls(urls) {
+    return [...new Set(urls.filter(Boolean))];
+}
+
+function getScanEndpointCandidates() {
+    const baseUrl = String(getApiBaseUrl() || "").replace(/\/+$/, "");
+    const configuredPath = String(getConfigValue("SCAN_API_PATH", "/scan") || "/scan");
+    const normalizedConfiguredPath = configuredPath.startsWith("/")
+        ? configuredPath
+        : `/${configuredPath}`;
+
+    return uniqueUrls([
+        `${baseUrl}${normalizedConfiguredPath}`,
+        `${baseUrl}/scan`,
+        `${baseUrl}/api/scan`
+    ]);
+}
+
+async function postScanRequest(payload) {
+    const headers = await getApiHeaders();
+    const body = JSON.stringify(payload);
+    const endpoints = getScanEndpointCandidates();
+
+    let lastError = null;
+
+    for (const endpoint of endpoints) {
+        try {
+            return await fetchWithRetry(endpoint, {
+                method: "POST",
+                headers,
+                body
+            });
+        } catch (error) {
+            lastError = error;
+            const message = String(error?.message || error || "");
+
+            // 只有掃描端點 404 時，才嘗試下一個相容路徑；401 / 403 / timeout 等錯誤不亂換路徑。
+            if (!message.includes("404")) {
+                break;
+            }
+
+            console.info(`Popup 掃描端點不存在，改試下一個相容路徑：${endpoint}`);
+        }
+    }
+
+    throw lastError || new Error("掃描 API 連線失敗。");
+}
+
 // ==========================================
 // 短效 Token / 身分初始化
 // ==========================================
@@ -613,6 +661,112 @@ async function getCurrentPageText(tabId) {
     }
 }
 
+
+function localPopupRiskAnalysis(url, text, cloudErrorMessage = "") {
+    const source = `${url || ""}\n${text || ""}`.toLowerCase();
+    const matchedTags = [];
+    const reasons = [];
+    let score = 8;
+
+    const rules = [
+        {
+            label: "要求輸入驗證碼或一次性密碼",
+            score: 26,
+            patterns: ["驗證碼", "otp", "one-time password", "一次性密碼", "簡訊碼"]
+        },
+        {
+            label: "要求匯款或轉帳",
+            score: 28,
+            patterns: ["匯款", "轉帳", "atm", "網銀", "帳戶", "保證金", "手續費"]
+        },
+        {
+            label: "投資高報酬話術",
+            score: 30,
+            patterns: ["穩賺", "保證獲利", "高報酬", "低風險高收益", "飆股", "內線", "老師帶單", "投資群組"]
+        },
+        {
+            label: "假冒官方或客服",
+            score: 24,
+            patterns: ["客服", "官方", "帳號異常", "安全驗證", "重新認證", "解除分期", "解除設定"]
+        },
+        {
+            label: "製造緊急壓力",
+            score: 22,
+            patterns: ["立即", "馬上", "最後通知", "限時", "逾期", "凍結", "停權", "警告"]
+        },
+        {
+            label: "索取個資或金融資料",
+            score: 25,
+            patterns: ["身分證", "信用卡", "卡號", "cvv", "出生年月日", "個人資料", "金融卡", "銀行帳號"]
+        },
+        {
+            label: "可疑短網址或跳轉連結",
+            score: 18,
+            patterns: ["bit.ly", "tinyurl", "reurl.cc", "lihi", "shorturl", "ppt.cc"]
+        }
+    ];
+
+    rules.forEach(rule => {
+        const hit = rule.patterns.some(pattern => source.includes(pattern));
+        if (hit) {
+            score += rule.score;
+            matchedTags.push(rule.label);
+            reasons.push(rule.label);
+        }
+    });
+
+    try {
+        const parsedUrl = new URL(url || "");
+        const hostname = parsedUrl.hostname.toLowerCase();
+
+        if (/xn--|[0-9]{1,3}(\.[0-9]{1,3}){3}/.test(hostname)) {
+            score += 18;
+            matchedTags.push("可疑網域格式");
+            reasons.push("網址格式異常，可能不是正式網站。");
+        }
+
+        if (hostname.split(".").length >= 4) {
+            score += 10;
+            matchedTags.push("多層子網域");
+        }
+    } catch (e) {
+        // 無法解析網址時不讓本機備援失敗。
+    }
+
+    score = Math.max(0, Math.min(score, 96));
+
+    const high = getRiskThresholdHigh();
+    const medium = getRiskThresholdMedium();
+
+    const riskLevel =
+        score >= high
+            ? "極度危險"
+            : score >= medium
+                ? "中高風險"
+                : "低風險";
+
+    const reason =
+        reasons.length > 0
+            ? `雲端掃描暫時不可用，已由本機防護依頁面文字與網址判斷：${reasons.slice(0, 3).join("、")}。`
+            : "雲端掃描暫時不可用，本機防護未發現明顯高風險詐騙話術，但仍建議保持警覺。";
+
+    const advice =
+        score >= medium
+            ? "請先不要輸入個資、驗證碼、信用卡資料或進行匯款；若涉及金錢或帳號安全，請改用官方 App 或自行輸入官方網址確認。"
+            : "目前未偵測到明顯高風險特徵，但請勿點擊不明連結或提供敏感資料。";
+
+    return {
+        riskScore: score,
+        riskLevel,
+        scamDNA: matchedTags.length ? [...new Set(matchedTags)] : ["本機基礎檢查"],
+        reason,
+        advice,
+        references: [],
+        fallback: true,
+        cloudError: String(cloudErrorMessage || "").slice(0, 160)
+    };
+}
+
 async function scanCurrentPage() {
     const scanBtn = document.getElementById("scan-btn");
 
@@ -636,16 +790,12 @@ async function scanCurrentPage() {
         const rawText = await getCurrentPageText(tab.id);
         maskedText = maskSensitiveData(rawText);
 
-        const response = await fetchWithRetry(`${getApiBaseUrl()}/scan`, {
-            method: "POST",
-            headers: await getApiHeaders(),
-            body: JSON.stringify({
-                url: tab.url,
-                text: maskedText,
-                userID: currentUserID || "anonymous",
-                familyID: currentFamilyID || "none",
-                scan_source: "popup_auto_or_manual"
-            })
+        const response = await postScanRequest({
+            url: tab.url,
+            text: maskedText,
+            userID: currentUserID || "anonymous",
+            familyID: currentFamilyID || "none",
+            scan_source: "popup_auto_or_manual"
         });
 
         let data = {};
@@ -666,7 +816,7 @@ async function scanCurrentPage() {
     } catch (error) {
         // 正式展示時不要把 token / 後端暫時問題顯示成紅色錯誤。
         // 雲端 API 失敗時，直接改用本機 AI 備援並正常渲染結果。
-        console.warn("Popup 雲端掃描失敗，改用本機 AI 備援：", error?.message || error);
+        console.info("Popup 雲端掃描失敗，改用本機 AI 備援：", error?.message || error);
 
         try {
             if (!tab) tab = await getActiveTab();
