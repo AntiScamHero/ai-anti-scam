@@ -156,7 +156,7 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
+
         #score-container {
             display: none;
             background: rgba(26, 115, 232, 0.05);
@@ -345,29 +345,6 @@
             margin-top: 10px;
         }
 
-        .footer-links {
-            margin-top: 14px;
-            display: flex;
-            gap: 8px;
-        }
-
-        .footer-links a {
-            flex: 1;
-            text-align: center;
-            text-decoration: none;
-            color: var(--shield-blue);
-            background: rgba(26, 115, 232, 0.08);
-            border: 1px solid rgba(26, 115, 232, 0.2);
-            border-radius: 8px;
-            padding: 10px 8px;
-            font-size: 13px;
-            font-weight: bold;
-        }
-
-        .footer-links a:hover {
-            filter: brightness(1.1);
-        }
-
         @media (prefers-reduced-motion: reduce) {
             *,
             *::before,
@@ -395,7 +372,7 @@
 
         <div id="loading">
             <span class="spinner"></span>
-            AI 防詐大腦分析中...
+            AI 防詐大腦分析中.
         </div>
 
         <div id="score-container">
@@ -438,16 +415,16 @@
         </div>
 
         <div class="section" id="family-section">
-            <div class="section-title">👨‍👩‍👧 家庭防護網</div>
+            <div class="section-title">👨‍👩‍👧 家庭守護綁定</div>
 
             <div class="invite-row">
                 <input
                     id="invite_input"
                     type="text"
+                    inputmode="latin"
                     maxlength="6"
-                    placeholder="輸入邀請碼"
                     autocomplete="off"
-                    inputmode="text"
+                    placeholder="輸入6碼"
                     aria-label="家庭邀請碼"
                 >
 
@@ -487,16 +464,6 @@
                     回報此頁
                 </button>
             </div>
-        </div>
-
-        <div class="footer-links">
-            <a href="simulator.html" target="_blank" rel="noopener noreferrer">
-                防詐演練
-            </a>
-
-            <a href="welcome.html" target="_blank" rel="noopener noreferrer">
-                使用教學
-            </a>
         </div>
     </div>
 
