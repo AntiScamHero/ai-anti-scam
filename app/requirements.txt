@@ -9,3 +9,4 @@ Flask-SocketIO
 firebase-admin
 line-bot-sdk
 Flask-Limiter
+openai
