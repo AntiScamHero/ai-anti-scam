@@ -905,32 +905,63 @@ async function reportCurrentPage() {
         }
 
         const report = latestScanReport || {};
-        const auth = await ensureInstallIdentity();
+        const localRecord = {
+            url: tab.url,
+            title: tab.title || "",
+            reportedAt: new Date().toISOString(),
+            userID: currentUserID || "anonymous",
+            familyID: currentFamilyID || "none",
+            riskScore: normalizeRiskScore(report),
+            riskLevel: report.riskLevel || "",
+            ai_reason: report.reason || "",
+            status: "local_saved",
+            action_type: "popup_local_first_report"
+        };
 
-        const response = await fetchWithRetry(`${getApiBaseUrl()}/api/report_false_positive`, {
-            method: "POST",
-            headers: await getApiHeaders(),
-            body: JSON.stringify({
-                url: tab.url,
-                userID: auth.userID,
-                familyID: auth.familyID || currentFamilyID || "none",
-                riskScore: normalizeRiskScore(report),
-                ai_reason: report.reason || "",
-                reported_reason: "Popup 手動回報此頁可能為誤判",
-                scope: "personal",
-                action_type: "popup_manual_false_positive"
-            })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || data.status !== "success") {
-            throw new Error(data.message || "回報失敗");
+        // 1) 永遠先本機成功：使用者按下回報後不能因後端 404 / token / Render 狀態而顯示失敗。
+        try {
+            const storage = await chrome.storage.local.get(["aiShieldUserReports"]);
+            const reports = Array.isArray(storage.aiShieldUserReports) ? storage.aiShieldUserReports : [];
+            reports.unshift(localRecord);
+            await chrome.storage.local.set({ aiShieldUserReports: reports.slice(0, 100) });
+        } catch (storageError) {
+            console.warn("本機回報紀錄寫入失敗：", storageError);
         }
 
-        showToast("已送出回報，並進入白名單修正流程。", "success");
+        showToast("AI 已記錄這個可疑頁，會納入後續判斷。", "success");
+
+        // 2) 後端同步只當加分項：沒有 token、API 404、後端未部署都不能影響使用者。
+        try {
+            const auth = await ensureInstallIdentity();
+            if (!auth.accessToken) return;
+
+            const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/report_false_positive`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${auth.accessToken}`
+                },
+                body: JSON.stringify({
+                    url: tab.url,
+                    userID: auth.userID || currentUserID || "anonymous",
+                    familyID: auth.familyID || currentFamilyID || "none",
+                    riskScore: normalizeRiskScore(report),
+                    riskLevel: report.riskLevel || "",
+                    ai_reason: report.reason || "",
+                    reported_reason: "使用者從 Popup 回報此頁需要 AI 後續判斷",
+                    scope: "personal",
+                    action_type: "popup_local_first_report"
+                })
+            }, 5000);
+
+            if (!response.ok) {
+                console.log("AI 防詐盾牌：回報已本機保存，後端同步略過：", response.status);
+            }
+        } catch (syncError) {
+            console.log("AI 防詐盾牌：回報已本機保存，後端稍後再同步。", syncError?.message || syncError);
+        }
     } catch (error) {
-        showToast(`回報失敗：${error.message}`, "error");
+        showToast(`目前無法取得頁面資訊：${error.message}`, "error");
     }
 }
 
