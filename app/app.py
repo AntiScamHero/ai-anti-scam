@@ -1,9 +1,9 @@
 # app.py
 # AI 防詐盾牌 - Flask / Socket.IO 入口
-# 修正版重點：
-# 1. 正確註冊 routes.py 的 api_bp，避免 /api/auth/install 變成 404。
-# 2. 加入 ProxyFix，讓 Render / 反向代理後方仍可取得真實來源資訊。
-# 3. 補健康檢查路由，供 Render Health Check 使用。
+
+# ⚠️ 關鍵修復：必須在所有 import 的最前面執行 Monkey Patch！
+from gevent import monkey
+monkey.patch_all()
 
 import os
 
