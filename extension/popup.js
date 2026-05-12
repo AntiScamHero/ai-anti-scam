@@ -286,12 +286,12 @@ async function getApiHeaders() {
     const headers = { "Content-Type": "application/json" };
     const auth = await ensureInstallIdentity();
 
-    if (auth.accessToken) headers.Authorization = `Bearer ${auth.accessToken}`;
-
-    if (!auth.accessToken && isAuthRequired()) {
-        throw new Error("尚未取得短效 accessToken，請確認後端 API 是否啟動。用於競賽展示時，請先確認 Render 服務已醒來。");
+    if (auth.accessToken) {
+        headers.Authorization = `Bearer ${auth.accessToken}`;
     }
 
+    // 雲端優先，但 token 暫時取不到時不要丟錯誤到前台。
+    // /scan 會先嘗試送出；若後端拒絕或連線失敗，再由 scanCurrentPage 靜默改用本機 AI 備援。
     return headers;
 }
 
@@ -621,17 +621,20 @@ async function scanCurrentPage() {
         return;
     }
 
+    let tab = null;
+    let maskedText = "";
+
     try {
         setLoading(true);
 
-        const tab = await getActiveTab();
+        tab = await getActiveTab();
 
         if (!tab || !tab.id || !tab.url) {
             throw new Error("無法取得目前分頁。");
         }
 
         const rawText = await getCurrentPageText(tab.id);
-        const maskedText = maskSensitiveData(rawText);
+        maskedText = maskSensitiveData(rawText);
 
         const response = await fetchWithRetry(`${getApiBaseUrl()}/scan`, {
             method: "POST",
@@ -652,7 +655,7 @@ async function scanCurrentPage() {
         } catch (e) {
             data = {
                 riskScore: 0,
-                riskLevel: "安全無虞",
+                riskLevel: "低風險",
                 reason: "伺服器回傳格式異常，但未偵測到明確風險。",
                 advice: "請保持一般警覺。"
             };
@@ -661,8 +664,36 @@ async function scanCurrentPage() {
         const reportData = safeParseReport(data);
         renderScanResult(reportData);
     } catch (error) {
-        console.error("掃描錯誤", error);
-        showToast(`掃描失敗：${error.message}`, "error");
+        // 正式展示時不要把 token / 後端暫時問題顯示成紅色錯誤。
+        // 雲端 API 失敗時，直接改用本機 AI 備援並正常渲染結果。
+        console.warn("Popup 雲端掃描失敗，改用本機 AI 備援：", error?.message || error);
+
+        try {
+            if (!tab) tab = await getActiveTab();
+            if (!maskedText && tab?.id) {
+                const rawText = await getCurrentPageText(tab.id);
+                maskedText = maskSensitiveData(rawText);
+            }
+
+            const fallbackReport = localPopupRiskAnalysis(
+                tab?.url || "",
+                maskedText,
+                error?.message || "雲端 API 暫時不可用"
+            );
+
+            renderScanResult(fallbackReport);
+        } catch (fallbackError) {
+            console.warn("Popup 本機 AI 備援失敗：", fallbackError?.message || fallbackError);
+            renderScanResult({
+                riskScore: 40,
+                riskLevel: "中風險",
+                scamDNA: ["系統保守防護"],
+                explain: ["目前無法完整檢查此頁，系統採取保守提醒。"],
+                reason: "目前無法完整檢查此頁，請先不要輸入個資、驗證碼、信用卡或匯款資料。",
+                advice: "請先離開頁面，或等網路穩定後重新檢查。",
+                references: []
+            });
+        }
     } finally {
         setLoading(false);
         resetScanButton(scanBtn);
