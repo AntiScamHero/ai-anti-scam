@@ -339,6 +339,53 @@ async function fetchWithRetry(url, options, maxRetries = getMaxRetries()) {
     throw lastError || new Error("fetchWithRetry failed");
 }
 
+function uniqueUrls(urls) {
+    return [...new Set(urls.filter(Boolean))];
+}
+
+function getScanEndpointCandidates() {
+    const baseUrl = String(getApiBaseUrl() || '').replace(/\/+$/, '');
+    const configuredPath = String(getConfigValue('SCAN_API_PATH', '/scan') || '/scan');
+    const normalizedConfiguredPath = configuredPath.startsWith('/')
+        ? configuredPath
+        : `/${configuredPath}`;
+
+    return uniqueUrls([
+        `${baseUrl}${normalizedConfiguredPath}`,
+        `${baseUrl}/scan`,
+        `${baseUrl}/api/scan`
+    ]);
+}
+
+async function postScanRequest(payload) {
+    const headers = await getApiHeaders();
+    const body = JSON.stringify(payload);
+    const endpoints = getScanEndpointCandidates();
+    let lastError = null;
+
+    for (const endpoint of endpoints) {
+        try {
+            return await fetchWithRetry(endpoint, {
+                method: 'POST',
+                headers,
+                body
+            });
+        } catch (error) {
+            lastError = error;
+            const message = String(error?.message || error || '');
+
+            // 只有掃描端點不存在時，才嘗試下一個相容路徑；授權、逾時、伺服器錯誤不亂切。
+            if (!message.includes('404')) {
+                break;
+            }
+
+            console.info(`Background 掃描端點不存在，改試下一個相容路徑：${endpoint}`);
+        }
+    }
+
+    throw lastError || new Error('掃描 API 連線失敗。');
+}
+
 function toAbsoluteHttpUrl(rawUrl) {
     if (!rawUrl) return '';
 
@@ -356,6 +403,43 @@ function normalizeHost(rawUrl) {
         return host.replace(/^www\./, '');
     } catch (e) {
         return '';
+    }
+}
+
+function normalizeDomainHost(host) {
+    return String(host || '').replace(/^www\./, '').toLowerCase();
+}
+
+function isGoogleDomain(host) {
+    const cleanHost = normalizeDomainHost(host);
+    return cleanHost === 'google.com' || /^google\.[a-z.]+$/i.test(cleanHost);
+}
+
+function isBingDomain(host) {
+    const cleanHost = normalizeDomainHost(host);
+    return cleanHost === 'bing.com' || cleanHost.endsWith('.bing.com');
+}
+
+function isYahooDomain(host) {
+    const cleanHost = normalizeDomainHost(host);
+    return cleanHost === 'yahoo.com' || cleanHost.endsWith('.yahoo.com') || cleanHost.endsWith('.yahoo.com.tw');
+}
+
+function isTrustedSearchResultUrl(rawUrl = '') {
+    try {
+        const url = new URL(toAbsoluteHttpUrl(rawUrl));
+        const host = normalizeDomainHost(url.hostname);
+        const path = url.pathname.toLowerCase();
+
+        return (
+            isGoogleDomain(host) && path === '/search'
+        ) || (
+            isBingDomain(host) && path === '/search'
+        ) || (
+            isYahooDomain(host) && path.includes('search')
+        );
+    } catch (e) {
+        return false;
     }
 }
 
@@ -401,6 +485,11 @@ async function isUrlTrustedOrWhitelisted(rawUrl) {
     const host = normalizeHost(rawUrl);
     if (!host) return false;
 
+    // 只對搜尋結果頁硬放行；不要把整個 Google / Yahoo / Bing 全域放行，避免表單、短連結或偽裝頁漏掃。
+    if (isTrustedSearchResultUrl(rawUrl)) {
+        return true;
+    }
+
     if (DEFAULT_TRUSTED_DOMAINS.some(domain => domainMatchesHost(host, domain))) {
         return true;
     }
@@ -439,6 +528,147 @@ function localHeuristicScore(text, url = '') {
         if (regex.test(combined)) score += value;
     }
     return Math.min(100, score);
+}
+
+
+// ==========================================
+// AI 平台誤判保護：DeepSeek / ChatGPT / Claude
+// ==========================================
+function isAiPlatformUrl(rawUrl = '') {
+    const host = normalizeHost(rawUrl);
+
+    return (
+        host === 'chat.deepseek.com' ||
+        host === 'deepseek.com' ||
+        host.endsWith('.deepseek.com') ||
+        host === 'chatgpt.com' ||
+        host === 'openai.com' ||
+        host.endsWith('.openai.com') ||
+        host === 'claude.ai' ||
+        host.endsWith('.claude.ai')
+    );
+}
+
+function hasDangerousActionText(text = '') {
+    const value = String(text || '').toLowerCase();
+
+    return /(?:請|立即|馬上|現在|立刻).{0,12}(點擊|輸入|匯款|轉帳|付款|掃描|掃qr|下載|安裝|加入|加line|加 line)|輸入.{0,8}(驗證碼|信用卡|提款卡密碼|銀行帳號|身分證)|下載apk|掃.{0,8}qr.{0,8}(付款|領獎|補助|驗證)|匯款到|轉帳到/i.test(value);
+}
+
+function hasStrongImageScamContext(text = '') {
+    const value = String(text || '').toLowerCase();
+
+    const explicitAction = /(?:請|立即|馬上|現在|立刻).{0,14}(點擊|輸入|匯款|轉帳|付款|掃描|掃qr|掃 qr|下載|安裝|加入|加line|加 line|加賴)|輸入.{0,10}(驗證碼|信用卡|提款卡密碼|銀行帳號|身分證)|下載\s*apk|匯款到|轉帳到/i.test(value);
+    const investmentTrap = /(保證獲利|穩賺不賠|老師帶單|內線消息|內部消息|飆股|投資群|vip群|usdt|虛擬貨幣|加密貨幣).{0,24}(加line|加 line|加賴|入群|匯款|轉帳|儲值|保證金|入金|付款)/i.test(value);
+    const qrTrap = /(qr|qrcode|掃碼|掃描).{0,24}(付款|匯款|領獎|補助|驗證|解鎖|繳費|儲值|下載|安裝)/i.test(value);
+    const prizeTrap = /(中獎|領獎|補助|獎金|禮物|bonus|claim|prize|gift|lottery).{0,24}(付款|匯款|手續費|保證金|稅金|運費|驗證|掃碼|掃qr|下載)/i.test(value);
+
+    return explicitAction || investmentTrap || qrTrap || prizeTrap;
+}
+
+function shouldShowImageInlineAlert(rawUrl = '', request = {}, reportData = {}, score = 0) {
+    const scamDNA = Array.isArray(reportData.scamDNA) ? reportData.scamDNA : [];
+    const combinedText = [
+        request.reason,
+        request.pageTextContext,
+        reportData.reason,
+        reportData.advice,
+        reportData.riskLevel,
+        scamDNA.join(' ')
+    ].join('\n');
+
+    const pageRiskScore = Math.max(0, Math.min(100, Number(request.pageRiskScore || 0) || 0));
+    const hasStrongContext = hasStrongImageScamContext(combinedText) || hasDangerousActionText(combinedText);
+    const looksVisualOnly = /圖文夾雜|混合規避|規避手法|可疑圖片|圖片誘導|qr code|qrcode/i.test(combinedText) && !hasStrongContext;
+
+    // 大型 AI 平台與一般資訊頁的圖片、圖表、產品截圖很多；不能只因圖片模型提到「圖文混合」就打擾使用者。
+    if (isAiPlatformUrl(rawUrl) && !hasStrongContext) return false;
+    if (looksVisualOnly && pageRiskScore < 50) return false;
+
+    // 85 以上才允許單獨跳提醒；70~84 需要同時有明確詐騙操作語境。
+    if (score >= 85) return true;
+    if (score >= 70 && (hasStrongContext || pageRiskScore >= 50)) return true;
+
+    return false;
+}
+
+function isLikelyDiscussionContext(text = '') {
+    const value = String(text || '').toLowerCase();
+
+    return /防詐|詐騙|說明|分析|案例|教學|範例|測試|競賽|專案|報告|修改程式碼|為什麼|如何|怎麼|不要|避免|提醒|查證|165|false positive|誤判|討論|比較|建議|優化/i.test(value);
+}
+
+function normalizeRiskScoreFromReport(reportData = {}, fallbackScore = 0) {
+    const rawScore = parseInt(
+        reportData.riskScore ||
+        reportData.RiskScore ||
+        reportData.risk_score ||
+        reportData.score ||
+        fallbackScore ||
+        0,
+        10
+    );
+
+    return Math.max(0, Math.min(100, Number.isNaN(rawScore) ? 0 : rawScore));
+}
+
+function applyAiPlatformBackgroundGuard(rawUrl = '', scanText = '', reportData = {}, fallbackScore = 0) {
+    const originalScore = normalizeRiskScoreFromReport(reportData, fallbackScore);
+
+    if (!isAiPlatformUrl(rawUrl)) {
+        return {
+            reportData: {
+                ...reportData,
+                riskScore: originalScore
+            },
+            score: originalScore
+        };
+    }
+
+    const scamDNA = Array.isArray(reportData.scamDNA) ? reportData.scamDNA : [];
+    const combinedText = [
+        scanText,
+        reportData.reason,
+        reportData.advice,
+        reportData.riskLevel,
+        scamDNA.join(' ')
+    ].join('\n');
+
+    const hasDangerousAction = hasDangerousActionText(combinedText);
+    const isDiscussion = isLikelyDiscussionContext(combinedText);
+
+    // AI 對話平台常會「討論」詐騙、投資、QR Code 與防詐案例。
+    // 只有真正出現要求付款、匯款、輸入驗證碼、下載 APK、掃 QR 付款等操作時，才保留高風險攔截。
+    if (hasDangerousAction && !isDiscussion) {
+        return {
+            reportData: {
+                ...reportData,
+                riskScore: originalScore,
+                aiPlatformGuard: 'dangerous_action_detected'
+            },
+            score: originalScore
+        };
+    }
+
+    const safeScore = Math.min(originalScore || fallbackScore || 25, 35);
+
+    return {
+        reportData: {
+            ...reportData,
+            riskScore: safeScore,
+            score: safeScore,
+            riskLevel: 'AI 平台內容討論',
+            reason: '目前是在 AI 對話平台上討論可能的風險內容，未偵測到直接要求付款、匯款、輸入驗證碼、下載 APK 或掃 QR 付款等操作，因此不直接攔截。',
+            advice: '可以繼續查資料；如果對方要求你離開平台、加入 LINE、匯款、輸入驗證碼或下載不明 App，請立即停止。',
+            scamDNA: [
+                'AI 平台討論降權',
+                ...scamDNA.filter(Boolean).slice(0, 4)
+            ],
+            aiPlatformAdjusted: true,
+            originalRiskScore: originalScore
+        },
+        score: safeScore
+    };
 }
 
 function parseAiReport(data) {
@@ -526,11 +756,7 @@ async function submitEvidence(payload) {
 
 async function sendScanLog(payload) {
     try {
-        return await fetchWithRetry(`${getApiBaseUrl()}/scan`, {
-            method: 'POST',
-            headers: await getApiHeaders(),
-            body: JSON.stringify(payload)
-        });
+        return await postScanRequest(payload);
     } catch (err) {
         console.warn("scan log 失敗:", err);
         return null;
@@ -544,6 +770,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status !== 'complete') return;
     if (!tab || !tab.url) return;
     if (isSystemPage(tab.url)) return;
+
+    if (isTrustedSearchResultUrl(tab.url)) {
+        console.log("✅ [背景搜尋頁放行] 搜尋結果頁只查資料，不執行自動攔截：", tab.url);
+        return;
+    }
 
     if (shouldThrottleBackgroundScan(tabId, tab.url)) {
         console.log('⏳ [背景掃描冷卻] 暫時略過重複掃描：', tab.url);
@@ -561,7 +792,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         const currentFamilyID = storage.familyID || "none";
 
         const pageText = await getTabPageText(tabId);
-        const heuristicScore = localHeuristicScore(pageText, tab.url);
+        const isAiPlatformPage = isAiPlatformUrl(tab.url);
+        let heuristicScore = localHeuristicScore(pageText, tab.url);
+
+        if (isAiPlatformPage && !hasDangerousActionText(pageText)) {
+            heuristicScore = Math.min(heuristicScore, 35);
+        }
+
         const minBackgroundRisk = Number(getConfigValue('BACKGROUND_LOCAL_RISK_MIN', 40));
 
         if (heuristicScore < minBackgroundRisk) {
@@ -572,23 +809,42 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         let response;
 
         try {
-            response = await fetchWithRetry(`${getApiBaseUrl()}/scan`, {
-                method: 'POST',
-                headers: await getApiHeaders(),
-                body: JSON.stringify({
-                    url: tab.url,
-                    text: pageText,
-                    scan_stage: "background_text_only",
-                    localRiskScore: heuristicScore,
-                    userID: currentUserID,
-                    familyID: currentFamilyID
-                })
+            response = await postScanRequest({
+                url: tab.url,
+                text: pageText,
+                scan_stage: "background_text_only",
+                localRiskScore: heuristicScore,
+                userID: currentUserID,
+                familyID: currentFamilyID,
+                page_category: isAiPlatformPage ? "ai_platform" : "normal_page",
+                ai_platform_guard: isAiPlatformPage
             });
         } catch (fetchErr) {
             console.warn(`[背景巡邏] 伺服器未連線 (${getApiBaseUrl()})，啟動 Edge AI 離線防護。`, fetchErr);
 
-            // Edge AI 離線攔截：後端暫時不可用時，仍使用本機啟發式分數保護使用者。
             if (heuristicScore >= getHighRiskThreshold()) {
+                const offlineReport = {
+                    riskScore: heuristicScore,
+                    riskLevel: '極度危險',
+                    reason: 'Edge AI 離線防護：後端暫時無法連線，但本機防護引擎偵測到高風險詐騙特徵，已先替你攔截。',
+                    advice: '請勿輸入任何個資、信用卡、驗證碼，也不要依照頁面指示匯款。',
+                    scamDNA: ['Edge AI 離線防護', '本機特徵攔截'],
+                    explain: [
+                        `本機詐騙特徵分數達 ${heuristicScore} 分，已超過高風險門檻 ${getHighRiskThreshold()} 分`,
+                        '即使後端 AI 暫時無法連線，瀏覽器端仍可先執行基本風險判斷',
+                        '頁面文字或網址命中高風險組合，系統優先採取保護性攔截'
+                    ],
+                    references: [],
+                    winningEngine: 'edge-ai-offline',
+                    source: 'edge-ai-offline'
+                };
+                const guardedOffline = applyAiPlatformBackgroundGuard(tab.url, pageText, offlineReport, heuristicScore);
+
+                if (guardedOffline.score < getHighRiskThreshold()) {
+                    console.log('🟢 [AI 平台離線降權] 討論型內容不執行離線攔截：', guardedOffline.score, tab.url);
+                    return;
+                }
+
                 chrome.tabs.get(tabId, (currentTab) => {
                     if (chrome.runtime.lastError || !currentTab) {
                         console.log('[Edge AI] 目標分頁已關閉，取消離線攔截。');
@@ -596,21 +852,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
                     }
 
                     chrome.tabs.update(tabId, {
-                        url: buildBlockedPageUrl(tab.url, {
-                            riskScore: heuristicScore,
-                            riskLevel: '極度危險',
-                            reason: 'Edge AI 離線防護：後端暫時無法連線，但本機防護引擎偵測到高風險詐騙特徵，已先替你攔截。',
-                            advice: '請勿輸入任何個資、信用卡、驗證碼，也不要依照頁面指示匯款。',
-                            scamDNA: ['Edge AI 離線防護', '本機特徵攔截'],
-                            explain: [
-                                `本機詐騙特徵分數達 ${heuristicScore} 分，已超過高風險門檻 ${getHighRiskThreshold()} 分`,
-                                '即使後端 AI 暫時無法連線，瀏覽器端仍可先執行基本風險判斷',
-                                '頁面文字或網址命中高風險組合，系統優先採取保護性攔截'
-                            ],
-                            references: [],
-                            winningEngine: 'edge-ai-offline',
-                            source: 'edge-ai-offline'
-                        }, 'Edge AI 離線攔截')
+                        url: buildBlockedPageUrl(tab.url, guardedOffline.reportData, 'Edge AI 離線攔截')
                     }).catch(e => console.log('Edge AI 攔截跳轉失敗:', e));
                 });
                 return;
@@ -623,7 +865,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         if (!response || !response.ok) return;
 
         const data = await response.json();
-        const { reportData, score } = parseAiReport(data);
+        let { reportData, score } = parseAiReport(data);
+
+        const guardedResult = applyAiPlatformBackgroundGuard(tab.url, pageText, reportData, score);
+        reportData = guardedResult.reportData;
+        score = guardedResult.score;
 
         if (score >= getHighRiskThreshold()) {
             if (await isUrlTrustedOrWhitelisted(tab.url)) {
@@ -708,20 +954,26 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             return;
         }
 
-        const response = await fetchWithRetry(`${getApiBaseUrl()}/scan`, {
-            method: 'POST',
-            headers: await getApiHeaders(),
-            body: JSON.stringify({
-                url: tab?.url || targetUrl,
-                text: targetData,
-                image_url: imageUrl,
-                userID: storage.userID || "anonymous",
-                familyID: storage.familyID || "none"
-            })
+        const scanPageUrl = tab?.url || targetUrl;
+        const guardUrl = info.menuItemId === "scan-link" ? targetUrl : scanPageUrl;
+        const isAiPlatformScan = isAiPlatformUrl(guardUrl);
+
+        const response = await postScanRequest({
+            url: scanPageUrl,
+            text: targetData,
+            image_url: imageUrl,
+            userID: storage.userID || "anonymous",
+            familyID: storage.familyID || "none",
+            page_category: isAiPlatformScan ? "ai_platform" : "normal_page",
+            ai_platform_guard: isAiPlatformScan
         });
 
         const data = await response.json();
-        const { reportData, score } = parseAiReport(data);
+        let { reportData, score } = parseAiReport(data);
+
+        const guardedResult = applyAiPlatformBackgroundGuard(guardUrl, targetData, reportData, score);
+        reportData = guardedResult.reportData;
+        score = guardedResult.score;
 
         chrome.notifications.clear("scanning");
 
@@ -770,6 +1022,28 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // Content Script 訊息
 // ==========================================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+
+    // 專門處理無視 CSP 阻擋的特權跳轉。
+    // 重要：一定要回傳真實結果，讓 content.js 可在失敗時啟動前台備援跳轉。
+    if (request.action === "redirect_to_blocked") {
+        if (sender.tab && sender.tab.id) {
+            chrome.tabs.update(sender.tab.id, { url: request.url }, () => {
+                if (chrome.runtime.lastError) {
+                    sendResponse({
+                        status: "fail",
+                        message: chrome.runtime.lastError.message || "背景跳轉失敗"
+                    });
+                    return;
+                }
+
+                sendResponse({ status: "success" });
+            });
+        } else {
+            sendResponse({ status: "fail", message: "找不到來源分頁" });
+        }
+        return true;
+    }
+
     if (request.action === "showEmergencyNotification") {
         chrome.notifications.create({
             type: "basic",
@@ -841,6 +1115,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         (async () => {
             const storage = await chrome.storage.local.get(['userID', 'familyID']);
 
+            const guardedTrigger = applyAiPlatformBackgroundGuard(
+                originalUrl,
+                request.reason || '',
+                request.reportData || {},
+                normalizeRiskScoreFromReport(request.reportData || {}, getHighRiskThreshold())
+            );
+
+            if (isAiPlatformUrl(originalUrl) && guardedTrigger.score < getHighRiskThreshold()) {
+                console.log("🟢 [triggerBlock AI 平台降權] 討論型內容不執行強制攔截：", originalUrl);
+                sendResponse({
+                    status: "ai_platform_discussion",
+                    score: guardedTrigger.score
+                });
+                return;
+            }
+
             if (await isUrlTrustedOrWhitelisted(originalUrl)) {
                 console.log("✅ [triggerBlock 白名單放行] 取消跳轉：", originalUrl);
                 sendResponse({
@@ -864,7 +1154,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             if (tabId) {
                 chrome.tabs.update(tabId, {
-                    url: buildBlockedPageUrl(originalUrl, request.reportData || {}, request.reason || '系統偵測到高風險異常行為')
+                    url: buildBlockedPageUrl(originalUrl, guardedTrigger.reportData || request.reportData || {}, request.reason || '系統偵測到高風險異常行為')
                 });
 
                 chrome.tts.speak(
@@ -914,34 +1204,61 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     return;
                 }
 
+                const pageRiskScore = Math.max(0, Math.min(100, Number(request.pageRiskScore || 0) || 0));
+                const requestContext = `${request.reason || ""}\n${request.pageTextContext || ""}`;
+
+                if (isAiPlatformUrl(request.pageUrl) && !hasStrongImageScamContext(requestContext) && !hasDangerousActionText(requestContext)) {
+                    console.log("🟢 [AI 平台圖片降權] AI 對話平台圖片不執行背景圖片掃描：", request.pageUrl);
+                    sendResponse({ status: "ai_platform_skip", score: 0 });
+                    return;
+                }
+
                 const storage = await chrome.storage.local.get(['userID', 'familyID']);
 
-                const response = await fetchWithRetry(`${getApiBaseUrl()}/scan`, {
-                    method: 'POST',
-                    headers: await getApiHeaders(),
-                    body: JSON.stringify({
-                        url: request.pageUrl,
-                        text: "背景圖片自動分析",
-                        image_url: request.imageUrl,
-                        userID: storage.userID || "anonymous",
-                        familyID: storage.familyID || "none",
-                        is_urgent: false
-                    })
+                const response = await postScanRequest({
+                    url: request.pageUrl,
+                    text: request.pageTextContext || "背景圖片自動分析",
+                    image_url: request.imageUrl,
+                    userID: storage.userID || "anonymous",
+                    familyID: storage.familyID || "none",
+                    is_urgent: false,
+                    pageRiskScore,
+                    scan_stage: "background_image_assist",
+                    page_category: isAiPlatformUrl(request.pageUrl) ? "ai_platform" : "normal_page",
+                    ai_platform_guard: isAiPlatformUrl(request.pageUrl)
                 });
 
                 const data = await response.json();
-                const { reportData, score } = parseAiReport(data);
+                let { reportData, score } = parseAiReport(data);
 
-                if (score >= 60 && sender.tab && sender.tab.id) {
+                const guardedResult = applyAiPlatformBackgroundGuard(request.pageUrl, requestContext || "背景圖片自動分析", reportData, score);
+                reportData = guardedResult.reportData;
+                score = guardedResult.score;
+
+                const shouldAlert = shouldShowImageInlineAlert(request.pageUrl, request, reportData, score);
+
+                if (shouldAlert && sender.tab && sender.tab.id) {
                     chrome.tabs.sendMessage(sender.tab.id, {
                         action: "show_alert",
-                        data: reportData
+                        data: {
+                            ...reportData,
+                            riskScore: score,
+                            scanStage: "background_image_assist"
+                        }
                     }).catch(() => {});
+                } else {
+                    console.log("🟢 [圖片提醒降噪] 圖片掃描未達提醒條件：", {
+                        score,
+                        pageRiskScore,
+                        url: request.pageUrl,
+                        reason: reportData?.reason || request.reason || ""
+                    });
                 }
 
                 sendResponse({
-                    status: "done",
-                    score
+                    status: shouldAlert ? "alert_shown" : "image_alert_suppressed",
+                    score,
+                    pageRiskScore
                 });
             } catch (e) {
                 sendResponse({

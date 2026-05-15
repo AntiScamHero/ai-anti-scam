@@ -8,6 +8,7 @@
 // 5. 支援 Socket.IO 家人緊急通知
 // 6. 支援詐騙情境還原聊天室
 // 7. 支援短效 Authorization Bearer token，不再依賴前端固定密鑰
+// 8. 支援確認詐騙後加入家庭黑名單
 
 document.addEventListener('DOMContentLoaded', async () => {
     // ==========================================
@@ -157,11 +158,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tagsContainer = document.getElementById('tags-container');
     const adviceEl = document.getElementById('advice');
 
+    const detailUrlEl = document.getElementById('detail-url');
+    const detailDomainEl = document.getElementById('detail-domain');
+    const detailSourceEl = document.getElementById('detail-source');
+    const detailRiskLevelEl = document.getElementById('detail-risk-level');
+    const detailReasonEl = document.getElementById('detail-reason');
+    const detailScamDnaEl = document.getElementById('detail-scam-dna');
+    const detailEvidenceStatusEl = document.getElementById('detail-evidence-status');
+    const detailSyncStatusEl = document.getElementById('detail-sync-status');
+    const detailTimestampEl = document.getElementById('detail-timestamp');
+    const detailSyncNoteEl = document.getElementById('detail-sync-note');
+
+    const communityStatusPillEl = document.getElementById('community-status-pill');
+    const communityStatusDomainEl = document.getElementById('community-status-domain');
+    const communityStatusCountEl = document.getElementById('community-status-count');
+    const communityStatusReviewEl = document.getElementById('community-status-review');
+    const communityStatusActionEl = document.getElementById('community-status-action');
+    const communityStatusNoteEl = document.getElementById('community-status-note');
+    const communityStatusRefreshBtn = document.getElementById('community-status-refresh-btn');
+
     const manualLeaveBtn = document.getElementById('manual-leave-btn');
     const closeBtn = document.getElementById('close-btn');
     const continueOnceBtn = document.getElementById('continue-once-btn');
     const reportFalseBtn = document.getElementById('report-false-btn');
     const bypassBtn = document.getElementById('bypass-btn');
+    const familyBlockBtn = ensureFamilyBlockButton();
+    const communityReportBtn = ensureCommunityReportButton();
 
     const passwordArea = document.getElementById('password-area');
     const guardianPinInput = document.getElementById('guardian-pin');
@@ -182,6 +204,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const aiSourcePill = document.getElementById('ai-source-pill');
     const scenarioToggleBtn = document.getElementById('scenario-toggle');
     const scenarioPanel = document.getElementById('scenario-panel');
+    const detailToggleBtn = document.getElementById('detail-toggle-btn');
+    const progressiveDetail = document.getElementById('progressive-detail');
+    const advancedActionsToggle = document.getElementById('advanced-actions-toggle');
+    const advancedActionsPanel = document.getElementById('advanced-actions-panel');
+    const mainMascot = document.getElementById('main-mascot');
     let scenarioReplayStarted = false;
 
 
@@ -191,6 +218,73 @@ document.addEventListener('DOMContentLoaded', async () => {
         div.textContent = String(text || '');
         parent.appendChild(div);
         return div;
+    }
+
+    function normalizeTimestamp(value) {
+        if (!value) return new Date().toLocaleString('zh-TW', { hour12: false });
+
+        try {
+            const date = typeof value === 'number' ? new Date(value) : new Date(String(value));
+            if (!Number.isNaN(date.getTime())) {
+                return date.toLocaleString('zh-TW', { hour12: false });
+            }
+        } catch (e) {}
+
+        return String(value);
+    }
+
+    function buildEvidenceStatusText(payload) {
+        if (payload?.screenshot_saved || payload?.screenshotSaved) return '已保存完整截圖與摘要';
+        if (payload?.evidenceID || payload?.evidenceId) return `已建立證據摘要（ID：${payload.evidenceID || payload.evidenceId}）`;
+        return '已保存攔截摘要；未保存完整截圖';
+    }
+
+    function createDetailTag(text) {
+        const tag = document.createElement('span');
+        tag.className = 'detail-tag';
+        tag.textContent = String(text || '未知特徵');
+        return tag;
+    }
+
+    function renderInterceptDetail(identity = null) {
+        const familyID = String(
+            parsedPayload.familyID ||
+            parsedPayload.familyId ||
+            identity?.familyID ||
+            'none'
+        ).toUpperCase();
+
+        const domain = normalizeHost(decodedTargetUrl) || '無法解析';
+        const sourceLabel = getEngineLabel(parsedPayload).replace('判定來源：', '');
+
+        setText(detailUrlEl, decodedTargetUrl || '未知網址');
+        setText(detailDomainEl, domain);
+        setText(detailSourceEl, sourceLabel);
+        setText(detailRiskLevelEl, riskLevel || '高風險');
+        setText(detailReasonEl, internalReason || '系統偵測到高風險異常行為。');
+        setText(detailEvidenceStatusEl, buildEvidenceStatusText(parsedPayload));
+        setText(detailTimestampEl, normalizeTimestamp(parsedPayload.timestamp || Date.now()));
+
+        if (detailScamDnaEl) {
+            detailScamDnaEl.replaceChildren();
+            if (scamDNA.length) {
+                scamDNA.slice(0, 6).forEach(item => detailScamDnaEl.appendChild(createDetailTag(item)));
+            } else {
+                detailScamDnaEl.appendChild(createDetailTag('未提供明確標籤'));
+            }
+        }
+
+        if (detailSyncStatusEl) {
+            detailSyncStatusEl.textContent = familyID && familyID !== 'NONE' && familyID !== 'none'
+                ? `已綁定家庭 ${familyID}`
+                : '未綁定家庭';
+        }
+
+        if (detailSyncNoteEl) {
+            detailSyncNoteEl.textContent = familyID && familyID !== 'NONE' && familyID !== 'none'
+                ? `此筆攔截摘要會使用家庭代碼 ${familyID} 同步到家庭戰情室；若即時推播未連線，戰情室仍會透過資料更新讀取紀錄。`
+                : '目前未綁定家庭代碼，因此只會顯示本機攔截資訊。若要讓家人一起看到紀錄，請先在 Popup 綁定家庭。';
+        }
     }
 
     function renderAiConsultant() {
@@ -295,6 +389,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     renderAiConsultant();
     renderOfficialCitations();
+    renderInterceptDetail();
 
     // ==========================================
     // 共用工具
@@ -537,6 +632,426 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 3000);
     }
 
+
+
+    // ==========================================
+    // 社群回報狀態工具
+    // ==========================================
+    function normalizeCommunityStatusLabel(status) {
+        const value = String(status || 'none').toLowerCase();
+        const map = {
+            none: '尚無回報',
+            pending: '已收件｜待累積',
+            watching: '觀察名單',
+            community_flagged: '社群高風險觀察',
+            approved: '社群確認高風險',
+            rejected: '已駁回'
+        };
+        return map[value] || status || '未知';
+    }
+
+    function normalizeCommunityActionLabel(action) {
+        const value = String(action || 'none').toLowerCase();
+        const map = {
+            none: '無動作',
+            collecting: '收集中',
+            watchlist: '提高關注',
+            raise_risk: '提高風險權重',
+            confirmed: '可直接高風險攔截',
+            manual_review_only: '高信任網域｜僅人工審核'
+        };
+        return map[value] || action || '未知';
+    }
+
+    function setCommunityStatusClass(el, state) {
+        if (!el) return;
+        el.classList.remove('warn', 'danger');
+        if (state) el.classList.add(state);
+    }
+
+    function renderCommunityStatus(data = {}, fallbackDomain = '') {
+        const domain = data.domain || fallbackDomain || normalizeHost(decodedTargetUrl) || '--';
+        const reportCount = Number(data.reportCount || 0);
+        const reviewStatus = data.reviewStatus || 'none';
+        const autoAction = data.autoAction || 'none';
+        const highTrust = Boolean(data.highTrustDomain);
+        const isReported = Boolean(data.isReported || reportCount > 0);
+
+        setText(communityStatusDomainEl, domain);
+        setText(communityStatusCountEl, `${reportCount} 次`);
+        setText(communityStatusReviewEl, normalizeCommunityStatusLabel(reviewStatus));
+        setText(communityStatusActionEl, normalizeCommunityActionLabel(autoAction));
+
+        const dangerState = reviewStatus === 'approved' || reviewStatus === 'community_flagged';
+        const warnState = reviewStatus === 'watching' || highTrust;
+        setCommunityStatusClass(communityStatusReviewEl, dangerState ? 'danger' : warnState ? 'warn' : '');
+        setCommunityStatusClass(communityStatusActionEl, dangerState ? 'danger' : warnState ? 'warn' : '');
+
+        if (communityStatusPillEl) {
+            communityStatusPillEl.textContent = isReported ? `已累積 ${reportCount} 次` : '尚無社群回報';
+        }
+
+        if (communityStatusNoteEl) {
+            if (!isReported) {
+                communityStatusNoteEl.textContent = '目前社群資料庫尚未累積此網域的回報。若你確認這是詐騙，可按下方「回報這是詐騙到社群防詐資料庫」。';
+            } else if (highTrust) {
+                communityStatusNoteEl.textContent = `此網域屬高信任網域或大型平台，已進入人工審核保護流程；目前累積 ${reportCount} 次回報，不會因單一回報直接封鎖。`;
+            } else {
+                communityStatusNoteEl.textContent = `目前狀態：${normalizeCommunityStatusLabel(reviewStatus)}；系統動作：${normalizeCommunityActionLabel(autoAction)}。多人回報與高風險分數達門檻後，才會提高全域風險判斷。`;
+            }
+        }
+    }
+
+    function renderCommunityStatusError(message) {
+        const domain = normalizeHost(decodedTargetUrl) || '--';
+        setText(communityStatusDomainEl, domain);
+        setText(communityStatusCountEl, '--');
+        setText(communityStatusReviewEl, '查詢失敗');
+        setText(communityStatusActionEl, '--');
+        setCommunityStatusClass(communityStatusReviewEl, 'warn');
+        if (communityStatusPillEl) communityStatusPillEl.textContent = '查詢失敗';
+        if (communityStatusNoteEl) communityStatusNoteEl.textContent = `社群狀態查詢失敗：${message || '請稍後再試'}。這不影響目前攔截結果。`;
+    }
+
+    async function fetchCommunityStatus(rawUrl) {
+        const host = normalizeHost(rawUrl);
+        if (!host) {
+            renderCommunityStatusError('無法解析網址主機名稱');
+            return null;
+        }
+
+        if (communityStatusPillEl) communityStatusPillEl.textContent = '查詢中';
+        if (communityStatusNoteEl) communityStatusNoteEl.textContent = '系統正在查詢此網域是否已存在於社群防詐回報池。';
+
+        try {
+            const response = await fetch(`${getApiBaseUrl()}/api/community/domain_status`, {
+                method: 'POST',
+                headers: await getApiHeaders(),
+                body: JSON.stringify({ url: rawUrl, domain: host })
+            });
+
+            let data = {};
+            try { data = await response.json(); } catch (e) {}
+
+            if (!response.ok || data.status !== 'success') {
+                throw new Error(data.message || `社群狀態查詢失敗 (${response.status})`);
+            }
+
+            renderCommunityStatus(data, host);
+            return data;
+        } catch (e) {
+            renderCommunityStatusError(e.message);
+            return null;
+        }
+    }
+
+    // ==========================================
+    // 家庭黑名單工具
+    // ==========================================
+    function ensureFamilyBlockButton() {
+        const existing = document.getElementById('family-block-btn');
+        if (existing) return existing;
+
+        const panel = document.querySelector('.false-positive-actions') || document.getElementById('cooldown-box');
+        if (!panel) return null;
+
+        const btn = document.createElement('button');
+        btn.id = 'family-block-btn';
+        btn.type = 'button';
+        btn.className = 'btn-text';
+        btn.textContent = '確認這是詐騙，加入家庭黑名單';
+        btn.style.color = 'var(--red-dark)';
+        btn.style.fontSize = '18px';
+        btn.style.fontWeight = '1000';
+        btn.style.marginTop = '12px';
+
+        const hint = document.createElement('div');
+        hint.id = 'family-block-hint';
+        hint.textContent = '加入後，同一家庭再次遇到此網域時會優先攔截。';
+        hint.style.cssText = 'margin-top:6px;color:#8a5200;font-size:14px;line-height:1.5;font-weight:800;';
+
+        panel.appendChild(btn);
+        panel.appendChild(hint);
+        return btn;
+    }
+
+    function ensureCommunityReportButton() {
+        const existing = document.getElementById('community-report-btn');
+        if (existing) return existing;
+
+        const panel = document.querySelector('.false-positive-actions') || document.getElementById('cooldown-box');
+        if (!panel) return null;
+
+        const btn = document.createElement('button');
+        btn.id = 'community-report-btn';
+        btn.type = 'button';
+        btn.className = 'btn-text';
+        btn.textContent = '回報這是詐騙到社群防詐資料庫';
+        btn.style.color = '#8a2be2';
+        btn.style.fontSize = '18px';
+        btn.style.fontWeight = '1000';
+        btn.style.marginTop = '12px';
+
+        const hint = document.createElement('div');
+        hint.id = 'community-report-hint';
+        hint.textContent = '送出後會進入社群回報池；系統會累積多方回報，達門檻後提高全域風險，不會因單一回報直接封鎖。';
+        hint.style.cssText = 'margin-top:6px;color:#5d3a7a;font-size:14px;line-height:1.5;font-weight:800;';
+
+        panel.appendChild(btn);
+        panel.appendChild(hint);
+        return btn;
+    }
+
+    async function saveLocalFamilyBlockDomain(host, familyID, payload = {}) {
+        if (!host || !hasChromeStorage()) return;
+
+        try {
+            const storage = await chrome.storage.local.get(['familyBlockedDomains']);
+            const root = storage.familyBlockedDomains && typeof storage.familyBlockedDomains === 'object'
+                ? storage.familyBlockedDomains
+                : {};
+
+            const fid = String(familyID || 'none').toUpperCase();
+            const familyMap = root[fid] && typeof root[fid] === 'object' ? root[fid] : {};
+
+            familyMap[host] = {
+                domain: host,
+                familyID: fid,
+                url: decodedTargetUrl,
+                reason: internalReason,
+                riskScore: parseInt(riskScore, 10) || 99,
+                riskLevel,
+                scamDNA,
+                updatedAt: new Date().toISOString(),
+                ...payload
+            };
+
+            root[fid] = familyMap;
+            await chrome.storage.local.set({ familyBlockedDomains: root });
+        } catch (e) {
+            console.warn('本機家庭黑名單暫存失敗：', e);
+        }
+    }
+
+    async function addFamilyBlockedDomain(rawUrl) {
+        const host = normalizeHost(rawUrl);
+        if (!host) throw new Error('無法解析網址主機名稱');
+
+        const identity = await getCurrentIdentity();
+        const familyID = String(identity.familyID || 'none').toUpperCase();
+
+        if (!familyID || familyID === 'NONE') {
+            throw new Error('尚未綁定家庭群組，無法加入家庭黑名單。');
+        }
+
+        const payload = {
+            url: rawUrl,
+            originalUrl: rawUrl,
+            domain: host,
+            userID: identity.userID,
+            familyID,
+            riskScore: parseInt(riskScore, 10) || 99,
+            riskLevel,
+            ai_reason: internalReason,
+            reason: internalReason,
+            reported_reason: '使用者在攔截頁確認此網站為詐騙，加入家庭黑名單',
+            scamDNA,
+            action_type: 'blocked_page_confirmed_scam'
+        };
+
+        const response = await fetch(`${getApiBaseUrl()}/api/family/block_domain`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        let data = {};
+        try { data = await response.json(); } catch (e) {}
+
+        if (!response.ok || data.status !== 'success') {
+            throw new Error(data.message || `後端加入家庭黑名單失敗 (${response.status})`);
+        }
+
+        await saveLocalFamilyBlockDomain(host, familyID, data.blocklist || payload);
+        return data;
+    }
+
+    async function handleAddFamilyBlockDomain() {
+        if (!decodedTargetUrl) {
+            showToast('找不到原始網址，無法加入家庭黑名單。', 'error');
+            return;
+        }
+
+        const ok = window.confirm('確定要把這個網域加入「家庭黑名單」嗎？\n\n加入後，同一家庭的成員再次遇到此網域，系統會優先攔截。');
+        if (!ok) return;
+
+        if (familyBlockBtn) {
+            familyBlockBtn.disabled = true;
+            familyBlockBtn.textContent = '正在加入家庭黑名單...';
+            familyBlockBtn.style.opacity = '0.68';
+        }
+
+        try {
+            const data = await addFamilyBlockedDomain(decodedTargetUrl);
+            const domain = data.domain || normalizeHost(decodedTargetUrl);
+            showToast(`已加入家庭黑名單：${domain}`, 'success');
+
+            if (detailSyncNoteEl) {
+                detailSyncNoteEl.textContent = `此網域 ${domain} 已加入家庭黑名單；家人之後再次遇到會被優先攔截。`;
+            }
+
+            if (familyBlockBtn) {
+                familyBlockBtn.textContent = '已加入家庭黑名單';
+                familyBlockBtn.disabled = true;
+                familyBlockBtn.style.opacity = '0.78';
+            }
+        } catch (e) {
+            const host = normalizeHost(decodedTargetUrl);
+            const identity = await getCurrentIdentity().catch(() => ({ familyID: 'none' }));
+
+            // 後端暫時不可用時，至少保留本機標記；但不宣稱已同步給家人。
+            if (host && identity.familyID && String(identity.familyID).toUpperCase() !== 'NONE') {
+                await saveLocalFamilyBlockDomain(host, identity.familyID, {
+                    syncStatus: 'local_only',
+                    syncError: e.message
+                });
+                showToast(`已先本機標記 ${host}；後端同步失敗：${e.message}`, 'error');
+            } else {
+                showToast(`加入家庭黑名單失敗：${e.message}`, 'error');
+            }
+
+            if (familyBlockBtn) {
+                familyBlockBtn.disabled = false;
+                familyBlockBtn.textContent = '確認這是詐騙，加入家庭黑名單';
+                familyBlockBtn.style.opacity = '1';
+            }
+        }
+    }
+
+    async function saveLocalCommunityReportDomain(host, payload = {}) {
+        if (!host || !hasChromeStorage()) return;
+
+        try {
+            const storage = await chrome.storage.local.get(['communityReportedDomains']);
+            const root = storage.communityReportedDomains && typeof storage.communityReportedDomains === 'object'
+                ? storage.communityReportedDomains
+                : {};
+
+            root[host] = {
+                domain: host,
+                url: decodedTargetUrl,
+                reason: internalReason,
+                riskScore: parseInt(riskScore, 10) || 99,
+                riskLevel,
+                scamDNA,
+                updatedAt: new Date().toISOString(),
+                ...payload
+            };
+
+            await chrome.storage.local.set({ communityReportedDomains: root });
+        } catch (e) {
+            console.warn('本機社群回報暫存失敗：', e);
+        }
+    }
+
+    async function reportCommunityScam(rawUrl) {
+        const host = normalizeHost(rawUrl);
+        if (!host) throw new Error('無法解析網址主機名稱');
+
+        const identity = await getCurrentIdentity();
+        const familyID = String(identity.familyID || 'none').toUpperCase();
+
+        const payload = {
+            url: rawUrl,
+            originalUrl: rawUrl,
+            domain: host,
+            userID: identity.userID,
+            familyID,
+            riskScore: parseInt(riskScore, 10) || 99,
+            riskLevel,
+            ai_reason: internalReason,
+            reason: internalReason,
+            reported_reason: '使用者在攔截頁確認此網站疑似詐騙，送入社群防詐回報池',
+            scamDNA,
+            action_type: 'blocked_page_report_scam'
+        };
+
+        const response = await fetch(`${getApiBaseUrl()}/api/report_scam`, {
+            method: 'POST',
+            headers: await getApiHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        let data = {};
+        try { data = await response.json(); } catch (e) {}
+
+        if (!response.ok || data.status !== 'success') {
+            throw new Error(data.message || `社群回報失敗 (${response.status})`);
+        }
+
+        await saveLocalCommunityReportDomain(host, data.communityReport || payload);
+        return data;
+    }
+
+    async function handleReportCommunityScam() {
+        if (!decodedTargetUrl) {
+            showToast('找不到原始網址，無法送出社群回報。', 'error');
+            return;
+        }
+
+        const ok = window.confirm('確定要把這個網站回報到「社群防詐資料庫」嗎？\n\n系統會累積多方回報，達門檻後提高全域風險；不會因單一回報直接封鎖全平台。');
+        if (!ok) return;
+
+        if (communityReportBtn) {
+            communityReportBtn.disabled = true;
+            communityReportBtn.textContent = '正在送出社群回報...';
+            communityReportBtn.style.opacity = '0.68';
+        }
+
+        try {
+            const data = await reportCommunityScam(decodedTargetUrl);
+            const domain = data.domain || normalizeHost(decodedTargetUrl);
+            showToast(`已送入社群防詐資料庫：${domain}`, 'success');
+            renderCommunityStatus({
+                status: 'success',
+                domain,
+                isReported: true,
+                reportCount: data.reportCount || 1,
+                reviewStatus: data.reviewStatus || 'pending',
+                autoAction: data.autoAction || 'collecting',
+                highTrustDomain: Boolean(data.highTrustDomain)
+            }, domain);
+
+            if (detailSyncNoteEl) {
+                detailSyncNoteEl.textContent = `此網域 ${domain} 已送入社群防詐資料庫；目前累積 ${data.reportCount || 1} 次回報，狀態：${data.reviewStatus || 'pending'}。`;
+            }
+
+            if (communityReportBtn) {
+                communityReportBtn.textContent = `已回報社群資料庫｜累積 ${data.reportCount || 1} 次`;
+                communityReportBtn.disabled = true;
+                communityReportBtn.style.opacity = '0.78';
+            }
+        } catch (e) {
+            const host = normalizeHost(decodedTargetUrl);
+
+            if (host) {
+                await saveLocalCommunityReportDomain(host, {
+                    syncStatus: 'local_only',
+                    syncError: e.message
+                });
+                showToast(`已先本機暫存社群回報；後端同步失敗：${e.message}`, 'error');
+            } else {
+                showToast(`社群回報失敗：${e.message}`, 'error');
+            }
+
+            if (communityReportBtn) {
+                communityReportBtn.disabled = false;
+                communityReportBtn.textContent = '回報這是詐騙到社群防詐資料庫';
+                communityReportBtn.style.opacity = '1';
+            }
+        }
+    }
+
     // ==========================================
     // 白名單工具
     // ==========================================
@@ -701,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function navigateToSafePage() {
-        window.location.href = 'https://www.google.com';
+        window.location.href = 'https://www.google.com.tw';
     }
 
     function closeCurrentTabOrSafePage() {
@@ -928,6 +1443,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 showElement(familyBroadcast);
             });
+
+            socket.on('community_report_updated', payload => {
+                const currentHost = normalizeHost(decodedTargetUrl);
+                const reportedDomain = normalizeHost(payload?.domain || '');
+                if (!currentHost || !reportedDomain || !domainMatchesHost(currentHost, reportedDomain)) return;
+
+                renderCommunityStatus({
+                    status: 'success',
+                    domain: payload.domain || currentHost,
+                    isReported: true,
+                    reportCount: payload.reportCount || 1,
+                    reviewStatus: payload.reviewStatus || 'pending',
+                    autoAction: payload.autoAction || 'collecting',
+                    highTrustDomain: Boolean(payload.highTrustDomain)
+                }, currentHost);
+            });
         } catch (e) {
             console.warn('Socket.IO 連線失敗：', e);
         }
@@ -1049,6 +1580,63 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
 
+    function setupMascotFallback() {
+        if (!mainMascot) return;
+
+        const replaceWithFallback = () => {
+            if (!mainMascot.isConnected) return;
+
+            const fallback = document.createElement('div');
+            fallback.className = 'robot-img';
+            fallback.setAttribute('role', 'img');
+            fallback.setAttribute('aria-label', 'AI 防詐盾牌');
+            fallback.style.cssText = `
+                width:min(320px,82vw);
+                min-height:260px;
+                display:grid;
+                place-items:center;
+                border-radius:32px;
+                background:linear-gradient(135deg, rgba(35,136,255,.12), rgba(34,197,94,.12));
+                font-size:96px;
+                box-shadow:0 20px 40px rgba(35,136,255,.16);
+                animation:none;
+                margin-top:22px;
+            `;
+            fallback.textContent = '🛡️';
+            mainMascot.replaceWith(fallback);
+        };
+
+        mainMascot.addEventListener('error', replaceWithFallback, { once: true });
+
+        setTimeout(() => {
+            if (!mainMascot.complete || mainMascot.naturalWidth === 0) {
+                replaceWithFallback();
+            }
+        }, 800);
+    }
+
+    function toggleProgressiveDetail() {
+        if (!detailToggleBtn || !progressiveDetail) return;
+
+        const isOpen = progressiveDetail.classList.toggle('open');
+        progressiveDetail.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        detailToggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        detailToggleBtn.textContent = isOpen ? '收起詳細原因' : '查看詳細原因';
+    }
+
+    function toggleAdvancedActions() {
+        if (!advancedActionsToggle || !advancedActionsPanel) return;
+
+        const isCollapsed = advancedActionsPanel.classList.toggle('collapsed');
+        const isOpen = !isCollapsed;
+
+        advancedActionsToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        advancedActionsToggle.textContent = isOpen
+            ? '收起進階處理'
+            : '我確定要進階處理 / 誤判放行';
+    }
+
+
     function toggleScenarioPanel() {
         if (!scenarioPanel || !scenarioToggleBtn) return;
         const isOpen = scenarioPanel.classList.toggle('open');
@@ -1074,8 +1662,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         scenarioToggleBtn.setAttribute('aria-expanded', 'false');
     }
 
+    if (detailToggleBtn) {
+        detailToggleBtn.addEventListener('click', toggleProgressiveDetail);
+        detailToggleBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    if (advancedActionsToggle) {
+        advancedActionsToggle.addEventListener('click', toggleAdvancedActions);
+        advancedActionsToggle.setAttribute('aria-expanded', 'false');
+    }
+
     if (manualLeaveBtn) {
-        manualLeaveBtn.addEventListener('click', navigateToSafePage);
+        let countdown = 5;
+        manualLeaveBtn.textContent = `聽從建議，安全離開此網頁 (${countdown} 秒後自動撤離)`;
+
+        const autoEvacuateTimer = setInterval(() => {
+            countdown -= 1;
+            
+            if (countdown > 0) {
+                manualLeaveBtn.textContent = `聽從建議，安全離開此網頁 (${countdown} 秒後自動撤離)`;
+            } else {
+                clearInterval(autoEvacuateTimer);
+                navigateToSafePage();
+            }
+        }, 1000);
+
+        manualLeaveBtn.addEventListener('click', () => {
+            clearInterval(autoEvacuateTimer);
+            navigateToSafePage();
+        });
     }
 
     if (closeBtn) {
@@ -1092,6 +1707,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (bypassBtn) {
         bypassBtn.addEventListener('click', handleTemporaryAllow);
+    }
+
+    if (familyBlockBtn) {
+        familyBlockBtn.addEventListener('click', handleAddFamilyBlockDomain);
+    }
+
+    if (communityReportBtn) {
+        communityReportBtn.addEventListener('click', handleReportCommunityScam);
+    }
+
+    if (communityStatusRefreshBtn) {
+        communityStatusRefreshBtn.addEventListener('click', () => fetchCommunityStatus(decodedTargetUrl));
     }
 
     if (verifyPinBtn) {
@@ -1173,7 +1800,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 初始化
     // ==========================================
     startCooldown();
+    setupMascotFallback();
     if (chatStatusEl) chatStatusEl.textContent = '尚未展開';
+    try {
+        const identityForDetail = await getCurrentIdentity();
+        renderInterceptDetail(identityForDetail);
+    } catch (e) {
+        renderInterceptDetail();
+    }
+    fetchCommunityStatus(decodedTargetUrl);
     setupFamilySocket();
 
     console.log('🛡️ blocked.js 已啟動', {

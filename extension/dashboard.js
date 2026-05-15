@@ -8,6 +8,7 @@
 // 6. 安全 DOM 建立，不用 innerHTML 塞使用者資料
 // 7. 證據快照 Modal
 // 8. 清空家庭紀錄
+// 9. Socket.IO shim 自動降級輪詢，避免假 client 觸發錯誤
 
 window.CONFIG = window.CONFIG || {
     API_BASE_URL: "https://ai-anti-scam.onrender.com",
@@ -26,6 +27,8 @@ let ratioChartInstance = null;
 let trendChartInstance = null;
 let isFetching = false;
 let currentRecords = [];
+let fallbackPollingTimer = null;
+let socketFallbackToastShown = false;
 
 // ==========================================
 // 共用工具
@@ -71,6 +74,70 @@ function isValidFamilyID(familyID) {
 
 function getRequestTimeoutMs() {
     return Number(window.CONFIG?.REQUEST_TIMEOUT_MS || 12000) || 12000;
+}
+
+function getPollingIntervalMs() {
+    return Number(window.CONFIG?.POLLING_INTERVAL_MS || 5000) || 5000;
+}
+
+function normalizeDashboardFamilyID(value) {
+    return String(value || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, 6);
+}
+
+function getDashboardUrlOptions() {
+    try {
+        const params = new URLSearchParams(window.location.search || "");
+        const familyID = normalizeDashboardFamilyID(params.get("familyID") || params.get("familyId") || params.get("fid") || "");
+        const autoStartValue = String(params.get("autoStart") || params.get("autostart") || "").toLowerCase();
+
+        return {
+            familyID,
+            autoStart: autoStartValue === "1" || autoStartValue === "true" || autoStartValue === "yes"
+        };
+    } catch (e) {
+        return { familyID: "", autoStart: false };
+    }
+}
+
+function applyFamilyIDToDashboard(familyID) {
+    const normalized = normalizeDashboardFamilyID(familyID);
+    if (!isValidFamilyID(normalized)) return "";
+
+    localStorage.setItem("savedFamilyID", normalized);
+
+    const input = document.getElementById("family-id-input");
+    if (input) input.value = normalized;
+
+    return normalized;
+}
+
+function hasRealSocketIOClient() {
+    if (typeof io !== "function") return false;
+
+    let source = "";
+    try {
+        source = Function.prototype.toString.call(io).toLowerCase();
+    } catch (e) {}
+
+    if (
+        source.includes("client shim") ||
+        source.includes("socket.io client shim") ||
+        source.includes("handlers.connect_error") ||
+        source.includes("即時通道未載入") ||
+        source.includes("fallback")
+    ) {
+        return false;
+    }
+
+    if (typeof io.Manager === "function" || typeof io.Socket === "function" || io.protocol !== undefined) {
+        return true;
+    }
+
+    return source.includes("manager") && source.includes("socket") && !source.includes("shim");
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = getRequestTimeoutMs()) {
@@ -317,151 +384,520 @@ function startClock() {
 }
 
 // ==========================================
-// 安全版證據 Modal
+// 攔截事件詳情 Modal
 // ==========================================
-function showEvidenceModal(imageUrl, reason) {
+function getRecordReport(record) {
+    return safeParseReport(record?.report || {});
+}
+
+function getRecordUrl(record, report = null) {
+    const data = report || getRecordReport(record);
+    return String(
+        record?.url ||
+        record?.url_preview ||
+        data?.originalUrl ||
+        data?.original_url ||
+        data?.targetUrl ||
+        data?.target_url ||
+        data?.pageUrl ||
+        data?.page_url ||
+        data?.url ||
+        record?.domain ||
+        "未知網址"
+    );
+}
+
+function getRecordDomain(record, report = null) {
+    const data = report || getRecordReport(record);
+    const explicitDomain = record?.domain || data?.domain || "";
+    if (explicitDomain) return String(explicitDomain);
+
+    try {
+        return new URL(getRecordUrl(record, data)).hostname.replace(/^www\./, "");
+    } catch (e) {
+        return "無法解析";
+    }
+}
+
+function createModalPill(text, kind = "neutral") {
+    const pill = document.createElement("span");
+    pill.textContent = String(text || "");
+    const bg = kind === "danger"
+        ? "rgba(255,77,79,.18)"
+        : kind === "warn"
+            ? "rgba(255,187,51,.16)"
+            : kind === "safe"
+                ? "rgba(0,200,81,.16)"
+                : "rgba(139,148,158,.18)";
+    const color = kind === "danger"
+        ? "#ff7875"
+        : kind === "warn"
+            ? "#ffd666"
+            : kind === "safe"
+                ? "#73d13d"
+                : "#c9d1d9";
+    pill.style.cssText = `
+        display:inline-flex;
+        align-items:center;
+        padding:6px 10px;
+        border-radius:999px;
+        background:${bg};
+        color:${color};
+        font-size:13px;
+        font-weight:800;
+        line-height:1.35;
+        margin:3px 5px 3px 0;
+    `;
+    return pill;
+}
+
+function createModalInfoRow(label, value, options = {}) {
+    const row = document.createElement("div");
+    row.style.cssText = `
+        display:grid;
+        grid-template-columns:120px minmax(0, 1fr);
+        gap:12px;
+        padding:11px 0;
+        border-bottom:1px solid rgba(139,148,158,.18);
+        align-items:start;
+    `;
+
+    const labelEl = document.createElement("div");
+    labelEl.textContent = String(label || "");
+    labelEl.style.cssText = "color:#8b949e;font-size:14px;font-weight:900;";
+
+    const valueEl = document.createElement("div");
+    valueEl.textContent = String(value || "--");
+    valueEl.style.cssText = `
+        color:${options.color || "#ffffff"};
+        font-size:${options.large ? "18px" : "15px"};
+        font-weight:${options.bold ? "900" : "700"};
+        line-height:1.55;
+        word-break:break-word;
+        white-space:pre-wrap;
+    `;
+
+    row.appendChild(labelEl);
+    row.appendChild(valueEl);
+    return row;
+}
+
+function buildEvidenceStatus(record, evidenceData = {}, loadError = "") {
+    if (loadError) return `證據讀取失敗：${loadError}`;
+    if (evidenceData?.screenshot_base64 || evidenceData?.evidence_image_url) return "已保存完整證據截圖";
+    if (record?.evidenceID || evidenceData?.evidenceID) return `已建立證據摘要（ID：${record?.evidenceID || evidenceData?.evidenceID}）`;
+    return "已保存攔截摘要，未保存完整截圖";
+}
+
+
+function normalizeCommunityStatusLabel(status) {
+    const value = String(status || "none").toLowerCase();
+    const map = {
+        none: "尚無回報",
+        pending: "已收件｜待累積",
+        watching: "觀察名單",
+        community_flagged: "社群高風險觀察",
+        approved: "社群確認高風險",
+        rejected: "已駁回",
+    };
+    return map[value] || status || "未知";
+}
+
+function normalizeCommunityActionLabel(action) {
+    const value = String(action || "none").toLowerCase();
+    const map = {
+        none: "無動作",
+        collecting: "收集中",
+        watchlist: "提高關注",
+        raise_risk: "提高風險權重",
+        confirmed: "可直接高風險攔截",
+        manual_review_only: "高信任網域｜僅人工審核",
+    };
+    return map[value] || action || "未知";
+}
+
+function createCommunityStatusBox() {
+    const box = document.createElement("div");
+    box.id = "modal-community-status";
+    box.style.cssText = "background:#161b22;border:1px solid rgba(139,148,158,.26);border-radius:18px;padding:16px;margin-bottom:16px;";
+
+    const title = document.createElement("div");
+    title.textContent = "社群防詐資料庫狀態";
+    title.style.cssText = "color:#c9d1d9;font-size:15px;font-weight:1000;margin-bottom:10px;";
+
+    const body = document.createElement("div");
+    body.id = "modal-community-status-body";
+    body.textContent = "正在查詢社群回報狀態...";
+    body.style.cssText = "color:#8b949e;font-size:14px;line-height:1.7;font-weight:800;";
+
+    box.appendChild(title);
+    box.appendChild(body);
+    return { box, body };
+}
+
+function renderCommunityStatusBody(body, data, fallbackDomain = "") {
+    if (!body) return;
+    body.replaceChildren();
+
+    const domain = data?.domain || fallbackDomain || "未知網域";
+    const isReported = Boolean(data?.isReported || Number(data?.reportCount || 0) > 0);
+    const reportCount = Number(data?.reportCount || 0);
+    const reviewStatus = data?.reviewStatus || "none";
+    const autoAction = data?.autoAction || "none";
+    const highTrust = Boolean(data?.highTrustDomain);
+
+    const summary = document.createElement("div");
+    summary.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;";
+    summary.appendChild(createModalPill(`網域：${domain}`, "neutral"));
+    summary.appendChild(createModalPill(`累積回報：${reportCount} 次`, reportCount >= 5 ? "danger" : reportCount >= 2 ? "warn" : "neutral"));
+    summary.appendChild(createModalPill(normalizeCommunityStatusLabel(reviewStatus), reviewStatus === "approved" || reviewStatus === "community_flagged" ? "danger" : reviewStatus === "watching" ? "warn" : "neutral"));
+    if (highTrust) summary.appendChild(createModalPill("高信任網域：需人工審核", "warn"));
+
+    const note = document.createElement("div");
+    note.style.cssText = "color:#c9d1d9;font-size:14px;line-height:1.7;";
+    if (!isReported) {
+        note.textContent = "目前社群資料庫尚未累積此網域的回報。若你確認這是詐騙，可送出回報；系統不會因單一回報直接封鎖全平台。";
+    } else {
+        note.textContent = `目前狀態：${normalizeCommunityStatusLabel(reviewStatus)}；系統動作：${normalizeCommunityActionLabel(autoAction)}。多人回報與高風險分數達門檻後，才會提高全域風險判斷。`;
+    }
+
+    body.appendChild(summary);
+    body.appendChild(note);
+}
+
+async function fetchCommunityStatusForDomain(domainOrUrl) {
+    const domain = String(domainOrUrl || "").trim();
+    if (!domain || domain === "未知網址" || domain === "無法解析") {
+        return { status: "fail", message: "無法解析網域" };
+    }
+
+    const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/community/domain_status`, {
+        method: "POST",
+        headers: await getApiHeaders(),
+        body: JSON.stringify({ domain })
+    });
+
+    let data = {};
+    try { data = await response.json(); } catch (e) {}
+
+    if (!response.ok || data.status !== "success") {
+        throw new Error(data.message || `社群狀態查詢失敗 (${response.status})`);
+    }
+
+    return data;
+}
+
+async function reportCommunityScamFromRecord(record = {}, button = null) {
+    const report = getRecordReport(record);
+    const url = getRecordUrl(record, report);
+    const domain = getRecordDomain(record, report);
+    const familyID = getCurrentFamilyID();
+
+    if (!url || url === "未知網址") {
+        showToast("找不到可回報的網址。", "error");
+        return null;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "正在送出社群回報...";
+        button.style.opacity = "0.68";
+    }
+
+    try {
+        const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/report_scam`, {
+            method: "POST",
+            headers: await getApiHeaders(),
+            body: JSON.stringify({
+                url,
+                domain,
+                familyID,
+                riskScore: normalizeRiskScore(report || record),
+                riskLevel: report.riskLevel || record.riskLevel || "",
+                ai_reason: report.reason || record.reason || "",
+                reason: report.reason || record.reason || "",
+                reported_reason: "戰情室使用者確認此紀錄疑似詐騙，送入社群防詐回報池",
+                scamDNA: Array.isArray(report.scamDNA) ? report.scamDNA : [],
+                action_type: "dashboard_confirmed_scam"
+            })
+        });
+
+        let data = {};
+        try { data = await response.json(); } catch (e) {}
+
+        if (!response.ok || data.status !== "success") {
+            throw new Error(data.message || `社群回報失敗 (${response.status})`);
+        }
+
+        showToast(`已送入社群防詐資料庫：${data.domain || domain}`, "success");
+
+        if (button) {
+            button.textContent = `已回報｜累積 ${data.reportCount || 1} 次`;
+            button.disabled = true;
+            button.style.opacity = "0.8";
+        }
+
+        return data;
+    } catch (error) {
+        showToast(`社群回報失敗：${error.message}`, "error");
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "回報到社群防詐資料庫";
+            button.style.opacity = "1";
+        }
+
+        return null;
+    }
+}
+
+function createModalActionButton(label, variant = "neutral") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+
+    const danger = variant === "danger";
+    button.style.cssText = `
+        padding:11px 14px;
+        border-radius:12px;
+        border:1px solid ${danger ? "rgba(255,77,79,.44)" : "rgba(139,148,158,.32)"};
+        background:${danger ? "rgba(255,77,79,.16)" : "#21262d"};
+        color:${danger ? "#ffaaa5" : "#ffffff"};
+        font-size:14px;
+        font-weight:900;
+        cursor:pointer;
+    `;
+
+    return button;
+}
+
+function showInterceptDetailModal(record = {}, evidenceData = {}, loadError = "") {
     const oldModal = document.getElementById("ai-evidence-modal");
     if (oldModal) oldModal.remove();
+
+    const report = getRecordReport(record);
+    const score = normalizeRiskScore(report || record);
+    const url = getRecordUrl(record, report);
+    const domain = getRecordDomain(record, report);
+    const reason = report.reason || record.reason || evidenceData?.reason || "未提供攔截原因";
+    const advice = report.advice || "請勿輸入個資、驗證碼、信用卡，也不要依照頁面指示匯款。";
+    const scamDNA = Array.isArray(report.scamDNA) ? report.scamDNA : [];
+    const riskLevel = report.riskLevel || record.riskLevel || (score >= getRiskThresholdHigh() ? "高風險" : score >= getRiskThresholdMedium() ? "中風險" : "低風險");
+    const familyID = record.familyID || report.familyID || getCurrentFamilyID();
+    const source = report.source || report.winningEngine || report.engine || record.source || "dashboard-record";
+    const timestamp = record.timestamp || report.timestamp || evidenceData?.timestamp || "";
+    const imageUrl = normalizeEvidenceImage(evidenceData?.evidence_image_url || evidenceData?.screenshot_base64 || "");
+    const evidenceStatus = buildEvidenceStatus(record, evidenceData, loadError);
 
     const modal = document.createElement("div");
     modal.id = "ai-evidence-modal";
     modal.style.cssText = `
         position:fixed;
-        top:0;
-        left:0;
-        width:100vw;
-        height:100vh;
-        background:rgba(0,0,0,0.9);
+        inset:0;
+        background:rgba(0,0,0,0.86);
         color:white;
         display:flex;
-        flex-direction:column;
         align-items:center;
         justify-content:center;
         z-index:2147483647;
-        font-family:sans-serif;
+        font-family:'Microsoft JhengHei', system-ui, sans-serif;
         backdrop-filter:blur(10px);
         padding:24px;
         box-sizing:border-box;
     `;
 
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = `
+    const panel = document.createElement("div");
+    panel.style.cssText = `
         position:relative;
-        width:90%;
-        max-width:1200px;
-        display:flex;
-        flex-direction:column;
-        align-items:center;
+        width:min(1080px, 96vw);
+        max-height:92vh;
+        overflow:auto;
+        background:#0d1117;
+        border:1px solid rgba(255,255,255,.14);
+        border-radius:24px;
+        box-shadow:0 24px 80px rgba(0,0,0,.55);
+        padding:26px;
     `;
 
     const closeBtn = document.createElement("button");
     closeBtn.id = "close-evidence-modal";
+    closeBtn.type = "button";
     closeBtn.textContent = "×";
     closeBtn.style.cssText = `
-        position:absolute;
-        top:-20px;
-        right:-20px;
-        background:white;
-        color:black;
-        border:none;
+        position:sticky;
+        top:0;
+        float:right;
+        width:42px;
+        height:42px;
         border-radius:50%;
-        width:44px;
-        height:44px;
+        border:0;
+        background:#ffffff;
+        color:#111;
         font-size:28px;
+        font-weight:900;
         cursor:pointer;
-        font-weight:bold;
-        box-shadow:0 0 10px rgba(255,255,255,0.5);
         z-index:2;
     `;
 
     const title = document.createElement("div");
-    title.textContent = "【AI 防詐盾牌 - 攔截證據保全快照】";
-    title.style.cssText = `
-        font-size:24px;
-        font-weight:bold;
-        color:#ff4d4f;
-        margin-bottom:15px;
-        text-align:center;
-    `;
+    title.textContent = "【AI 防詐盾牌｜攔截事件詳情】";
+    title.style.cssText = "color:#ff7875;font-size:24px;font-weight:1000;margin:4px 52px 8px 0;";
 
-    const reasonEl = document.createElement("div");
-    reasonEl.textContent = `證據原因：${reason || "未提供"}`;
-    reasonEl.style.cssText = `
-        color:#aaa;
-        margin-bottom:20px;
-        text-align:center;
-        max-width:100%;
-        line-height:1.6;
-        word-break:break-word;
-    `;
+    const subtitle = document.createElement("div");
+    subtitle.textContent = "這裡會說明攔截了哪個網址、為什麼攔截、是否已同步家庭戰情室，以及目前保存了哪些證據。";
+    subtitle.style.cssText = "color:#c9d1d9;font-size:15px;line-height:1.7;margin-bottom:18px;";
+
+    const topGrid = document.createElement("div");
+    topGrid.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;";
+
+    const scoreCard = document.createElement("div");
+    scoreCard.style.cssText = "background:rgba(255,77,79,.12);border:1px solid rgba(255,77,79,.28);border-radius:18px;padding:16px;";
+    const scoreLabel = document.createElement("div");
+    scoreLabel.textContent = "風險分數";
+    scoreLabel.style.cssText = "color:#ffccc7;font-size:13px;font-weight:900;";
+    const scoreValue = document.createElement("div");
+    scoreValue.textContent = `${score} / 100`;
+    scoreValue.style.cssText = "color:#ff7875;font-size:30px;font-weight:1000;margin-top:4px;";
+    scoreCard.appendChild(scoreLabel);
+    scoreCard.appendChild(scoreValue);
+
+    const levelCard = document.createElement("div");
+    levelCard.style.cssText = "background:rgba(255,187,51,.10);border:1px solid rgba(255,187,51,.24);border-radius:18px;padding:16px;";
+    const levelLabel = document.createElement("div");
+    levelLabel.textContent = "風險等級";
+    levelLabel.style.cssText = "color:#ffe58f;font-size:13px;font-weight:900;";
+    const levelValue = document.createElement("div");
+    levelValue.textContent = riskLevel;
+    levelValue.style.cssText = "color:#ffd666;font-size:24px;font-weight:1000;margin-top:7px;";
+    levelCard.appendChild(levelLabel);
+    levelCard.appendChild(levelValue);
+
+    const syncCard = document.createElement("div");
+    syncCard.style.cssText = "background:rgba(35,136,255,.10);border:1px solid rgba(35,136,255,.24);border-radius:18px;padding:16px;";
+    const syncLabel = document.createElement("div");
+    syncLabel.textContent = "家庭同步";
+    syncLabel.style.cssText = "color:#9ecbff;font-size:13px;font-weight:900;";
+    const syncValue = document.createElement("div");
+    syncValue.textContent = familyID && familyID !== "none" ? `已綁定 ${familyID}` : "未綁定家庭";
+    syncValue.style.cssText = "color:#79c0ff;font-size:20px;font-weight:1000;margin-top:8px;";
+    syncCard.appendChild(syncLabel);
+    syncCard.appendChild(syncValue);
+
+    topGrid.appendChild(scoreCard);
+    topGrid.appendChild(levelCard);
+    topGrid.appendChild(syncCard);
+
+    const infoBox = document.createElement("div");
+    infoBox.style.cssText = "background:#161b22;border:1px solid rgba(139,148,158,.26);border-radius:18px;padding:16px;margin-bottom:16px;";
+    infoBox.appendChild(createModalInfoRow("攔截網址", url, { bold: true }));
+    infoBox.appendChild(createModalInfoRow("網域", domain));
+    infoBox.appendChild(createModalInfoRow("攔截原因", reason, { color: "#ffd8d8", bold: true, large: true }));
+    infoBox.appendChild(createModalInfoRow("建議動作", advice, { color: "#d2f8d2" }));
+    infoBox.appendChild(createModalInfoRow("判定來源", source));
+    infoBox.appendChild(createModalInfoRow("發生時間", formatTimestamp(timestamp)));
+    infoBox.appendChild(createModalInfoRow("證據狀態", evidenceStatus, { color: imageUrl ? "#73d13d" : "#ffd666", bold: true }));
+
+    const dnaBox = document.createElement("div");
+    dnaBox.style.cssText = "background:#161b22;border:1px solid rgba(139,148,158,.26);border-radius:18px;padding:16px;margin-bottom:16px;";
+    const dnaTitle = document.createElement("div");
+    dnaTitle.textContent = "命中詐騙特徵";
+    dnaTitle.style.cssText = "color:#c9d1d9;font-size:15px;font-weight:1000;margin-bottom:10px;";
+    dnaBox.appendChild(dnaTitle);
+    if (scamDNA.length) {
+        scamDNA.forEach(tag => dnaBox.appendChild(createModalPill(tag, score >= getRiskThresholdHigh() ? "danger" : "warn")));
+    } else {
+        dnaBox.appendChild(createModalPill("未提供明確標籤", "neutral"));
+    }
+
+    const { box: communityStatusBox, body: communityStatusBody } = createCommunityStatusBox();
+    fetchCommunityStatusForDomain(domain)
+        .then(data => renderCommunityStatusBody(communityStatusBody, data, domain))
+        .catch(error => {
+            if (communityStatusBody) {
+                communityStatusBody.textContent = `社群狀態查詢失敗：${error.message}`;
+                communityStatusBody.style.color = "#ffd666";
+            }
+        });
+
+    const actionBox = document.createElement("div");
+    actionBox.style.cssText = "background:#161b22;border:1px solid rgba(139,148,158,.26);border-radius:18px;padding:16px;margin-bottom:16px;";
+
+    const actionTitle = document.createElement("div");
+    actionTitle.textContent = "後續處理";
+    actionTitle.style.cssText = "color:#c9d1d9;font-size:15px;font-weight:1000;margin-bottom:10px;";
+
+    const actionNote = document.createElement("div");
+    actionNote.textContent = "確認這是詐騙時，可送入社群防詐回報池。系統會累積多方回報，達門檻才提高全域風險，不會因單一回報直接封鎖全平台。";
+    actionNote.style.cssText = "color:#8b949e;font-size:13px;line-height:1.65;margin-bottom:12px;";
+
+    const communityReportBtn = createModalActionButton("回報到社群防詐資料庫", "danger");
+    communityReportBtn.addEventListener("click", async () => {
+        const data = await reportCommunityScamFromRecord(record, communityReportBtn);
+        if (data) {
+            renderCommunityStatusBody(communityStatusBody, {
+                status: "success",
+                domain: data.domain || domain,
+                isReported: true,
+                reportCount: data.reportCount || 1,
+                reviewStatus: data.reviewStatus || "pending",
+                autoAction: data.autoAction || "collecting",
+                highTrustDomain: Boolean(data.highTrustDomain)
+            }, domain);
+        }
+    });
+
+    actionBox.appendChild(actionTitle);
+    actionBox.appendChild(actionNote);
+    actionBox.appendChild(communityReportBtn);
+
+    const evidenceBox = document.createElement("div");
+    evidenceBox.style.cssText = "background:#161b22;border:1px solid rgba(139,148,158,.26);border-radius:18px;padding:16px;";
+    const evidenceTitle = document.createElement("div");
+    evidenceTitle.textContent = "證據快照";
+    evidenceTitle.style.cssText = "color:#c9d1d9;font-size:15px;font-weight:1000;margin-bottom:10px;";
+    evidenceBox.appendChild(evidenceTitle);
 
     if (imageUrl) {
         const img = document.createElement("img");
         img.src = imageUrl;
-        img.alt = "詐騙網頁證據";
-        img.style.cssText = `
-            width:100%;
-            max-height:80vh;
-            border:4px solid #ff4d4f;
-            border-radius:8px;
-            box-shadow:0 0 30px rgba(255,0,0,0.5);
-            object-fit:contain;
-            background:#222;
-        `;
-
-        wrapper.appendChild(closeBtn);
-        wrapper.appendChild(title);
-        wrapper.appendChild(reasonEl);
-        wrapper.appendChild(img);
+        img.alt = "詐騙網頁證據快照";
+        img.style.cssText = "width:100%;max-height:58vh;object-fit:contain;border:3px solid #ff7875;border-radius:14px;background:#000;";
+        evidenceBox.appendChild(img);
     } else {
         const empty = document.createElement("div");
-        empty.textContent = "此筆紀錄只保存摘要，未保存完整截圖。";
-        empty.style.cssText = `
-            padding:40px;
-            border:2px dashed #666;
-            border-radius:12px;
-            color:#ccc;
-            text-align:center;
-            font-size:18px;
-            width:100%;
-            background:#151515;
-        `;
-
-        wrapper.appendChild(closeBtn);
-        wrapper.appendChild(title);
-        wrapper.appendChild(reasonEl);
-        wrapper.appendChild(empty);
+        empty.textContent = loadError
+            ? `目前無法讀取完整截圖，但攔截摘要仍保留在戰情室。${loadError}`
+            : "此筆紀錄目前只保存摘要，未保存完整截圖。這是正式版較安全的隱私預設；仍可從上方確認網址、原因、分數與詐騙特徵。";
+        empty.style.cssText = "padding:28px;border:2px dashed rgba(139,148,158,.35);border-radius:14px;color:#c9d1d9;text-align:center;line-height:1.7;background:#0d1117;";
+        evidenceBox.appendChild(empty);
     }
 
-    const note = document.createElement("div");
-    note.textContent = "提醒：正式版建議只保存必要摘要，完整截圖應由使用者明確同意後才保存。";
-    note.style.cssText = `
-        color:#8b949e;
-        font-size:13px;
-        line-height:1.6;
-        margin-top:14px;
-        text-align:center;
-    `;
+    const footer = document.createElement("div");
+    footer.textContent = familyID && familyID !== "none"
+        ? `同步說明：此家庭代碼為 ${familyID}。若後端連線正常，掃描紀錄會出現在家庭戰情室。`
+        : "同步說明：目前未綁定家庭代碼，因此只會顯示本機攔截資訊。";
+    footer.style.cssText = "color:#8b949e;font-size:13px;line-height:1.7;margin-top:14px;text-align:center;";
 
-    wrapper.appendChild(note);
-    modal.appendChild(wrapper);
+    panel.appendChild(closeBtn);
+    panel.appendChild(title);
+    panel.appendChild(subtitle);
+    panel.appendChild(topGrid);
+    panel.appendChild(infoBox);
+    panel.appendChild(dnaBox);
+    panel.appendChild(communityStatusBox);
+    panel.appendChild(actionBox);
+    panel.appendChild(evidenceBox);
+    panel.appendChild(footer);
+    modal.appendChild(panel);
     document.body.appendChild(modal);
 
     closeBtn.addEventListener("click", () => modal.remove());
-
     modal.addEventListener("click", event => {
-        if (event.target === modal) {
-            modal.remove();
-        }
+        if (event.target === modal) modal.remove();
     });
-
-    document.addEventListener(
-        "keydown",
-        event => {
-            if (event.key === "Escape") modal.remove();
-        },
-        { once: true }
-    );
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") modal.remove();
+    }, { once: true });
 }
 
 async function openEvidence(record) {
@@ -469,7 +905,7 @@ async function openEvidence(record) {
     const evidenceID = record?.evidenceID;
 
     if (!evidenceID) {
-        showEvidenceModal("", "此筆紀錄沒有對應的證據快照。");
+        showInterceptDetailModal(record, {}, "");
         return;
     }
 
@@ -483,20 +919,20 @@ async function openEvidence(record) {
             })
         });
 
-        const data = await response.json();
+        let data = {};
+        try { data = await response.json(); } catch (e) {}
 
         if (!response.ok || data.status !== "success") {
-            showEvidenceModal("", data.message || "找不到對應的證據快照。");
+            showInterceptDetailModal(record, { evidenceID }, data.message || "找不到對應的證據快照。仍顯示攔截摘要。");
             return;
         }
 
-        const imageUrl = normalizeEvidenceImage(
-            data.evidence_image_url || data.screenshot_base64 || ""
-        );
-
-        showEvidenceModal(imageUrl, record?.reason || "攔截證據");
+        showInterceptDetailModal(record, {
+            ...data,
+            evidenceID
+        });
     } catch (error) {
-        showEvidenceModal("", `讀取證據失敗：${error.message}`);
+        showInterceptDetailModal(record, { evidenceID }, error.message || "讀取證據失敗");
     }
 }
 
@@ -696,23 +1132,21 @@ function createStatusCell(record, report) {
 
     td.appendChild(status);
 
-    if (record.evidenceID) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = "查看證據";
-        btn.style.cssText = `
-            margin-top:8px;
-            padding:6px 10px;
-            font-size:13px;
-            border-radius:6px;
-            background:#30363d;
-            color:white;
-            border:1px solid #555;
-            cursor:pointer;
-        `;
-        btn.addEventListener("click", () => openEvidence(record));
-        td.appendChild(btn);
-    }
+    const detailBtn = document.createElement("button");
+    detailBtn.type = "button";
+    detailBtn.textContent = record.evidenceID ? "查看詳情 / 證據" : "查看詳情";
+    detailBtn.style.cssText = `
+        margin-top:8px;
+        padding:6px 10px;
+        font-size:13px;
+        border-radius:6px;
+        background:#30363d;
+        color:white;
+        border:1px solid #555;
+        cursor:pointer;
+    `;
+    detailBtn.addEventListener("click", () => openEvidence(record));
+    td.appendChild(detailBtn);
 
     if (report?.whitelistScope) {
         const whitelist = document.createElement("div");
@@ -745,9 +1179,10 @@ function createLogRow(record, isNew = false) {
     timeTd.textContent = formatTimestamp(record.timestamp);
 
     const urlTd = document.createElement("td");
-    const urlText = record.domain || record.url || record.url_preview || "未知網址";
+    const recordReport = safeParseReport(record.report);
+    const urlText = record.domain || record.url || record.url_preview || recordReport.originalUrl || recordReport.original_url || recordReport.url || "未知網址";
     urlTd.textContent = truncateMiddle(urlText, 72);
-    urlTd.title = String(record.url || record.url_preview || urlText || "");
+    urlTd.title = String(record.url || record.url_preview || recordReport.originalUrl || recordReport.original_url || recordReport.url || urlText || "");
 
     const riskTd = createRiskCell(score);
 
@@ -781,6 +1216,21 @@ function createLogRow(record, isNew = false) {
             line-height:1.5;
         `;
         reasonTd.appendChild(advice);
+    }
+
+    if (report.communityReportHit || report.communityReportCount || report.communityReviewStatus) {
+        const community = document.createElement("div");
+        const count = report.communityReportCount || 0;
+        const review = normalizeCommunityStatusLabel(report.communityReviewStatus || "pending");
+        community.textContent = `社群資料庫：累積 ${count} 次回報｜${review}`;
+        community.style.cssText = `
+            margin-top:8px;
+            color:#ffd666;
+            font-size:14px;
+            line-height:1.5;
+            font-weight:900;
+        `;
+        reasonTd.appendChild(community);
     }
 
     const statusTd = createStatusCell(normalizedRecord, report);
@@ -955,6 +1405,50 @@ function setConnectionStatus(text, connected = false) {
     el.classList.toggle("status-connected", connected);
 }
 
+function stopFallbackPolling() {
+    if (fallbackPollingTimer) {
+        clearInterval(fallbackPollingTimer);
+        fallbackPollingTimer = null;
+    }
+}
+
+async function startFallbackPolling(reason = "Socket.IO client 未載入，已改用資料更新模式。") {
+    const familyID = getCurrentFamilyID();
+
+    if (!isValidFamilyID(familyID)) {
+        showToast("請先輸入 6 碼家庭邀請碼。", "error");
+        return;
+    }
+
+    localStorage.setItem("savedFamilyID", familyID);
+
+    const input = document.getElementById("family-id-input");
+    if (input) input.value = familyID;
+
+    if (socket) {
+        try { socket.disconnect(); } catch (e) {}
+        socket = null;
+    }
+
+    stopFallbackPolling();
+    setConnectionStatus(`🟡 資料讀取正常｜即時推播未啟用：${familyID}`, false);
+    setDisplay("btn-start", "none");
+    setDisplay("btn-stop", "inline-flex");
+
+    if (!socketFallbackToastShown) {
+        showToast(reason, "info");
+        socketFallbackToastShown = true;
+    }
+
+    await fetchAlerts();
+
+    fallbackPollingTimer = setInterval(() => {
+        fetchAlerts().catch(error => {
+            console.info("戰情室輪詢更新失敗：", error?.message || error);
+        });
+    }, getPollingIntervalMs());
+}
+
 async function startSocket() {
     const familyID = getCurrentFamilyID();
 
@@ -968,8 +1462,8 @@ async function startSocket() {
     const input = document.getElementById("family-id-input");
     if (input) input.value = familyID;
 
-    if (typeof io === "undefined") {
-        showToast("Socket.IO 尚未載入。", "error");
+    if (!hasRealSocketIOClient()) {
+        await startFallbackPolling("Socket.IO 官方 client 未載入，已自動改用資料更新模式；資料仍會正常顯示。若要即時推播，請換成官方 socket.io.min.js。");
         return;
     }
 
@@ -978,6 +1472,8 @@ async function startSocket() {
         socket = null;
     }
 
+    stopFallbackPolling();
+    socketFallbackToastShown = false;
     setConnectionStatus("🟡 連線中...", false);
 
     try {
@@ -1013,8 +1509,8 @@ async function startSocket() {
         });
 
         socket.on("connect_error", error => {
-            setConnectionStatus("🔴 連線失敗", false);
-            console.warn("Socket 連線錯誤:", error);
+            console.info("Socket 即時通道連線失敗，改用資料更新模式：", error?.message || error);
+            startFallbackPolling("即時推播暫時無法連線，已自動改用資料更新模式；資料仍會正常顯示。");
         });
 
         socket.on("disconnect", () => {
@@ -1041,6 +1537,14 @@ async function startSocket() {
             showEmergencyBanner(payload);
         });
 
+        socket.on("community_report_updated", payload => {
+            const domain = payload?.domain || "可疑網域";
+            const count = payload?.reportCount || 1;
+            const status = normalizeCommunityStatusLabel(payload?.reviewStatus || "pending");
+            showToast(`社群回報已更新：${domain}｜累積 ${count} 次｜${status}`, "info");
+            fetchAlerts();
+        });
+
         socket.on("demo_reset_triggered", payload => {
             renderDashboard([]);
             showToast(payload?.message || "Demo 已重置。", "success");
@@ -1052,6 +1556,9 @@ async function startSocket() {
 }
 
 function stopSocket() {
+    stopFallbackPolling();
+    socketFallbackToastShown = false;
+
     if (socket) {
         socket.disconnect();
         socket = null;
@@ -1144,11 +1651,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     startClock();
     bindEvents();
 
-    const savedFamilyID = localStorage.getItem("savedFamilyID");
+    const urlOptions = getDashboardUrlOptions();
+    const savedFamilyID = normalizeDashboardFamilyID(localStorage.getItem("savedFamilyID"));
+    const initialFamilyID = applyFamilyIDToDashboard(urlOptions.familyID || savedFamilyID);
 
-    if (savedFamilyID) {
-        setConnectionStatus(`待連線：${savedFamilyID}`, false);
-        await fetchAlerts();
+    if (initialFamilyID) {
+        setConnectionStatus(`待連線：${initialFamilyID}`, false);
+
+        if (urlOptions.autoStart) {
+            await startSocket();
+        } else {
+            await fetchAlerts();
+        }
     } else {
         setConnectionStatus("🔴 尚未連線 / 閒置中", false);
         renderDashboard([]);

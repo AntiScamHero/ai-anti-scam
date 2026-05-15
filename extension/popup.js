@@ -9,6 +9,7 @@
  * 5. 家庭戰情室輪詢
  * 6. 短效 Bearer token，不再使用前端固定 EXTENSION_SECRET
  * 7. DOM 安全更新：使用 textContent / createElement
+ * 8. AI 平台誤判保護：DeepSeek / ChatGPT / Claude 手動掃描降權
  */
 
 let currentUserID = "";
@@ -680,9 +681,14 @@ function localPopupRiskAnalysis(url, text, cloudErrorMessage = "") {
             patterns: ["匯款", "轉帳", "atm", "網銀", "帳戶", "保證金", "手續費"]
         },
         {
+            label: "投資一般關鍵字",
+            score: 10,
+            patterns: ["投資", "股票", "飆股", "理財", "基金", "ETF", "etf"]
+        },
+        {
             label: "投資高報酬話術",
             score: 30,
-            patterns: ["穩賺", "保證獲利", "高報酬", "低風險高收益", "飆股", "內線", "老師帶單", "投資群組"]
+            patterns: ["穩賺", "保證獲利", "高報酬", "低風險高收益", "內線", "老師帶單", "投資群組"]
         },
         {
             label: "假冒官方或客服",
@@ -767,6 +773,160 @@ function localPopupRiskAnalysis(url, text, cloudErrorMessage = "") {
     };
 }
 
+
+
+// ------------------------------------------------------------
+// 誤判修正：可信搜尋結果頁硬放行
+// 例：google.com.tw/search?q=飆股 只是搜尋資料，不應直接高風險攔截。
+// 真正要攔的是點進去後出現「老師帶單 / LINE 群 / 保證獲利 / 入金匯款」的頁面。
+// ------------------------------------------------------------
+function normalizeDomainHost(host) {
+    return String(host || "").replace(/^www\./, "").toLowerCase();
+}
+
+function isGoogleDomain(host) {
+    const cleanHost = normalizeDomainHost(host);
+    return cleanHost === "google.com" || /^google\.[a-z.]+$/i.test(cleanHost);
+}
+
+function isBingDomain(host) {
+    const cleanHost = normalizeDomainHost(host);
+    return cleanHost === "bing.com" || cleanHost.endsWith(".bing.com");
+}
+
+function isYahooDomain(host) {
+    const cleanHost = normalizeDomainHost(host);
+    return cleanHost === "yahoo.com" || cleanHost.endsWith(".yahoo.com") || cleanHost.endsWith(".yahoo.com.tw");
+}
+
+function isTrustedSearchResultPage(urlString = "") {
+    try {
+        const url = new URL(urlString || "");
+        const host = normalizeDomainHost(url.hostname);
+        const path = url.pathname.toLowerCase();
+        return (
+            isGoogleDomain(host) && path === "/search"
+        ) || (
+            isBingDomain(host) && path === "/search"
+        ) || (
+            isYahooDomain(host) && path.includes("search")
+        );
+    } catch (e) {
+        return false;
+    }
+}
+
+function getSearchQueryText(urlString = "") {
+    try {
+        const url = new URL(urlString || "");
+        return decodeURIComponent(url.searchParams.get("q") || url.searchParams.get("p") || "").toLowerCase();
+    } catch (e) {
+        return "";
+    }
+}
+
+function isInvestmentSearchQuery(urlString = "") {
+    const query = getSearchQueryText(urlString);
+    return /投資|股票|飆股|理財|基金|etf|虛擬貨幣|usdt|btc|crypto|加密貨幣/i.test(query);
+}
+
+function buildTrustedSearchPageReport(urlString = "") {
+    const query = getSearchQueryText(urlString);
+    const isInvestment = isInvestmentSearchQuery(urlString);
+    return {
+        riskScore: isInvestment ? 20 : 10,
+        score: isInvestment ? 20 : 10,
+        riskLevel: "低風險",
+        scamDNA: [isInvestment ? "可信搜尋頁投資查詢放行" : "可信搜尋結果頁放行"],
+        reason: isInvestment
+            ? `目前是可信搜尋引擎的搜尋結果頁${query ? `（搜尋：${query}）` : ""}，搜尋投資、股票或飆股等關鍵字本身不等於詐騙，系統不會攔截。`
+            : "目前是可信搜尋引擎的搜尋結果頁，尚未偵測到直接要求付款或輸入個資的高風險操作。",
+        advice: "可以繼續查資料；若點入外部頁面後出現加入 LINE 群、保證獲利、入金匯款、輸入信用卡或驗證碼，請立即停止並重新掃描。",
+        searchPageHardPass: true,
+        references: []
+    };
+}
+
+
+// ==========================================
+// AI 平台誤判保護：DeepSeek / ChatGPT / Claude
+// ==========================================
+function isAiPlatformUrl(urlString = "") {
+    try {
+        const host = new URL(urlString || "").hostname.toLowerCase().replace(/^www\./, "");
+
+        return (
+            host === "chat.deepseek.com" ||
+            host === "deepseek.com" ||
+            host.endsWith(".deepseek.com") ||
+            host === "chatgpt.com" ||
+            host === "openai.com" ||
+            host.endsWith(".openai.com") ||
+            host === "claude.ai" ||
+            host.endsWith(".claude.ai")
+        );
+    } catch (e) {
+        return false;
+    }
+}
+
+function hasDangerousActionText(text = "") {
+    const value = String(text || "").toLowerCase();
+
+    return /(?:請|立即|馬上|現在|立刻).{0,12}(點擊|輸入|匯款|轉帳|付款|掃描|掃qr|下載|安裝|加入|加line|加 line)|輸入.{0,8}(驗證碼|信用卡|提款卡密碼|銀行帳號|身分證)|下載apk|掃.{0,8}qr.{0,8}(付款|領獎|補助|驗證)|匯款到|轉帳到/i.test(value);
+}
+
+function isLikelyDiscussionContext(text = "") {
+    const value = String(text || "").toLowerCase();
+
+    return /防詐|詐騙|說明|分析|案例|教學|範例|測試|競賽|專案|報告|修改程式碼|為什麼|如何|怎麼|不要|避免|提醒|查證|165|false positive|誤判/i.test(value);
+}
+
+function applyAiPlatformPopupGuard(tabUrl = "", pageText = "", reportData = {}) {
+    if (!isAiPlatformUrl(tabUrl)) {
+        return reportData;
+    }
+
+    const scamDNA = Array.isArray(reportData.scamDNA) ? reportData.scamDNA : [];
+    const combinedText = [
+        pageText,
+        reportData.reason,
+        reportData.advice,
+        reportData.riskLevel,
+        scamDNA.join(" ")
+    ].join("\n");
+
+    const hasDangerousAction = hasDangerousActionText(combinedText);
+    const isDiscussion = isLikelyDiscussionContext(combinedText);
+
+    // AI 平台上如果只是討論詐騙、投資、QR Code、NFT、防詐案例，不應直接攔截。
+    // 只有出現明確要求使用者執行付款、匯款、輸入驗證碼、下載 APK、掃 QR 付款等操作，才保留高風險。
+    if (hasDangerousAction && !isDiscussion) {
+        return {
+            ...reportData,
+            aiPlatformGuard: "dangerous_action_detected"
+        };
+    }
+
+    const originalScore = normalizeRiskScore(reportData);
+    const safeScore = Math.min(originalScore || 25, 35);
+
+    return {
+        ...reportData,
+        riskScore: safeScore,
+        score: safeScore,
+        riskLevel: "AI 平台內容討論",
+        reason: "目前是在 AI 對話平台上討論可能的風險內容，未偵測到直接要求付款、匯款、輸入驗證碼、下載 APK 或掃 QR 付款等操作，因此不直接攔截。",
+        advice: "可以繼續查資料；如果對方要求你離開平台、加入 LINE、匯款、輸入驗證碼或下載不明 App，請立即停止。",
+        scamDNA: [
+            "AI 平台討論降權",
+            ...scamDNA.filter(Boolean).slice(0, 4)
+        ],
+        aiPlatformAdjusted: true,
+        originalRiskScore: originalScore
+    };
+}
+
 async function scanCurrentPage() {
     const scanBtn = document.getElementById("scan-btn");
 
@@ -787,15 +947,25 @@ async function scanCurrentPage() {
             throw new Error("無法取得目前分頁。");
         }
 
+        // 搜尋結果頁硬放行：不送雲端、不啟動高風險倒數，避免查資料被攔截。
+        if (isTrustedSearchResultPage(tab.url)) {
+            renderScanResult(buildTrustedSearchPageReport(tab.url));
+            return;
+        }
+
         const rawText = await getCurrentPageText(tab.id);
         maskedText = maskSensitiveData(rawText);
+
+        const isAiPlatform = isAiPlatformUrl(tab.url);
 
         const response = await postScanRequest({
             url: tab.url,
             text: maskedText,
             userID: currentUserID || "anonymous",
             familyID: currentFamilyID || "none",
-            scan_source: "popup_auto_or_manual"
+            scan_source: "popup_auto_or_manual",
+            page_category: isAiPlatform ? "ai_platform" : "normal_page",
+            ai_platform_guard: isAiPlatform
         });
 
         let data = {};
@@ -811,7 +981,8 @@ async function scanCurrentPage() {
             };
         }
 
-        const reportData = safeParseReport(data);
+        let reportData = safeParseReport(data);
+        reportData = applyAiPlatformPopupGuard(tab.url, maskedText, reportData);
         renderScanResult(reportData);
     } catch (error) {
         // 正式展示時不要把 token / 後端暫時問題顯示成紅色錯誤。
@@ -825,12 +996,13 @@ async function scanCurrentPage() {
                 maskedText = maskSensitiveData(rawText);
             }
 
-            const fallbackReport = localPopupRiskAnalysis(
+            let fallbackReport = localPopupRiskAnalysis(
                 tab?.url || "",
                 maskedText,
                 error?.message || "雲端 API 暫時不可用"
             );
 
+            fallbackReport = applyAiPlatformPopupGuard(tab?.url || "", maskedText, fallbackReport);
             renderScanResult(fallbackReport);
         } catch (fallbackError) {
             console.warn("Popup 本機 AI 備援失敗：", fallbackError?.message || fallbackError);

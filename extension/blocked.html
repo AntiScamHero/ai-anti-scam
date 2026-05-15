@@ -135,7 +135,7 @@
             font-weight: 1000;
             margin-bottom: 12px;
         }
-        .danger-tag::before { content: "🚨"; }
+        .danger-tag::before { content: ""; width: 30px; height: 30px; background: url("warning-new.png") center / contain no-repeat; display: inline-block; flex: 0 0 30px; }
 
         .risk-score-display {
             font-size: clamp(30px, 3vw, 42px);
@@ -220,6 +220,173 @@
         }
         .official-citations-title { color: var(--green-dark); font-weight:1000; margin-bottom:8px; }
         .official-citations-list { margin:0; padding-left:20px; display:grid; gap:6px; }
+
+
+
+        .intercept-detail-card {
+            background: rgba(255,255,255,.90);
+            border: 2px solid rgba(239,68,68,.16);
+            border-radius: 26px;
+            padding: 18px;
+            margin: 14px 0 18px;
+            box-shadow: 0 14px 30px rgba(20,75,130,.09);
+        }
+        .intercept-detail-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            color: var(--ink);
+            font-size: clamp(21px, 2.1vw, 27px);
+            font-weight: 1000;
+            margin-bottom: 12px;
+        }
+        .intercept-detail-title small {
+            color: var(--red-dark);
+            font-size: 14px;
+            white-space: nowrap;
+            background: var(--soft-red);
+            border: 1px solid rgba(239,68,68,.18);
+            border-radius: 999px;
+            padding: 6px 10px;
+        }
+        .intercept-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .intercept-item {
+            background: #ffffff;
+            border: 1px solid rgba(35,136,255,.15);
+            border-radius: 18px;
+            padding: 13px 14px;
+            min-width: 0;
+        }
+        .intercept-item.full { grid-column: 1 / -1; }
+        .intercept-label {
+            color: var(--sub);
+            font-size: 14px;
+            font-weight: 1000;
+            margin-bottom: 6px;
+        }
+        .intercept-value {
+            color: var(--ink);
+            font-size: 16px;
+            font-weight: 900;
+            line-height: 1.55;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+        .intercept-value.danger { color: var(--red-dark); }
+        .intercept-value.safe { color: var(--green-dark); }
+        .detail-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 4px;
+        }
+        .detail-tag {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 7px 10px;
+            background: var(--soft-red);
+            color: var(--red-dark);
+            border: 1px solid rgba(239,68,68,.17);
+            font-size: 14px;
+            font-weight: 1000;
+            line-height: 1.25;
+        }
+        .sync-note {
+            margin-top: 12px;
+            padding: 12px 14px;
+            background: rgba(34,197,94,.10);
+            color: #134e2b;
+            border: 1px solid rgba(34,197,94,.25);
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.55;
+            font-weight: 900;
+        }
+
+        .community-status-card {
+            background: rgba(255,255,255,.90);
+            border: 2px solid rgba(138,43,226,.16);
+            border-radius: 26px;
+            padding: 18px;
+            margin: 14px 0 18px;
+            box-shadow: 0 14px 30px rgba(20,75,130,.09);
+        }
+        .community-status-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .community-status-title {
+            color: var(--ink);
+            font-size: clamp(21px, 2.1vw, 27px);
+            font-weight: 1000;
+        }
+        .community-status-pill {
+            color: #5d3a7a;
+            background: rgba(138,43,226,.10);
+            border: 1px solid rgba(138,43,226,.18);
+            border-radius: 999px;
+            padding: 7px 11px;
+            font-size: 14px;
+            font-weight: 1000;
+            white-space: nowrap;
+        }
+        .community-status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .community-status-item {
+            background: #ffffff;
+            border: 1px solid rgba(35,136,255,.15);
+            border-radius: 18px;
+            padding: 13px 14px;
+            min-width: 0;
+        }
+        .community-status-label {
+            color: var(--sub);
+            font-size: 14px;
+            font-weight: 1000;
+            margin-bottom: 6px;
+        }
+        .community-status-value {
+            color: var(--ink);
+            font-size: 16px;
+            font-weight: 1000;
+            line-height: 1.55;
+            word-break: break-word;
+        }
+        .community-status-value.warn { color: #8a5200; }
+        .community-status-value.danger { color: var(--red-dark); }
+        .community-status-note {
+            margin-top: 12px;
+            padding: 12px 14px;
+            background: rgba(138,43,226,.08);
+            color: #4b286d;
+            border: 1px solid rgba(138,43,226,.18);
+            border-radius: 16px;
+            font-size: 15px;
+            line-height: 1.55;
+            font-weight: 900;
+        }
+        .community-refresh-btn {
+            margin-top: 12px;
+            border: 0;
+            background: rgba(138,43,226,.12);
+            color: #4b286d;
+            border-radius: 999px;
+            padding: 10px 14px;
+            font-weight: 1000;
+            cursor: pointer;
+        }
 
         .action-panel {
             border: 2px solid rgba(255,216,77,.90);
@@ -313,15 +480,135 @@
 
         #family-broadcast { display:none; margin-bottom:18px; padding:15px; background:#fff8d9; border:2px solid var(--yellow); border-radius:18px; width:100%; text-align:center; }
 
+
+
+        /* ==============================
+           老人友善：第一眼只看重點，詳細資料漸進揭露
+           ============================== */
+        .right-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .danger-tag { order: 1; }
+        .risk-score-display { order: 2; }
+        .warning-subtitle { order: 3; }
+        .ai-source-pill { order: 4; }
+
+        .elder-summary-card {
+            order: 5;
+            background: rgba(239,68,68,.08);
+            border: 2px solid rgba(239,68,68,.18);
+            border-radius: 24px;
+            padding: 18px 20px;
+            margin: 8px 0 14px;
+            box-shadow: 0 12px 26px rgba(239,68,68,.08);
+        }
+        .elder-summary-title {
+            font-size: clamp(24px, 2.5vw, 34px);
+            font-weight: 1000;
+            color: var(--red-dark);
+            margin-bottom: 10px;
+        }
+        .elder-summary-list {
+            margin: 0;
+            padding-left: 0;
+            list-style: none;
+            display: grid;
+            gap: 10px;
+        }
+        .elder-summary-list li {
+            font-size: clamp(20px, 2vw, 26px);
+            font-weight: 1000;
+            line-height: 1.45;
+            color: var(--ink);
+        }
+        .elder-summary-list li::before {
+            content: "✓ ";
+            color: var(--red);
+            font-weight: 1000;
+        }
+
+        .action-panel {
+            order: 6;
+            margin-top: 10px;
+            margin-bottom: 16px;
+        }
+
+        .detail-toggle-btn {
+            order: 7;
+            width: 100%;
+            min-height: 56px;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(35,136,255,.12);
+            color: #1767c8;
+            font-size: clamp(18px, 1.8vw, 22px);
+            font-weight: 1000;
+            cursor: pointer;
+            margin: 6px 0 14px;
+        }
+        .detail-toggle-btn:hover,
+        .detail-toggle-btn:focus-visible {
+            outline: none;
+            background: rgba(35,136,255,.18);
+            transform: translateY(-1px);
+        }
+
+        .progressive-detail {
+            order: 8;
+            display: none;
+        }
+        .progressive-detail.open {
+            display: block;
+        }
+
+        .intercept-detail-card,
+        .community-status-card,
+        .ai-consultant-box {
+            margin-top: 12px;
+        }
+
+        .advanced-actions-toggle {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: var(--sub);
+            font-size: 17px;
+            font-weight: 900;
+            text-decoration: underline;
+            cursor: pointer;
+            margin-top: 10px;
+            line-height: 1.5;
+        }
+        .advanced-actions-toggle:hover,
+        .advanced-actions-toggle:focus-visible {
+            color: var(--ink);
+            outline: none;
+        }
+        .false-positive-actions.collapsed {
+            display: none;
+        }
+
         @media (max-width: 920px) {
             body { align-items: flex-start; }
             .main-layout { grid-template-columns: 1fr; }
+            .intercept-grid { grid-template-columns: 1fr; }
+            .community-status-grid { grid-template-columns: 1fr; }
+            .community-status-head { align-items: flex-start; flex-direction: column; }
             .left-col { min-height: auto; }
             .robot-img { width: min(320px, 80vw); }
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
             .robot-img { animation: none; }
+        }
+    
+
+        /* 新版人物與警示標誌 */
+        #main-mascot {
+            object-fit: contain;
+            object-position: center bottom;
         }
     </style>
 </head>
@@ -337,7 +624,7 @@
                 <div class="speech-bubble" id="voice-bubble" role="button" tabindex="0" title="點擊畫面任何地方即可聽取語音" aria-label="點擊重聽語音提醒">
                     先停一下。<br>不要輸入資料。<br>先問家人。<span>🔊</span>
                 </div>
-                <img src="hero.png" id="main-mascot" alt="AI 防詐英雄" class="robot-img" draggable="false">
+                <img src="mascot-boy-new.png" id="main-mascot" alt="新版 AI 防詐守護公仔" class="robot-img" draggable="false">
 
                 <section class="scenario-wrapper" aria-label="AI 詐騙手法還原">
                     <button class="scenario-toggle" id="scenario-toggle" type="button">
@@ -359,6 +646,92 @@
                 <div class="risk-score-display" aria-live="polite">危險指數：<span id="score">--</span> 分</div>
                 <div class="warning-subtitle">這個頁面可能正在誘導你輸入資料或匯款。</div>
                 <div class="ai-source-pill" id="ai-source-pill">判定來源：AI 防詐引擎</div>
+
+                <section class="elder-summary-card" aria-label="重要安全提醒">
+                    <div class="elder-summary-title">現在請先停下來</div>
+                    <ul class="elder-summary-list">
+                        <li>不要輸入身分證、信用卡、驗證碼</li>
+                        <li>不要匯款、不要付款、不要掃 QR Code</li>
+                        <li>先安全離開，再請家人或 165 協助確認</li>
+                    </ul>
+                </section>
+
+                <button class="detail-toggle-btn" id="detail-toggle-btn" type="button" aria-expanded="false">
+                    查看詳細原因
+                </button>
+
+                <div class="progressive-detail" id="progressive-detail" aria-hidden="true">
+
+                <section class="intercept-detail-card" aria-label="攔截事件詳情">
+                    <div class="intercept-detail-title">
+                        <span>這次攔截了什麼？</span>
+                        <small id="detail-risk-level">高風險</small>
+                    </div>
+                    <div class="intercept-grid">
+                        <div class="intercept-item full">
+                            <div class="intercept-label">攔截網址</div>
+                            <div class="intercept-value danger" id="detail-url">載入中...</div>
+                        </div>
+                        <div class="intercept-item">
+                            <div class="intercept-label">網域</div>
+                            <div class="intercept-value" id="detail-domain">--</div>
+                        </div>
+                        <div class="intercept-item">
+                            <div class="intercept-label">判定來源</div>
+                            <div class="intercept-value" id="detail-source">AI 防詐引擎</div>
+                        </div>
+                        <div class="intercept-item full">
+                            <div class="intercept-label">攔截原因</div>
+                            <div class="intercept-value" id="detail-reason">系統正在整理原因...</div>
+                        </div>
+                        <div class="intercept-item full">
+                            <div class="intercept-label">命中詐騙特徵</div>
+                            <div class="detail-tags" id="detail-scam-dna"></div>
+                        </div>
+                        <div class="intercept-item">
+                            <div class="intercept-label">證據狀態</div>
+                            <div class="intercept-value" id="detail-evidence-status">已保存攔截摘要</div>
+                        </div>
+                        <div class="intercept-item">
+                            <div class="intercept-label">家庭同步</div>
+                            <div class="intercept-value safe" id="detail-sync-status">確認中...</div>
+                        </div>
+                        <div class="intercept-item full">
+                            <div class="intercept-label">發生時間</div>
+                            <div class="intercept-value" id="detail-timestamp">--</div>
+                        </div>
+                    </div>
+                    <div class="sync-note" id="detail-sync-note">系統會盡可能將此筆攔截摘要同步到家庭戰情室；若即時推播未連線，戰情室仍可用資料更新模式查看紀錄。</div>
+                </section>
+
+
+
+                <section class="community-status-card" aria-label="社群防詐資料庫狀態">
+                    <div class="community-status-head">
+                        <div class="community-status-title">社群防詐資料庫狀態</div>
+                        <div class="community-status-pill" id="community-status-pill">查詢中</div>
+                    </div>
+                    <div class="community-status-grid">
+                        <div class="community-status-item">
+                            <div class="community-status-label">社群回報網域</div>
+                            <div class="community-status-value" id="community-status-domain">--</div>
+                        </div>
+                        <div class="community-status-item">
+                            <div class="community-status-label">累積回報</div>
+                            <div class="community-status-value" id="community-status-count">--</div>
+                        </div>
+                        <div class="community-status-item">
+                            <div class="community-status-label">審核狀態</div>
+                            <div class="community-status-value" id="community-status-review">--</div>
+                        </div>
+                        <div class="community-status-item">
+                            <div class="community-status-label">系統動作</div>
+                            <div class="community-status-value" id="community-status-action">--</div>
+                        </div>
+                    </div>
+                    <div class="community-status-note" id="community-status-note">系統正在查詢此網域是否已存在於社群防詐回報池。</div>
+                    <button class="community-refresh-btn" id="community-status-refresh-btn" type="button">重新查詢社群狀態</button>
+                </section>
 
                 <div id="reason-box" aria-hidden="true"></div>
                 <div id="dna-box" aria-hidden="true"></div>
@@ -383,18 +756,24 @@
                     </div>
                 </section>
 
+                </div>
+
                 <section class="action-panel" id="cooldown-box" aria-label="安全處置">
                     <div class="action-title">現在請先做安全處理</div>
                     <button class="btn-safe" id="manual-leave-btn" type="button">聽從建議，安全離開此網頁</button>
                     <a href="tel:165" class="btn-165" id="call-btn">📞 有疑慮？撥打 165</a>
                     <button class="btn-safe" id="close-btn" type="button" style="display: none;">關閉分頁</button>
 
-                    <div class="false-positive-actions">
+                    <button class="advanced-actions-toggle" id="advanced-actions-toggle" type="button" aria-expanded="false">
+                        我確定要進階處理 / 誤判放行
+                    </button>
+
+                    <div class="false-positive-actions collapsed" id="advanced-actions-panel">
                         <div class="false-positive-title">如果你確定這是可信網站，請選擇放行方式</div>
                         <button class="btn-text" id="continue-once-btn" type="button">這次仍要前往（暫時放行 30 分鐘）</button>
                         <button class="btn-text" id="report-false-btn" type="button">家人確認可信，輸入密碼加入白名單</button>
+                        <button class="btn-text" id="bypass-btn" type="button">強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button>
                     </div>
-                    <button class="btn-text" id="bypass-btn" type="button">強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button>
 
                     <div id="password-area" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed rgba(35,136,255,.25); width: 100%;">
                         <div style="color: #8a5200; font-size: 18px; margin-bottom: 10px; font-weight:1000;">🔒 請輸入家人設定的防護密碼，確認後會將此網域加入永久白名單：</div>

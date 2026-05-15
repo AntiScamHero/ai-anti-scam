@@ -8,6 +8,7 @@
  * 4. 前端個資遮蔽補強：全形、零寬字元、混淆手機 / 身分證 / 信用卡 / Email
  * 5. inject_fake_data 改成必須由 CONFIG.ENABLE_FAKE_DATA_INJECTION=true 才可使用
  * 6. 攔截時保留證據摘要，正式版預設不保存完整截圖
+ * 7. 🌟 新增 AI 平台防護機制：針對 DeepSeek/ChatGPT 降權討論型關鍵字、排除 Sidebar、無動作時封頂分數
  */
 
 (() => {
@@ -16,6 +17,46 @@
     }
 
     window.__AI_SHIELD_CONTENT_SCRIPT_LOADED__ = true;
+
+    // ------------------------------------------------------------
+    // 可信網域與特殊頁面判斷
+    // ------------------------------------------------------------
+    function normalizeDomainHost(host) {
+        return String(host || "").replace(/^www\./, "").toLowerCase();
+    }
+
+    function isGoogleDomain(host) {
+        const cleanHost = normalizeDomainHost(host);
+        return cleanHost === "google.com" || /^google\.[a-z.]+$/i.test(cleanHost);
+    }
+
+    function isBingDomain(host) {
+        const cleanHost = normalizeDomainHost(host);
+        return cleanHost === "bing.com" || cleanHost.endsWith(".bing.com");
+    }
+
+    function isYahooDomain(host) {
+        const cleanHost = normalizeDomainHost(host);
+        return cleanHost === "yahoo.com" || cleanHost.endsWith(".yahoo.com") || cleanHost.endsWith(".yahoo.com.tw");
+    }
+
+    function isTrustedSearchResultUrl(urlString = window.location.href) {
+        try {
+            const url = new URL(String(urlString || window.location.href));
+            const host = normalizeDomainHost(url.hostname);
+            const path = url.pathname.toLowerCase();
+
+            return (
+                isGoogleDomain(host) && path === "/search"
+            ) || (
+                isBingDomain(host) && path === "/search"
+            ) || (
+                isYahooDomain(host) && path.includes("search")
+            );
+        } catch (e) {
+            return false;
+        }
+    }
 
     function shouldSkipAiShieldAutoScanPage() {
         try {
@@ -29,7 +70,8 @@
 
             if (document.body && document.body.dataset && document.body.dataset.aiShieldSkipScan === "true") return true;
 
-            // Demo / internal pages：避免測試頁本身因為包含詐騙範例文字而被自動攔截
+            if (isTrustedSearchResultUrl(window.location.href)) return true;
+
             if (href.includes("mobile_demo.html") || pathname.endsWith("/mobile_demo.html")) return true;
             if (href.includes("blocked.html") || pathname.endsWith("/blocked.html")) return true;
             if (href.includes("simulator.html") || pathname.endsWith("/simulator.html")) return true;
@@ -44,10 +86,9 @@
     }
 
     if (shouldSkipAiShieldAutoScanPage()) {
-        console.log("🛡️ AI 防詐盾牌：此頁為 Demo / 內部頁，跳過自動掃描。");
+        console.log("🛡️ AI 防詐盾牌：此頁為內部頁或可信搜尋結果頁，跳過自動掃描。");
         return;
     }
-
 
     const scannedCache = new Set();
     const observedLinks = new WeakSet();
@@ -85,53 +126,41 @@
         "youtu.be": { category: "video", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "google.com": { category: "search", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "facebook.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
-        "twitter.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
-        "x.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
-        "instagram.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
-        "wikipedia.org": { category: "reference", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
-        "ccsh.tn.edu.tw": { category: "education", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
-        "github.com": { category: "development", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "chatgpt.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "openai.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
-        "pchome.com.tw": { category: "ecommerce", reputation: 80, riskThreshold: 90, scanMode: "full" },
-        "momoshop.com.tw": { category: "ecommerce", reputation: 80, riskThreshold: 90, scanMode: "full" },
-        "momo.com.tw": { category: "ecommerce", reputation: 80, riskThreshold: 90, scanMode: "full" },
-        "shopee.tw": { category: "ecommerce", reputation: 75, riskThreshold: 90, scanMode: "full" },
-        "cnyes.com": { category: "news", reputation: 80, riskThreshold: 90, scanMode: "full" },
-        "msn.com": { category: "portal", reputation: 85, riskThreshold: 95, scanMode: "full" },
-        "yahoo.com": { category: "portal", reputation: 85, riskThreshold: 95, scanMode: "full" }
+        "deepseek.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" }
     };
 
     const SCAM_RULES = [
-        { word: "保證獲利", baseScore: 80, contextModifiers: { social: 0.25, video: 0.25, search: 0.35, general: 1.0 } },
-        { word: "穩賺不賠", baseScore: 80, contextModifiers: { social: 0.25, video: 0.25, search: 0.35, general: 1.0 } },
-        { word: "無風險投資", baseScore: 65, contextModifiers: { social: 0.35, video: 0.35, search: 0.45, general: 1.0 } },
-        { word: "保本保息", baseScore: 70, contextModifiers: { social: 0.35, video: 0.35, search: 0.45, general: 1.0 } },
-        { word: "飆股", baseScore: 55, contextModifiers: { social: 0.45, video: 0.45, search: 0.5, general: 1.0 } },
-        { word: "內部消息", baseScore: 60, contextModifiers: { social: 0.45, video: 0.45, search: 0.5, general: 1.0 } },
-        { word: "內線消息", baseScore: 60, contextModifiers: { social: 0.45, video: 0.45, search: 0.5, general: 1.0 } },
-        { word: "老師帶單", baseScore: 70, contextModifiers: { social: 0.55, video: 0.55, search: 0.55, general: 1.0 } },
-        { word: "解凍金", baseScore: 100, contextModifiers: { social: 0.65, video: 0.65, search: 0.7, general: 1.0 } },
-        { word: "殺豬盤", baseScore: 100, contextModifiers: { social: 0.9, video: 0.9, search: 0.9, general: 1.0 } },
-        { word: "不准報警", baseScore: 100, contextModifiers: { social: 0.75, video: 0.75, search: 0.8, general: 1.0 } },
-        { word: "斷手斷腳", baseScore: 100, contextModifiers: { social: 0.75, video: 0.75, search: 0.8, general: 1.0 } },
-        { word: "偵查不公開", baseScore: 95, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, general: 1.0 } },
-        { word: "監管帳戶", baseScore: 95, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, general: 1.0 } },
-        { word: "法院公證人", baseScore: 95, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, general: 1.0 } },
-        { word: "解除分期", baseScore: 90, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, general: 1.0 } },
-        { word: "取消分期", baseScore: 85, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, general: 1.0 } },
-        { word: "提款卡密碼", baseScore: 95, contextModifiers: { social: 0.9, video: 0.9, search: 0.9, general: 1.0 } },
-        { word: "驗證碼", baseScore: 55, contextModifiers: { social: 0.5, video: 0.5, search: 0.55, general: 1.0 } },
-        { word: "加賴領取", baseScore: 55, contextModifiers: { social: 0.7, video: 0.7, search: 0.75, general: 1.0 } },
-        { word: "加line", baseScore: 40, contextModifiers: { social: 0.55, video: 0.55, search: 0.65, general: 1.0 } },
-        { word: "加 line", baseScore: 40, contextModifiers: { social: 0.55, video: 0.55, search: 0.65, general: 1.0 } },
-        { word: "保證金", baseScore: 45, contextModifiers: { social: 0.75, video: 0.75, search: 0.8, general: 1.0 } },
-        { word: "通關費", baseScore: 70, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, general: 1.0 } },
-        { word: "中獎", baseScore: 25, contextModifiers: { social: 0.3, video: 0.3, search: 0.35, general: 1.0 } },
-        { word: "限時領取", baseScore: 45, contextModifiers: { social: 0.5, video: 0.5, search: 0.55, general: 1.0 } },
-        { word: "名額有限", baseScore: 18, contextModifiers: { social: 0.35, video: 0.35, search: 0.45, general: 1.0 } },
-        { word: "下載apk", baseScore: 80, contextModifiers: { social: 0.85, video: 0.85, search: 0.85, general: 1.0 } },
-        { word: "掃qr", baseScore: 50, contextModifiers: { social: 0.65, video: 0.65, search: 0.7, general: 1.0 } }
+        { word: "保證獲利", baseScore: 80, contextModifiers: { social: 0.25, video: 0.25, search: 0.35, ai: 0.1, general: 1.0 } },
+        { word: "穩賺不賠", baseScore: 80, contextModifiers: { social: 0.25, video: 0.25, search: 0.35, ai: 0.1, general: 1.0 } },
+        { word: "無風險投資", baseScore: 65, contextModifiers: { social: 0.35, video: 0.35, search: 0.45, ai: 0.1, general: 1.0 } },
+        { word: "保本保息", baseScore: 70, contextModifiers: { social: 0.35, video: 0.35, search: 0.45, ai: 0.1, general: 1.0 } },
+        { word: "飆股", baseScore: 22, contextModifiers: { social: 0.35, video: 0.35, search: 0.2, ai: 0.1, general: 0.55 } },
+        { word: "內部消息", baseScore: 45, contextModifiers: { social: 0.4, video: 0.4, search: 0.25, ai: 0.1, general: 0.8 } },
+        { word: "內線消息", baseScore: 45, contextModifiers: { social: 0.4, video: 0.4, search: 0.25, ai: 0.1, general: 0.8 } },
+        { word: "老師帶單", baseScore: 70, contextModifiers: { social: 0.55, video: 0.55, search: 0.55, ai: 0.1, general: 1.0 } },
+        { word: "解凍金", baseScore: 100, contextModifiers: { social: 0.65, video: 0.65, search: 0.7, ai: 0.8, general: 1.0 } },
+        { word: "殺豬盤", baseScore: 100, contextModifiers: { social: 0.9, video: 0.9, search: 0.9, ai: 0.1, general: 1.0 } },
+        { word: "不准報警", baseScore: 100, contextModifiers: { social: 0.75, video: 0.75, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "斷手斷腳", baseScore: 100, contextModifiers: { social: 0.75, video: 0.75, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "偵查不公開", baseScore: 95, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "監管帳戶", baseScore: 95, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "法院公證人", baseScore: 95, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "解除分期", baseScore: 90, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "取消分期", baseScore: 85, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "提款卡密碼", baseScore: 95, contextModifiers: { social: 0.9, video: 0.9, search: 0.9, ai: 0.9, general: 1.0 } },
+        { word: "驗證碼", baseScore: 55, contextModifiers: { social: 0.5, video: 0.5, search: 0.55, ai: 0.3, general: 1.0 } },
+        { word: "加賴領取", baseScore: 55, contextModifiers: { social: 0.7, video: 0.7, search: 0.75, ai: 0.8, general: 1.0 } },
+        { word: "加line", baseScore: 40, contextModifiers: { social: 0.55, video: 0.55, search: 0.65, ai: 0.3, general: 1.0 } },
+        { word: "加 line", baseScore: 40, contextModifiers: { social: 0.55, video: 0.55, search: 0.65, ai: 0.3, general: 1.0 } },
+        { word: "保證金", baseScore: 45, contextModifiers: { social: 0.75, video: 0.75, search: 0.8, ai: 0.5, general: 1.0 } },
+        { word: "通關費", baseScore: 70, contextModifiers: { social: 0.8, video: 0.8, search: 0.8, ai: 0.8, general: 1.0 } },
+        { word: "中獎", baseScore: 25, contextModifiers: { social: 0.3, video: 0.3, search: 0.35, ai: 0.1, general: 1.0 } },
+        { word: "限時領取", baseScore: 45, contextModifiers: { social: 0.5, video: 0.5, search: 0.55, ai: 0.4, general: 1.0 } },
+        { word: "名額有限", baseScore: 18, contextModifiers: { social: 0.35, video: 0.35, search: 0.45, ai: 0.2, general: 1.0 } },
+        { word: "下載apk", baseScore: 80, contextModifiers: { social: 0.85, video: 0.85, search: 0.85, ai: 0.9, general: 1.0 } },
+        { word: "掃qr", baseScore: 50, contextModifiers: { social: 0.65, video: 0.65, search: 0.7, ai: 0.1, general: 1.0 } }
     ];
 
     const TRUST_RULES = [
@@ -233,6 +262,10 @@
     async function isCurrentUrlTrustedOrWhitelisted() {
         const host = normalizeHost(window.location.href);
         if (!host) return false;
+
+        if (isTrustedSearchResultUrl(window.location.href)) {
+            return true;
+        }
 
         if (DEFAULT_TRUSTED_DOMAINS.some(domain => domainMatchesHost(host, domain))) {
             return true;
@@ -399,6 +432,16 @@
     async function getSiteReputation() {
         const host = normalizeHost(window.location.href) || window.location.hostname;
 
+        if (isGoogleDomain(host) || isBingDomain(host) || isYahooDomain(host)) {
+            return {
+                ...DEFAULT_REPUTATION,
+                category: "search",
+                reputation: 100,
+                riskThreshold: 120,
+                scanMode: "ugc"
+            };
+        }
+
         try {
             const storage = await getStorage(["siteReputation"]);
             const custom = storage.siteReputation?.[host];
@@ -416,6 +459,14 @@
         const host = window.location.hostname;
         const texts = [];
 
+        if (host.includes("chatgpt.com") || host.includes("openai.com") || host.includes("deepseek.com") || host.includes("claude.ai")) {
+            document.querySelectorAll("main, [role='main'], .chat-container, .markdown, article").forEach(el => {
+                const text = getSafePageText(el, 3000);
+                if (text) texts.push(text);
+            });
+            return texts.join("\n");
+        }
+
         if (host.includes("youtube.com") || host.includes("youtu.be")) {
             document.querySelectorAll("#description-inline-expander, #description, ytd-text-inline-expander, #comments #content-text, ytd-comment-renderer #content-text").forEach(el => {
                 texts.push(getSafePageText(el, 2500));
@@ -430,7 +481,7 @@
             return texts.join("\n");
         }
 
-        if (host.includes("google.com") || host.includes("yahoo.com")) {
+        if (isGoogleDomain(host) || isBingDomain(host) || isYahooDomain(host)) {
             document.querySelectorAll("a, cite, h3, .VwiC3b, [role='heading'], article").forEach(el => {
                 const text = getSafePageText(el, 800);
                 if (text) texts.push(text);
@@ -470,7 +521,6 @@
             }
         }
 
-        // 組合式詐騙：關鍵字本身不一定高，但多項同時出現就升級。
         const comboRules = [
             [/驗證碼|otp|簡訊碼/i, /信用卡|帳號|密碼|身分證/i, 35, "驗證碼 + 個資"],
             [/包裹|海關|物流|宅配/i, /補繳|通關費|運費|付款/i, 32, "包裹 + 付款"],
@@ -481,8 +531,21 @@
 
         for (const [a, b, score, label] of comboRules) {
             if (a.test(textLower) && b.test(textLower)) {
-                totalRiskScore += score;
-                matchedKeywords.push(`${label}(+${score})`);
+                const finalComboScore = category === "ai" ? Math.floor(score * 0.5) : score;
+                totalRiskScore += finalComboScore;
+                matchedKeywords.push(`${label}(+${finalComboScore})`);
+            }
+        }
+
+        // ✅ 核心防護：AI 平台討論內容封頂機制
+        if (category === "ai") {
+            const hasDangerousAction = /請.{0,8}(點擊|輸入|匯款|轉帳|掃描|下載|安裝|加入|加LINE|加 line)|立即.{0,8}(付款|匯款|轉帳|驗證)|下載apk|掃qr|輸入驗證碼|輸入信用卡|提供提款卡密碼/i.test(textLower);
+
+            if (!hasDangerousAction) {
+                totalRiskScore = Math.min(totalRiskScore, 65);
+                if (totalRiskScore === 65) {
+                    trustedFootprints.push("[信任]純防詐討論(分數封頂)");
+                }
             }
         }
 
@@ -696,24 +759,69 @@
         } catch (e) {}
     }
 
+    function hasStrongImageScamContext(text = "") {
+        const value = normalizeText(text).toLowerCase();
+
+        const explicitAction = /(?:請|立即|馬上|現在|立刻).{0,14}(點擊|輸入|匯款|轉帳|付款|掃描|掃qr|掃 qr|下載|安裝|加入|加line|加 line|加賴)|輸入.{0,10}(驗證碼|信用卡|提款卡密碼|銀行帳號|身分證)|下載\s*apk|匯款到|轉帳到/i.test(value);
+        const investmentTrap = /(保證獲利|穩賺不賠|老師帶單|內線消息|內部消息|飆股|投資群|vip群|usdt|虛擬貨幣|加密貨幣).{0,24}(加line|加 line|加賴|入群|匯款|轉帳|儲值|保證金|入金|付款)/i.test(value);
+        const qrTrap = /(qr|qrcode|掃碼|掃描).{0,24}(付款|匯款|領獎|補助|驗證|解鎖|繳費|儲值|下載|安裝)/i.test(value);
+        const prizeTrap = /(中獎|領獎|補助|獎金|禮物|bonus|claim|prize|gift|lottery).{0,24}(付款|匯款|手續費|保證金|稅金|運費|驗證|掃碼|掃qr|下載)/i.test(value);
+
+        return explicitAction || investmentTrap || qrTrap || prizeTrap;
+    }
+
+    function buildImageRiskContext(img) {
+        const pieces = [
+            document.title || "",
+            img?.alt || "",
+            img?.title || "",
+            img?.src || ""
+        ];
+
+        // 只有頁面已經有明顯文字風險時才補一小段頁面上下文，避免正常圖表網站因圖片多而被誤掃。
+        if (currentGlobalRiskScore >= 45) {
+            try {
+                pieces.push(getScannableText().slice(0, 1200));
+            } catch (e) {}
+        }
+
+        return normalizeText(pieces.join(" ")).slice(0, 1600);
+    }
+
     async function scanSingleImage(img) {
         try {
             if (!img?.src || img.src.startsWith("data:")) return;
-            const siteInfo = await getSiteReputation();
-            const imgText = `${img.alt || ""} ${img.title || ""} ${img.src || ""}`.toLowerCase();
-            const looksRisky = /qr|qrcode|中獎|領獎|付款|匯款|claim|bonus|prize|gift|lottery/.test(imgText);
+            if (img.width < 80 || img.height < 80) return;
 
-            if (
-                (siteInfo.reputation < 80 && currentGlobalRiskScore > 20 && img.width > 50 && img.height > 50) ||
-                looksRisky
-            ) {
-                chrome.runtime.sendMessage({
-                    action: "scanImageInBackground",
-                    imageUrl: img.src,
-                    pageUrl: window.location.href,
-                    reason: looksRisky ? "圖片文字或網址具有 QR / 領獎 / 付款特徵" : "低信譽頁面中的可疑圖片"
-                }).catch(() => {});
-            }
+            const siteInfo = await getSiteReputation();
+            if (siteInfo.category === "ai") return;
+
+            const imageContext = buildImageRiskContext(img);
+            const contextLower = imageContext.toLowerCase();
+
+            const hasQR = /qr|qrcode|掃碼|掃描/.test(contextLower);
+            const hasCTA = /中獎|領獎|付款|匯款|claim|bonus|prize|gift|lottery|補助|驗證|下載apk|手續費|保證金|儲值/.test(contextLower);
+            const hasStrongScamAction = hasStrongImageScamContext(imageContext);
+
+            // 圖表、產品截圖、投資工具頁都會有大量圖片；不能只因「低信譽 + 有圖」就送背景警示。
+            // 只有強誘導語境、QR/領獎/付款組合，或本頁文字本身已達高風險時才進一步掃圖。
+            const shouldScanImage =
+                (hasQR && hasCTA) ||
+                hasStrongScamAction ||
+                (siteInfo.reputation < 40 && currentGlobalRiskScore >= 60 && img.width > 120 && img.height > 120);
+
+            if (!shouldScanImage) return;
+
+            chrome.runtime.sendMessage({
+                action: "scanImageInBackground",
+                imageUrl: img.src,
+                pageUrl: window.location.href,
+                reason: hasStrongScamAction || (hasQR && hasCTA)
+                    ? "圖片或周邊文字具有明確詐騙誘導語境"
+                    : "低信譽頁面且整體文字風險偏高，需輔助圖片掃描",
+                pageRiskScore: currentGlobalRiskScore,
+                pageTextContext: imageContext
+            }).catch(() => {});
         } catch (e) {}
     }
 
@@ -844,15 +952,33 @@
             "&original_url=" + encodeURIComponent(originalUrl) +
             "&url=" + encodeURIComponent(originalUrl);
 
-        try {
-            window.location.replace(blockedUrl);
-        } catch (error) {
+        let didUseFrontendFallback = false;
+
+        const fallbackToBlockedPage = () => {
+            if (didUseFrontendFallback) return;
+            didUseFrontendFallback = true;
+
             try {
-                window.location.href = blockedUrl;
-            } catch (e) {
-                alert("🚨 【AI 防詐盾牌】已攔截此危險頁面！");
+                window.location.replace(blockedUrl);
+            } catch (error) {
+                try {
+                    window.location.href = blockedUrl;
+                } catch (e) {
+                    alert("🚨 【AI 防詐盾牌】已攔截此危險頁面！");
+                }
             }
-        }
+        };
+
+        chrome.runtime.sendMessage({
+            action: "redirect_to_blocked",
+            url: blockedUrl
+        }, (response) => {
+            if (chrome.runtime.lastError || !response || response.status !== "success") {
+                fallbackToBlockedPage();
+            }
+        });
+
+        setTimeout(fallbackToBlockedPage, 1500);
     }
 
     function renderBlockingOverlay() {

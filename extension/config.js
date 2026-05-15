@@ -23,7 +23,10 @@ const CONFIG = Object.freeze({
     BACKGROUND_SCAN_COOLDOWN_MS: 30 * 1000,
     BACKGROUND_MAX_TEXT_LENGTH: 1200,
     BACKGROUND_LOCAL_RISK_MIN: 40,
+    
+    // ✅ 已修正：維持 12 秒，避免 Popup 或擴充功能卡頓
     REQUEST_TIMEOUT_MS: 12000,
+    
     MAX_RETRIES: 3,
     POLLING_INTERVAL_MS: 5000,
 
@@ -56,6 +59,7 @@ const CONFIG = Object.freeze({
         "youtube.com": { category: "video", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "youtu.be": { category: "video", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "google.com": { category: "search", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+        "google.com.tw": { category: "search", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "facebook.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
         "twitter.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
         "x.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
@@ -63,8 +67,14 @@ const CONFIG = Object.freeze({
         "wikipedia.org": { category: "reference", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "ccsh.tn.edu.tw": { category: "education", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "github.com": { category: "development", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+        
+        // 🌟 各大 AI 平台高信譽保護
         "chatgpt.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "openai.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+        "deepseek.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+        "chat.deepseek.com": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+        "claude.ai": { category: "ai", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
+        
         "pchome.com.tw": { category: "ecommerce", reputation: 80, riskThreshold: 90, scanMode: "full" },
         "momoshop.com.tw": { category: "ecommerce", reputation: 80, riskThreshold: 90, scanMode: "full" },
         "momo.com.tw": { category: "ecommerce", reputation: 80, riskThreshold: 90, scanMode: "full" },

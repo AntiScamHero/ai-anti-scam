@@ -355,12 +355,48 @@
                 scroll-behavior: auto !important;
             }
         }
+    
+
+        /* 新版人物與警示標誌 */
+        .popup-mascot {
+            display: block;
+            width: 132px;
+            max-width: 52%;
+            height: auto;
+            margin: 0 auto 12px;
+            object-fit: contain;
+            filter: drop-shadow(0 10px 18px rgba(26, 115, 232, 0.22));
+        }
+
+        .header-warning-icon,
+        .inline-warning-icon {
+            width: 26px;
+            height: 26px;
+            object-fit: contain;
+            vertical-align: middle;
+            flex: 0 0 auto;
+        }
+
+        #header-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #btn_report_page {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
     </style>
 </head>
 
 <body>
     <div class="app-card" id="app-body">
-        <h2 id="header-title">🛡️ AI 防詐盾牌</h2>
+        <img class="popup-mascot" src="mascot-boy-new.png" alt="新版 AI 防詐守護公仔" draggable="false">
+        <h2 id="header-title"><img class="header-warning-icon" src="warning-new.png" alt="" aria-hidden="true">AI 防詐盾牌</h2>
 
         <p class="subtle-text">
             手動掃描目前頁面、反白文字、圖片或連結前，請先確認自己沒有正在輸入信用卡、密碼或驗證碼。
@@ -372,7 +408,7 @@
 
         <div id="loading">
             <span class="spinner"></span>
-            AI 防詐大腦分析中.
+            AI 防詐大腦分析中...
         </div>
 
         <div id="score-container">
@@ -417,7 +453,7 @@
         <div class="section" id="family-section">
             <div class="section-title">👨‍👩‍👧 家庭守護綁定</div>
 
-            <div class="invite-row">
+            <div class="invite-row" id="family-join-row">
                 <input
                     id="invite_input"
                     type="text"
@@ -435,6 +471,20 @@
 
             <div class="family-status" id="family-status">
                 目前狀態：<strong>尚未綁定家庭群組</strong>
+            </div>
+
+            <div id="family-code-display" style="display: none; background: #e8f0fe; padding: 14px; border-radius: 12px; text-align: center; margin-top: 12px; border: 2px dashed #1a73e8;">
+                <div style="font-size: 13px; color: #38556e; font-weight: bold; margin-bottom: 6px;">您的家庭守護代碼</div>
+                <div id="display_code" style="font-size: 28px; font-weight: 900; letter-spacing: 4px; color: #1a73e8; cursor: pointer;" title="點擊複製代碼">------</div>
+                
+                <div style="display: flex; gap: 8px; margin-top: 12px;">
+                    <button id="btn_share_line" type="button" style="flex: 1; background: #06C755; color: white; margin-bottom: 0; padding: 10px; font-size: 14px; border-radius: 8px; box-shadow: 0 4px 10px rgba(6, 199, 85, 0.2); border: none; font-weight: bold; cursor: pointer;">
+                        💬 傳送 LINE
+                    </button>
+                    <button id="btn_copy_invite" type="button" style="flex: 1; background: #ffffff; color: #1a73e8; border: 2px solid #1a73e8; margin-bottom: 0; padding: 10px; font-size: 14px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+                        📄 複製邀請
+                    </button>
+                </div>
             </div>
 
             <div class="quick-actions">
@@ -461,7 +511,7 @@
                 </button>
 
                 <button id="btn_report_page" class="btn-red" type="button">
-                    回報此頁
+                    <img class="inline-warning-icon" src="warning-new.png" alt="" aria-hidden="true">回報可疑網站
                 </button>
             </div>
         </div>
