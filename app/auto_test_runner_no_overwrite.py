@@ -8,7 +8,7 @@ from pathlib import Path
 # AI 防詐盾牌｜不覆蓋舊報告版測試器
 # ==========================================
 INPUT_FILE = "01_測試資料集_100筆.xlsx"
-API_URL = "http://127.0.0.1:5000/api/analyze"
+API_URL = "http://127.0.0.1:5000/scan"
 REQUEST_TIMEOUT = 15
 
 def make_output_filename():

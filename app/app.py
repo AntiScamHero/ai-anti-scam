@@ -2,8 +2,8 @@
 # AI 防詐盾牌 - Flask / Socket.IO 入口
 
 # ⚠️ 關鍵修復：必須在所有 import 的最前面執行 Monkey Patch！
-from gevent import monkey
-monkey.patch_all()
+# from gevent import monkey    <-- 加上 #
+# monkey.patch_all()           <-- 加上 #
 
 import os
 

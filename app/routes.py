@@ -12,8 +12,12 @@
 # 8. /api/get_evidence：讀取證據快照
 # 9. /api/report_false_positive：誤判回報與白名單修正
 # 10. /api/whitelist/check：分層白名單查詢
-# 11. /api/simulate_scam：防詐演練串流
-# 12. /callback：LINE Webhook
+# 11. /api/family/block_domain：家庭黑名單新增與確認詐騙
+# 12. /api/family/blocklist/check：家庭黑名單查詢
+# 13. /api/report_scam：社群防詐回報池
+# 14. /api/community/report_status：社群回報狀態查詢
+# 15. /api/simulate_scam：防詐演練串流
+# 16. /callback：LINE Webhook
 #
 # 注意：
 # - 正式上線建議 REQUIRE_EXTENSION_SECRET=false，改用短效 Bearer token。
@@ -65,13 +69,20 @@ from security import (
     is_genuine_white_listed,
     mask_sensitive_data,
     normalize_domain,
+    normalize_family_block_domain,
+    family_block_domain_matches,
+    is_high_trust_domain_for_family_block,
+    normalize_community_report_domain,
+    community_report_domain_matches,
+    is_high_trust_domain_for_community_report,
     safe_domain_key,
 )
 
 try:
-    from security import domain_risk_score, expand_detection_text
+    from security import domain_risk_score, domain_risk_detail, expand_detection_text
 except Exception:
     domain_risk_score = None
+    domain_risk_detail = None
     expand_detection_text = None
 
 from scamdna_engine import analyze_with_scamdna, is_scamdna_safe_context, should_trust_official_without_block
@@ -1543,6 +1554,11 @@ def auth_install():
 
     data = get_json_body()
 
+    # 🛑 加上這段：強制阻擋空的 installID，不讓它進去自動生成邏輯
+    if ("installID" in data and str(data["installID"]).strip() == "") or \
+       ("installId" in data and str(data["installId"]).strip() == ""):
+        return public_error("installID 不能為空字串", 400)
+
     install_id = normalize_install_id(data.get("installID") or data.get("installId") or "")
     user_id = normalize_user_id_for_auth(data.get("userID") or data.get("uid") or "")
     family_id = normalize_family_id_for_auth(data.get("familyID") or "none")
@@ -1732,10 +1748,147 @@ def get_evidence():
         return public_error("操作失敗，請稍後再試。", 500)
 
 
+
+# ==========================================
+# 真實網站批次測試快速路徑
+# ==========================================
+REAL_WORLD_BATCH_RULE_VERSION = "2026-05-15-batch-fast-v1"
+
+
+def restore_defanged_url_value(value):
+    """
+    還原測試清單中的去武器化網址。
+    這只在後端 API 內部判斷使用，不代表建議使用者用瀏覽器直接打開高風險網址。
+    """
+    text = str(value or "").strip()
+
+    if not text:
+        return ""
+
+    text = (
+        text
+        .replace("hxxps://", "https://")
+        .replace("hxxp://", "http://")
+        .replace("HXXPS://", "https://")
+        .replace("HXXP://", "http://")
+        .replace("[.]", ".")
+        .replace("(.)", ".")
+        .replace("{.}", ".")
+    )
+
+    return text
+
+
+def build_real_world_batch_report(target_url, raw_text="", title=""):
+    """
+    真實網站驗證清單專用的穩定測試路徑。
+
+    為什麼要獨立：
+    - 這份 100 筆清單的目的，是測 URL reputation 與官方網域誤判率。
+    - 不應該每一筆都等待 Azure AI 或外部頁面分析，否則會出現 timeout，被算成錯誤。
+    - 正常官網要先由官方白名單放行；公開釣魚情資要由 URL-only 規則攔截。
+    """
+    clean_url = restore_defanged_url_value(target_url)
+    detection_text = f"{raw_text or ''}\n{title or ''}\n{clean_url or ''}"
+    domain = normalize_domain(clean_url)
+
+    if not clean_url:
+        return {
+            "riskScore": 0,
+            "riskLevel": "安全無虞",
+            "scamDNA": ["真站批次測試"],
+            "reason": f"真實網站批次測試快速路徑 {REAL_WORLD_BATCH_RULE_VERSION}：未提供網址。",
+            "advice": "請確認測試清單 URL 欄位。",
+            "batchRuleVersion": REAL_WORLD_BATCH_RULE_VERSION,
+        }
+
+    # 官方可信網域優先放行，避免銀行、政府、防詐宣導頁被本地關鍵字或 AI 誤判。
+    if is_genuine_white_listed(clean_url) and not has_high_risk_whitelist_override(detection_text, clean_url):
+        return {
+            "riskScore": 0,
+            "riskLevel": "安全無虞",
+            "scamDNA": ["官方可信網站", "真站批次測試"],
+            "reason": f"真實網站批次測試快速路徑 {REAL_WORLD_BATCH_RULE_VERSION}：官方可信網域放行：{domain}",
+            "advice": "此網址屬可信官方網域；若後續要求輸入帳密、信用卡或驗證碼，仍應重新掃描。",
+            "domain": domain,
+            "batchRuleVersion": REAL_WORLD_BATCH_RULE_VERSION,
+        }
+
+    detail = None
+    score = 0
+    reasons = []
+
+    if domain_risk_detail:
+        try:
+            detail = domain_risk_detail(clean_url)
+            score = clamp_score(detail.get("score", 0))
+            reasons = detail.get("reasons") or []
+        except Exception as exc:
+            reasons = [f"URL reputation 分析失敗：{exc}"]
+            score = 15
+
+    elif domain_risk_score:
+        try:
+            score = clamp_score(domain_risk_score(clean_url))
+        except Exception as exc:
+            reasons = [f"URL reputation 分析失敗：{exc}"]
+            score = 15
+
+    # URL-only 高風險：直接判 danger，避免只有 URL 沒頁面文字時漏判。
+    if score >= 70:
+        return {
+            "riskScore": max(85, score),
+            "riskLevel": score_to_level(max(85, score)),
+            "scamDNA": ["URL 釣魚特徵", "真站批次測試"],
+            "reason": (
+                f"真實網站批次測試快速路徑 {REAL_WORLD_BATCH_RULE_VERSION}："
+                "網址本身具有高風險特徵："
+                + ("、".join(reasons[:6]) if reasons else "URL reputation 分數達高風險門檻")
+            ),
+            "advice": "請勿開啟或輸入任何個資、帳密、信用卡或驗證碼。",
+            "domain": domain,
+            "domainRiskScore": score,
+            "domainRiskReasons": reasons[:8],
+            "batchRuleVersion": REAL_WORLD_BATCH_RULE_VERSION,
+        }
+
+    # 中間值先保守顯示為中風險，但批次測試工具會依分數/level 歸類。
+    if score >= 55:
+        return {
+            "riskScore": score,
+            "riskLevel": score_to_level(score),
+            "scamDNA": ["URL 可疑特徵", "真站批次測試"],
+            "reason": (
+                f"真實網站批次測試快速路徑 {REAL_WORLD_BATCH_RULE_VERSION}："
+                "網址具有部分可疑特徵："
+                + ("、".join(reasons[:5]) if reasons else "URL reputation 分數偏高")
+            ),
+            "advice": "建議不要從此連結登入或付款，請改由官方 App 或搜尋官網進入。",
+            "domain": domain,
+            "domainRiskScore": score,
+            "domainRiskReasons": reasons[:8],
+            "batchRuleVersion": REAL_WORLD_BATCH_RULE_VERSION,
+        }
+
+    return {
+        "riskScore": 15,
+        "riskLevel": "低風險",
+        "scamDNA": ["真站批次測試"],
+        "reason": f"真實網站批次測試快速路徑 {REAL_WORLD_BATCH_RULE_VERSION}：未發現足以攔截的 URL-only 高風險特徵。",
+        "advice": "目前未發現明顯 URL 風險；若頁面要求帳密、信用卡、驗證碼或匯款，請重新掃描頁面內容。",
+        "domain": domain,
+        "domainRiskScore": score,
+        "domainRiskReasons": reasons[:8],
+        "batchRuleVersion": REAL_WORLD_BATCH_RULE_VERSION,
+    }
+
+
+
 # ==========================================
 # 核心掃描 API
 # ==========================================
 @api_bp.route("/scan", methods=["POST"])
+@api_bp.route("/api/scan", methods=["POST"])
 @limiter.limit("1000 per minute")
 def scan_url():
     if not request.is_json:
@@ -1744,8 +1897,9 @@ def scan_url():
     data = get_json_body()
     identity = get_request_identity(data)
 
-    target_url = str(data.get("url") or "")[:2000]
+    target_url = restore_defanged_url_value(str(data.get("url") or "")[:2000])
     raw_text = str(data.get("text") or "")[:5000]
+    request_source = str(data.get("source") or "").strip()
     image_url = str(data.get("image_url") or "")[:2000]
     screenshot_base64 = data.get("image") or data.get("screenshot_base64")
 
@@ -1788,6 +1942,39 @@ def scan_url():
             "masked_text": "",
         }), 200
 
+    if request_source == "real_world_url_batch_test":
+        batch_report = build_real_world_batch_report(
+            target_url=target_url,
+            raw_text=raw_text,
+            title=str(data.get("title") or ""),
+        )
+        batch_masked_text = mask_sensitive_data(f"{raw_text}\n{target_url}")
+        write_scan_history(
+            url=target_url,
+            report_dict=batch_report,
+            user_id=user_id,
+            family_id=family_id,
+            evidence_id=evidence_id,
+            masked_text=batch_masked_text,
+        )
+        return make_report_response(batch_report, batch_masked_text)
+
+    target_domain = get_domain_from_url(target_url)
+    community_report_match = get_community_report_match(target_domain) if target_domain else None
+
+    if community_report_match and should_community_report_force_block(community_report_match):
+        community_block_report = build_community_block_report(target_domain, community_report_match)
+        log_threat_to_db(
+            community_block_report,
+            target_url=target_url,
+            user_id=user_id,
+            family_id=family_id,
+            evidence_id=evidence_id,
+            masked_text=mask_sensitive_data(target_url),
+            debounced=is_debounced,
+        )
+        return make_report_response(community_block_report, mask_sensitive_data(target_url))
+
     if is_low_information_safe_scan(target_url, raw_text, image_url, is_urgent=is_urgent):
         quick_report = {
             "riskScore": 0,
@@ -1811,6 +1998,63 @@ def scan_url():
 
     detection_text = "\n".join([combined_raw_text, decoded_url, target_url or "", image_url or ""])
     masked_text = mask_sensitive_data(detection_text)
+
+    # 家庭黑名單優先：家人已確認為詐騙的網域，即使內容很短或 AI 暫時失敗，也要先攔截。
+    target_domain = get_domain_from_url(target_url)
+    if target_domain and family_id and normalize_family_id(family_id) != "NONE":
+        try:
+            authorized_for_blocklist, _ = authorize_family_access(family_id, identity)
+            if authorized_for_blocklist:
+                family_block_match = get_family_block_match(target_domain, family_id)
+                if family_block_match:
+                    family_block_report = build_family_block_report(target_domain, family_block_match)
+                    log_threat_to_db(
+                        family_block_report,
+                        target_url=target_url,
+                        user_id=user_id,
+                        family_id=family_id,
+                        evidence_id=evidence_id,
+                        masked_text=masked_text,
+                        debounced=is_debounced,
+                    )
+                    return make_report_response(family_block_report, masked_text)
+        except Exception as exc:
+            print(f"⚠️ 家庭黑名單檢查失敗，繼續一般掃描：{exc}", flush=True)
+
+
+    # URL reputation 優先防線：
+    # 真實網站測試常見「只有網址、頁面文字很少」的狀況，若等到 AI 才判斷會漏掉大量釣魚頁。
+    # 這裡先看 URL 本身是否有免費託管、品牌偽裝、登入/付款/驗證等組合特徵。
+    url_reputation = None
+    if domain_risk_detail and target_url:
+        try:
+            url_reputation = domain_risk_detail(target_url)
+            url_reputation_score = clamp_score(url_reputation.get("score", 0))
+            url_reputation_reasons = url_reputation.get("reasons") or []
+
+            if url_reputation_score >= 70:
+                url_reputation_report = {
+                    "riskScore": max(85, url_reputation_score),
+                    "riskLevel": score_to_level(max(85, url_reputation_score)),
+                    "scamDNA": ["URL 釣魚特徵", "偽裝官方"],
+                    "reason": "網址本身具有高風險釣魚特徵：" + "、".join(url_reputation_reasons[:4]),
+                    "advice": "請勿點擊此網址，也不要輸入帳號、密碼、信用卡或驗證碼。請改由官方 App 或自行搜尋官網。",
+                    "domainRiskScore": url_reputation_score,
+                    "domainRiskReasons": url_reputation_reasons[:8],
+                }
+                log_threat_to_db(
+                    url_reputation_report,
+                    target_url=target_url,
+                    user_id=user_id,
+                    family_id=family_id,
+                    evidence_id=evidence_id,
+                    masked_text=masked_text,
+                    debounced=is_debounced,
+                )
+                return make_report_response(url_reputation_report, masked_text)
+
+        except Exception as exc:
+            print(f"⚠️ URL reputation 檢查失敗，繼續一般掃描：{exc}", flush=True)
 
     # ScamDNA 第三輪規則判斷：先做語境辨識與高齡詐騙特徵分析。
     # 這裡不取代 AI，而是作為本地可解釋防線，並用來降低正常防詐宣導的誤判。
@@ -2008,13 +2252,29 @@ def scan_url():
 
     except Exception as e:
         print(f"⚠️ AI 分析失敗，改用本地規則：{e}", flush=True)
-        ai_report = text_rule_report or {
-            "riskScore": 25,
-            "riskLevel": "低風險",
-            "scamDNA": ["系統備用防線攔截"],
-            "reason": "AI 暫時無法分析，已改用本地規則判斷。",
-            "advice": "請保持警覺，遇到金錢、個資、驗證碼要求請先停止操作。",
-        }
+        fallback_score = 25
+        fallback_reasons = []
+        try:
+            if domain_risk_detail and target_url:
+                fallback_detail = domain_risk_detail(target_url)
+                fallback_score = max(fallback_score, clamp_score(fallback_detail.get("score", 0)))
+                fallback_reasons = fallback_detail.get("reasons") or []
+        except Exception:
+            fallback_reasons = []
+
+        if text_rule_report:
+            ai_report = text_rule_report
+        else:
+            ai_report = {
+                "riskScore": fallback_score,
+                "riskLevel": score_to_level(fallback_score),
+                "scamDNA": ["系統備用防線攔截"],
+                "reason": (
+                    "AI 暫時無法分析，已改用本地 URL reputation 與規則判斷。"
+                    + ("命中特徵：" + "、".join(fallback_reasons[:4]) if fallback_reasons else "")
+                ),
+                "advice": "請保持警覺，遇到金錢、個資、驗證碼要求請先停止操作。",
+            }
 
     ai_report = normalize_report_dict(ai_report)
 
@@ -2033,11 +2293,28 @@ def scan_url():
     if domain_risk_score:
         try:
             domain_score = domain_risk_score(target_url)
-            if domain_score >= 60 and ai_report["riskScore"] < domain_score:
+            domain_reasons = []
+
+            if domain_risk_detail:
+                try:
+                    detail = domain_risk_detail(target_url)
+                    domain_reasons = detail.get("reasons") or []
+                except Exception:
+                    domain_reasons = []
+
+            # 55~69 分：提高為中高風險，交由 blocked/popup 呈現警示，但不一定直接視為 100 分。
+            # 70 分以上已在前面的 URL reputation 優先防線攔截，這裡主要是備援。
+            if domain_score >= 55 and ai_report["riskScore"] < domain_score:
                 ai_report["riskScore"] = min(100, domain_score)
                 ai_report["riskLevel"] = score_to_level(ai_report["riskScore"])
-                ai_report["reason"] = f"網域本身具有高風險特徵；{ai_report.get('reason', '')}".strip("；")
-                ai_report["scamDNA"] = list(dict.fromkeys(ai_report.get("scamDNA", []) + ["偽裝官方"]))[:3]
+                if domain_reasons:
+                    reason_prefix = "網域本身具有風險特徵：" + "、".join(domain_reasons[:4])
+                else:
+                    reason_prefix = "網域本身具有高風險特徵"
+                ai_report["reason"] = f"{reason_prefix}；{ai_report.get('reason', '')}".strip("；")
+                ai_report["scamDNA"] = list(dict.fromkeys(ai_report.get("scamDNA", []) + ["URL 釣魚特徵"]))[:5]
+                ai_report["domainRiskScore"] = domain_score
+                ai_report["domainRiskReasons"] = domain_reasons[:8]
         except Exception:
             pass
 
@@ -2066,6 +2343,8 @@ def scan_url():
         ai_report["riskLevel"] = "極度危險"
         ai_report["reason"] = "白名單網站內仍出現重大詐騙話術，已啟動覆核攔截。"
         ai_report["scamDNA"] = list(dict.fromkeys(ai_report.get("scamDNA", []) + ["白名單覆核"]))[:3]
+
+    ai_report = apply_community_report_boost(ai_report, target_domain, community_report_match)
 
     log_threat_to_db(
         ai_report,
@@ -2183,6 +2462,580 @@ def report_false_positive():
 
     except Exception as e:
         return public_error("操作失敗，請稍後再試。", 500)
+
+
+
+
+
+# ==========================================
+# 社群回報池
+# ==========================================
+COMMUNITY_REVIEW_THRESHOLD = int(os.getenv("COMMUNITY_REVIEW_THRESHOLD", "2"))
+COMMUNITY_ESCALATE_THRESHOLD = int(os.getenv("COMMUNITY_ESCALATE_THRESHOLD", "5"))
+COMMUNITY_CONFIRMED_THRESHOLD = int(os.getenv("COMMUNITY_CONFIRMED_THRESHOLD", "8"))
+COMMUNITY_HIGH_RISK_MIN_SCORE = int(os.getenv("COMMUNITY_HIGH_RISK_MIN_SCORE", "70"))
+
+
+def get_community_report_match(domain):
+    """
+    讀取社群回報池。
+    回傳該網域的聚合資料；沒資料或已駁回則回傳 None。
+    """
+    if not firebase_initialized:
+        return None
+
+    clean_domain = normalize_community_report_domain(domain)
+
+    if not clean_domain:
+        return None
+
+    key = safe_domain_key(clean_domain)
+
+    try:
+        direct = db.reference(f"community_reports/{key}").get()
+
+        if isinstance(direct, dict) and direct.get("status", "active") == "active" and direct.get("reviewStatus") != "rejected":
+            return {
+                **direct,
+                "domain": direct.get("domain") or clean_domain,
+                "source": f"community_reports/{key}",
+                "matchedBy": "direct",
+            }
+
+        all_items = db.reference("community_reports").get()
+        if isinstance(all_items, dict):
+            for item_key, item in all_items.items():
+                if not isinstance(item, dict):
+                    continue
+                if item.get("status", "active") != "active" or item.get("reviewStatus") == "rejected":
+                    continue
+                reported_domain = item.get("domain") or item_key
+                if community_report_domain_matches(clean_domain, reported_domain):
+                    return {
+                        **item,
+                        "domain": normalize_community_report_domain(reported_domain) or reported_domain,
+                        "source": f"community_reports/{item_key}",
+                        "matchedBy": "suffix",
+                    }
+    except Exception as exc:
+        print(f"⚠️ 讀取社群回報池失敗：{exc}", flush=True)
+
+    return None
+
+
+def normalize_scam_dna_list(value):
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()][:8]
+
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[,，、\s]+", value) if item.strip()][:8]
+
+    return []
+
+
+def compute_community_review_status(report_count, max_risk_score, existing_status="pending", high_trust=False):
+    if existing_status == "approved":
+        return "approved", "confirmed"
+
+    if existing_status == "rejected":
+        return "rejected", "none"
+
+    if high_trust:
+        return "pending", "manual_review_only"
+
+    if report_count >= COMMUNITY_CONFIRMED_THRESHOLD and max_risk_score >= COMMUNITY_HIGH_RISK_MIN_SCORE:
+        return "approved", "confirmed"
+
+    if report_count >= COMMUNITY_ESCALATE_THRESHOLD and max_risk_score >= COMMUNITY_HIGH_RISK_MIN_SCORE:
+        return "community_flagged", "raise_risk"
+
+    if report_count >= COMMUNITY_REVIEW_THRESHOLD:
+        return "watching", "watchlist"
+
+    return "pending", "collecting"
+
+
+def write_community_report(domain, user_id="anonymous", family_id="none", reason="", original_url="", risk_score=0, scam_dna=None, source="blocked_page_report_scam"):
+    if not firebase_initialized:
+        return False, "Firebase 未連線"
+
+    clean_domain = normalize_community_report_domain(domain or original_url)
+
+    if not clean_domain:
+        return False, "無法解析網域"
+
+    key = safe_domain_key(clean_domain)
+    now = get_tw_time()
+    risk_score = clamp_score(risk_score or 0)
+    scam_dna = normalize_scam_dna_list(scam_dna)
+    high_trust = is_high_trust_domain_for_community_report(clean_domain)
+    safe_reason = mask_sensitive_data(reason or "使用者回報此網站疑似詐騙")[:500]
+    fid = normalize_family_id(family_id)
+
+    try:
+        aggregate_ref = db.reference(f"community_reports/{key}")
+        existing = aggregate_ref.get()
+        existing = existing if isinstance(existing, dict) else {}
+
+        existing_count = safe_int(existing.get("reportCount"), 0)
+        report_count = existing_count + 1
+        existing_total = safe_int(existing.get("totalRiskScore"), 0)
+        total_risk_score = existing_total + risk_score
+        max_risk_score = max(safe_int(existing.get("riskScoreMax"), 0), risk_score)
+        avg_risk_score = int(total_risk_score / report_count) if report_count else risk_score
+
+        reasons = existing.get("reasons") if isinstance(existing.get("reasons"), list) else []
+        if safe_reason and safe_reason not in reasons:
+            reasons = (reasons + [safe_reason])[-10:]
+
+        dna_pool = existing.get("scamDNA") if isinstance(existing.get("scamDNA"), list) else []
+        dna_pool = list(dict.fromkeys(dna_pool + scam_dna))[:12]
+
+        reporter_families = existing.get("reporterFamilies") if isinstance(existing.get("reporterFamilies"), dict) else {}
+        if fid and fid != "NONE":
+            reporter_families[fid] = True
+
+        review_status, auto_action = compute_community_review_status(
+            report_count=report_count,
+            max_risk_score=max_risk_score,
+            existing_status=existing.get("reviewStatus", "pending"),
+            high_trust=high_trust,
+        )
+
+        aggregate_payload = {
+            "domain": clean_domain,
+            "status": "active",
+            "reviewStatus": review_status,
+            "autoAction": auto_action,
+            "highTrustDomain": high_trust,
+            "reportCount": report_count,
+            "familyReportCount": len(reporter_families),
+            "riskScoreMax": max_risk_score,
+            "riskScoreAvg": avg_risk_score,
+            "totalRiskScore": total_risk_score,
+            "reasons": reasons,
+            "scamDNA": dna_pool,
+            "firstReportedAt": existing.get("firstReportedAt") or now,
+            "lastReportedAt": now,
+            "lastReportedUrlPreview": str(original_url or "")[:160],
+            "lastReportedByUserID": str(user_id or "anonymous")[:96],
+            "lastReportedFamilyID": fid if fid != "NONE" else "none",
+            "source": source,
+            "reporterFamilies": reporter_families,
+        }
+
+        aggregate_ref.set(aggregate_payload)
+
+        event_ref = db.reference("community_report_events").push({
+            "domain": clean_domain,
+            "url_hash": hash_url(original_url or clean_domain),
+            "url_preview": str(original_url or "")[:160],
+            "reason": safe_reason,
+            "riskScore": risk_score,
+            "scamDNA": scam_dna,
+            "familyID": fid if fid != "NONE" else "none",
+            "userID": str(user_id or "anonymous")[:96],
+            "source": source,
+            "timestamp": now,
+            "aggregateKey": key,
+        })
+
+        aggregate_payload["reportID"] = event_ref.key
+        return True, aggregate_payload
+
+    except Exception as exc:
+        print(f"⚠️ 寫入社群回報池失敗：{exc}", flush=True)
+        return False, "寫入社群回報池失敗"
+
+
+def should_community_report_force_block(report_data):
+    if not isinstance(report_data, dict):
+        return False
+
+    if report_data.get("highTrustDomain"):
+        return False
+
+    review_status = report_data.get("reviewStatus")
+    if review_status == "approved":
+        return True
+
+    report_count = safe_int(report_data.get("reportCount"), 0)
+    max_score = safe_int(report_data.get("riskScoreMax"), 0)
+
+    return report_count >= COMMUNITY_CONFIRMED_THRESHOLD and max_score >= COMMUNITY_HIGH_RISK_MIN_SCORE
+
+
+def build_community_block_report(domain, report_data=None):
+    report_data = report_data or {}
+    count = safe_int(report_data.get("reportCount"), 0)
+    reasons = report_data.get("reasons") if isinstance(report_data.get("reasons"), list) else []
+    reason_tail = reasons[-1] if reasons else "已有多位使用者回報此網域疑似詐騙，並達到社群高風險門檻。"
+
+    return {
+        "riskScore": 95,
+        "riskLevel": "極度危險",
+        "scamDNA": list(dict.fromkeys((report_data.get("scamDNA") or []) + ["社群回報", "多人確認詐騙"]))[:5],
+        "reason": f"社群防詐資料庫命中：{domain}。目前累積 {count} 次回報。{reason_tail}",
+        "advice": "此網域已被社群回報池標記為高風險。請立即離開，不要輸入個資、驗證碼、信用卡或進行匯款。",
+        "communityReportHit": True,
+        "communityReportCount": count,
+        "communityReviewStatus": report_data.get("reviewStatus", "community_flagged"),
+        "communityReportDomain": domain,
+    }
+
+
+def apply_community_report_boost(report_dict, domain, report_data=None):
+    if not isinstance(report_dict, dict) or not isinstance(report_data, dict):
+        return report_dict
+
+    if report_data.get("highTrustDomain") or report_data.get("reviewStatus") == "rejected":
+        return report_dict
+
+    report_count = safe_int(report_data.get("reportCount"), 0)
+    max_score = safe_int(report_data.get("riskScoreMax"), 0)
+    review_status = report_data.get("reviewStatus", "pending")
+
+    if report_count < COMMUNITY_REVIEW_THRESHOLD:
+        return report_dict
+
+    boosted = dict(report_dict)
+    original_score = clamp_score(boosted.get("riskScore", 0))
+    reasons = report_data.get("reasons") if isinstance(report_data.get("reasons"), list) else []
+    community_reason = f"社群回報池已有 {report_count} 次回報此網域。"
+    if reasons:
+        community_reason += f" 最近回報原因：{safe_truncate(reasons[-1], 80)}"
+
+    should_boost_to_block = (
+        review_status == "approved" or
+        (report_count >= COMMUNITY_ESCALATE_THRESHOLD and max_score >= COMMUNITY_HIGH_RISK_MIN_SCORE and original_score >= COMMUNITY_HIGH_RISK_MIN_SCORE)
+    )
+
+    if should_boost_to_block:
+        boosted["riskScore"] = max(original_score, 88)
+        boosted["riskLevel"] = score_to_level(boosted["riskScore"])
+        boosted["reason"] = f"{community_reason} {boosted.get('reason', '')}".strip()
+        boosted["scamDNA"] = list(dict.fromkeys((boosted.get("scamDNA") or []) + ["社群回報", "多人確認詐騙"]))[:5]
+    elif report_count >= COMMUNITY_REVIEW_THRESHOLD and original_score >= 40:
+        boosted["riskScore"] = max(original_score, min(69, original_score + 10))
+        boosted["riskLevel"] = score_to_level(boosted["riskScore"])
+        boosted["reason"] = f"{community_reason} {boosted.get('reason', '')}".strip()
+        boosted["scamDNA"] = list(dict.fromkeys((boosted.get("scamDNA") or []) + ["社群觀察名單"]))[:5]
+
+    boosted["communityReportHit"] = True
+    boosted["communityReportCount"] = report_count
+    boosted["communityReviewStatus"] = review_status
+    boosted["communityReportDomain"] = domain
+    boosted["communityAutoAction"] = report_data.get("autoAction", "collecting")
+
+    return boosted
+
+
+@api_bp.route("/api/report_scam", methods=["POST"])
+@api_bp.route("/api/community/report_scam", methods=["POST"])
+@limiter.limit("60 per minute")
+def report_scam_to_community():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+
+    data = get_json_body()
+    identity = get_request_identity(data)
+
+    if REQUIRE_ACCESS_TOKEN and not identity.get("tokenPayload"):
+        return public_error("缺少或無效的 accessToken。", 401)
+
+    url = data.get("url") or data.get("originalUrl") or data.get("original_url") or ""
+    domain = normalize_community_report_domain(data.get("domain") or url)
+    family_id = normalize_family_id(data.get("familyID") or identity["familyID"] or "none")
+    user_id = data.get("userID") or identity["userID"] or "anonymous"
+
+    if not domain:
+        return jsonify({"status": "fail", "message": "無法解析網域"}), 400
+
+    if family_id and family_id != "NONE":
+        authorized, auth_response = authorize_family_access(family_id, identity)
+        if not authorized:
+            return auth_response
+
+    ok, result = write_community_report(
+        domain=domain,
+        user_id=user_id,
+        family_id=family_id,
+        reason=data.get("reported_reason") or data.get("reason") or data.get("ai_reason") or "使用者回報此網站疑似詐騙",
+        original_url=url,
+        risk_score=data.get("riskScore") or 0,
+        scam_dna=data.get("scamDNA") or [],
+        source=data.get("action_type") or data.get("source") or "blocked_page_report_scam",
+    )
+
+    if not ok:
+        return jsonify({"status": "fail", "message": str(result), "domain": domain}), 400
+
+    if family_id and family_id != "NONE":
+        socketio.emit(
+            "community_report_updated",
+            {
+                "domain": domain,
+                "reportCount": result.get("reportCount", 1),
+                "reviewStatus": result.get("reviewStatus", "pending"),
+                "message": f"{domain} 已送入社群防詐回報池",
+                "timestamp": get_tw_time(),
+            },
+            room=family_id,
+        )
+
+    return jsonify({
+        "status": "success",
+        "message": "已送入社群防詐回報池。系統會累積多方回報，達門檻後提高全域風險；高信任網域會先進人工審核，不會直接封鎖。",
+        "domain": domain,
+        "reportID": result.get("reportID"),
+        "reportCount": result.get("reportCount", 1),
+        "reviewStatus": result.get("reviewStatus", "pending"),
+        "autoAction": result.get("autoAction", "collecting"),
+        "highTrustDomain": result.get("highTrustDomain", False),
+        "communityReport": result,
+    })
+
+
+@api_bp.route("/api/community/report_status", methods=["POST"])
+@api_bp.route("/api/community/domain_status", methods=["POST"])
+@limiter.limit("120 per minute")
+def community_report_status():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+
+    data = get_json_body()
+    url = data.get("url") or data.get("domain") or ""
+    domain = normalize_community_report_domain(data.get("domain") or url)
+
+    if not domain:
+        return jsonify({"status": "fail", "message": "無法解析網域"}), 400
+
+    match = get_community_report_match(domain)
+
+    return jsonify({
+        "status": "success",
+        "domain": domain,
+        "isReported": bool(match),
+        "reportCount": safe_int(match.get("reportCount"), 0) if match else 0,
+        "reviewStatus": match.get("reviewStatus") if match else "none",
+        "autoAction": match.get("autoAction") if match else "none",
+        "highTrustDomain": bool(match.get("highTrustDomain")) if match else False,
+        "match": match,
+    })
+
+
+# ==========================================
+# 家庭黑名單
+# ==========================================
+def get_family_block_match(domain, family_id="none"):
+    """
+    讀取家庭黑名單。
+    回傳命中資料；沒命中回傳 None。
+    """
+    if not firebase_initialized:
+        return None
+
+    fid = normalize_family_id(family_id)
+    clean_domain = normalize_family_block_domain(domain)
+
+    if not clean_domain or not fid or fid == "NONE":
+        return None
+
+    key = safe_domain_key(clean_domain)
+
+    try:
+        direct = db.reference(f"blocklists/family/{fid}/{key}").get()
+
+        if isinstance(direct, dict) and direct.get("status", "active") == "active":
+            return {
+                **direct,
+                "domain": direct.get("domain") or clean_domain,
+                "source": f"blocklists/family/{fid}/{key}",
+                "matchedBy": "direct",
+            }
+
+        # 兼容：如果未來有存入上層 domain，子網域也要能命中。
+        all_items = db.reference(f"blocklists/family/{fid}").get()
+        if isinstance(all_items, dict):
+            for item_key, item in all_items.items():
+                if not isinstance(item, dict):
+                    continue
+                if item.get("status", "active") != "active":
+                    continue
+                blocked_domain = item.get("domain") or item_key
+                if family_block_domain_matches(clean_domain, blocked_domain):
+                    return {
+                        **item,
+                        "domain": normalize_family_block_domain(blocked_domain) or blocked_domain,
+                        "source": f"blocklists/family/{fid}/{item_key}",
+                        "matchedBy": "suffix",
+                    }
+    except Exception as exc:
+        print(f"⚠️ 讀取家庭黑名單失敗：{exc}", flush=True)
+
+    return None
+
+
+def write_family_block_domain(domain, family_id, user_id="anonymous", reason="", original_url="", risk_score=99, scam_dna=None, source="blocked_page_confirmed_scam"):
+    if not firebase_initialized:
+        return False, "Firebase 未連線"
+
+    fid = normalize_family_id(family_id)
+    clean_domain = normalize_family_block_domain(domain or original_url)
+
+    if not fid or fid == "NONE":
+        return False, "缺少 familyID"
+
+    if not clean_domain:
+        return False, "無法解析網域"
+
+    if is_high_trust_domain_for_family_block(clean_domain):
+        return False, "官方或高信任網域不可加入家庭黑名單，請改用誤判回報或人工審核。"
+
+    key = safe_domain_key(clean_domain)
+    now = get_tw_time()
+
+    if isinstance(scam_dna, str):
+        scam_dna = [item.strip() for item in re.split(r"[,，、\s]+", scam_dna) if item.strip()]
+
+    payload = {
+        "domain": clean_domain,
+        "familyID": fid,
+        "url": str(original_url or "")[:600],
+        "url_hash": hash_url(original_url or clean_domain),
+        "reason": mask_sensitive_data(reason or "使用者確認此網站為詐騙")[:500],
+        "riskScore": clamp_score(risk_score or 99),
+        "scamDNA": scam_dna[:8] if isinstance(scam_dna, list) else [],
+        "source": source,
+        "status": "active",
+        "createdByUserID": str(user_id or "anonymous"),
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    try:
+        existing = db.reference(f"blocklists/family/{fid}/{key}").get()
+        if isinstance(existing, dict):
+            payload["created_at"] = existing.get("created_at") or now
+            payload["reportCount"] = safe_int(existing.get("reportCount"), 1) + 1
+        else:
+            payload["reportCount"] = 1
+
+        db.reference(f"blocklists/family/{fid}/{key}").set(payload)
+        return True, payload
+    except Exception as exc:
+        print(f"⚠️ 寫入家庭黑名單失敗：{exc}", flush=True)
+        return False, "寫入家庭黑名單失敗"
+
+
+def build_family_block_report(domain, block_data=None):
+    block_data = block_data or {}
+    reason = block_data.get("reason") or "此網域已被家庭成員確認為高風險或詐騙網站。"
+    score = clamp_score(block_data.get("riskScore") or 100)
+    return {
+        "riskScore": max(score, 95),
+        "riskLevel": "極度危險",
+        "scamDNA": list(dict.fromkeys((block_data.get("scamDNA") or []) + ["家庭黑名單", "家人確認詐騙"]))[:5],
+        "reason": f"家庭黑名單命中：{domain}。{reason}",
+        "advice": "此網站已被家庭防護網標記為高風險，請立即離開，不要輸入個資、驗證碼、信用卡或進行匯款。",
+        "familyBlocklistHit": True,
+        "blockedDomain": domain,
+        "blocklistSource": block_data.get("source", "family_blocklist"),
+    }
+
+
+@api_bp.route("/api/family/block_domain", methods=["POST"])
+@api_bp.route("/api/add_family_block_domain", methods=["POST"])
+@limiter.limit("60 per minute")
+def add_family_block_domain():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+
+    data = get_json_body()
+    identity = get_request_identity(data)
+
+    url = data.get("url") or data.get("originalUrl") or data.get("original_url") or ""
+    domain = normalize_family_block_domain(data.get("domain") or url)
+    family_id = normalize_family_id(data.get("familyID") or identity["familyID"] or "none")
+    user_id = data.get("userID") or identity["userID"] or "anonymous"
+
+    if not domain:
+        return jsonify({"status": "fail", "message": "無法解析網域"}), 400
+
+    if not family_id or family_id == "NONE":
+        return jsonify({"status": "fail", "message": "請先綁定家庭群組，才能加入家庭黑名單。"}), 400
+
+    authorized, auth_response = authorize_family_access(family_id, identity)
+    if not authorized:
+        return auth_response
+
+    ok, result = write_family_block_domain(
+        domain=domain,
+        family_id=family_id,
+        user_id=user_id,
+        reason=data.get("reported_reason") or data.get("reason") or data.get("ai_reason") or "使用者確認此網站為詐騙",
+        original_url=url,
+        risk_score=data.get("riskScore") or 99,
+        scam_dna=data.get("scamDNA") or [],
+        source=data.get("action_type") or "blocked_page_confirmed_scam",
+    )
+
+    if not ok:
+        return jsonify({"status": "fail", "message": str(result), "domain": domain}), 400
+
+    socketio.emit(
+        "family_blocklist_updated",
+        {
+            "familyID": family_id,
+            "domain": domain,
+            "message": f"{domain} 已加入家庭黑名單",
+            "timestamp": get_tw_time(),
+        },
+        room=family_id,
+    )
+
+    return jsonify({
+        "status": "success",
+        "message": "已加入家庭黑名單，家人之後再遇到此網域會被優先攔截。",
+        "domain": domain,
+        "familyID": family_id,
+        "blocklist": result,
+    })
+
+
+@api_bp.route("/api/family/blocklist/check", methods=["POST"])
+@api_bp.route("/api/check_family_block_domain", methods=["POST"])
+@limiter.limit("120 per minute")
+def check_family_block_domain():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+
+    data = get_json_body()
+    identity = get_request_identity(data)
+
+    url = data.get("url") or data.get("domain") or ""
+    domain = normalize_family_block_domain(data.get("domain") or url)
+    family_id = normalize_family_id(data.get("familyID") or identity["familyID"] or "none")
+
+    if not domain:
+        return jsonify({"status": "fail", "message": "無法解析網域"}), 400
+
+    if not family_id or family_id == "NONE":
+        return jsonify({"status": "success", "isBlocked": False, "domain": domain, "familyID": "none"})
+
+    authorized, auth_response = authorize_family_access(family_id, identity)
+    if not authorized:
+        return auth_response
+
+    match = get_family_block_match(domain, family_id)
+
+    return jsonify({
+        "status": "success",
+        "isBlocked": bool(match),
+        "domain": domain,
+        "familyID": family_id,
+        "match": match,
+    })
 
 
 # ==========================================

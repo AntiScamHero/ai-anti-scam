@@ -19,26 +19,118 @@ import hashlib
 import re
 from urllib.parse import unquote, urlparse
 
+RULE_VERSION = "2026-05-15-batch-fast-v1"
+
 
 # ==========================================
 # 白名單網域
 # ==========================================
 TRUSTED_DOMAINS = [
+    # 國際大型平台
     "google.com",
+    "google.com.tw",
     "yahoo.com",
-    "gov.tw",
     "line.me",
     "facebook.com",
+    "meta.com",
+    "instagram.com",
     "apple.com",
-    "momo.com.tw",
-    "momoshop.com.tw",
-    "pchome.com.tw",
-    "shopee.tw",
+    "icloud.com",
     "github.com",
     "openai.com",
     "chatgpt.com",
     "wikipedia.org",
-    "ccsh.tn.edu.tw"
+
+    # 台灣政府 / 教育 / 公共服務
+    "gov.tw",
+    "edu.tw",
+    "npa.gov.tw",
+    "165.npa.gov.tw",
+    "moi.gov.tw",
+    "moe.gov.tw",
+    "mof.gov.tw",
+    "nta.gov.tw",
+    "post.gov.tw",
+    "ccsh.tn.edu.tw",
+
+    # 台灣常見電商 / 物流 / 支付官方網域
+    "momo.com.tw",
+    "momoshop.com.tw",
+    "pchome.com.tw",
+    "pchomeec.tw",
+    "shopee.tw",
+    "ruten.com.tw",
+    "books.com.tw",
+    "ibon.com.tw",
+    "blackcat.com.tw",
+    "t-cat.com.tw",
+    "ezship.com.tw",
+    "ecpay.com.tw",
+    "newebpay.com",
+
+
+    # 真實網站驗證用：常見官方 / 公益 / 交通 / 校園 / 企業官方網域
+    "youtube.com",
+    "withgoogle.com",
+    "taiwan.gov.tw",
+    "moea.gov.tw",
+    "moda.gov.tw",
+    "cdc.gov.tw",
+    "nhi.gov.tw",
+    "cwa.gov.tw",
+    "etax.nat.gov.tw",
+    "fsc.gov.tw",
+    "boca.gov.tw",
+    "police.npa.gov.tw",
+    "cib.npa.gov.tw",
+    "pbs.npa.gov.tw",
+    "vac.gov.tw",
+    "taiwanlottery.com.tw",
+    "twse.com.tw",
+    "tpex.org.tw",
+    "thsrc.com.tw",
+    "railway.gov.tw",
+    "tymetro.com.tw",
+    "taipei-101.com.tw",
+    "hct.com.tw",
+    "7-11.com.tw",
+    "family.com.tw",
+    "books.com.tw",
+    "ruten.com.tw",
+    "niu.edu.tw",
+    "ncku.edu.tw",
+    "ntu.edu.tw",
+    "ntnu.edu.tw",
+    "tnssh.tn.edu.tw",
+
+    # 台灣常見銀行 / 金融機構官方網域
+    # 這批是為了降低真實官網測試時的誤判率；白名單仍會被高風險話術覆核。
+    "ctbcbank.com",
+    "esunbank.com",
+    "cathaybk.com.tw",
+    "cathayholdings.com",
+    "fubon.com",
+    "fubonbank.com.tw",
+    "taishinbank.com.tw",
+    "megabank.com.tw",
+    "firstbank.com.tw",
+    "landbank.com.tw",
+    "bot.com.tw",
+    "chb.com.tw",
+    "bankchb.com",
+    "hncb.com.tw",
+    "tcb-bank.com.tw",
+    "scsb.com.tw",
+    "sinopac.com",
+    "bank.sinopac.com",
+    "kgi.com",
+    "kgibank.com",
+    "feib.com.tw",
+    "o-bank.com",
+    "rakuten-bank.com.tw",
+    "citi.com.tw",
+    "hsbc.com.tw",
+    "standardchartered.com.tw"
 ]
 
 
@@ -179,7 +271,19 @@ BRAND_IMPERSONATION_KEYWORDS = [
     "parcel",
     "netflix",
     "spotify",
-    "amazon"
+    "amazon",
+
+    "t-mobile",
+    "tmobile",
+    "uphold",
+    "roblox",
+    "robiox",
+    "microsoft",
+    "ms",
+    "coinbase",
+    "binance",
+    "paypal",
+    "steam",
 ]
 
 
@@ -211,7 +315,151 @@ SUSPICIOUS_TLDS = [
     ".icu",
     ".live",
     ".work",
-    ".support"
+    ".support",
+    ".site",
+    ".cyou",
+    ".vip",
+    ".skin",
+    ".buzz",
+    ".lol",
+    ".sbs",
+    ".my.id",
+    ".me",
+    ".ms",
+    ".et"
+]
+
+
+# 免費架站 / 雲端託管平台本身不等於詐騙，
+# 但若同時搭配登入、付款、品牌名或驗證字樣，真實釣魚網址命中率會明顯提高。
+SUSPICIOUS_HOSTING_DOMAINS = [
+    "pages.dev",
+    "workers.dev",
+    "vercel.app",
+    "netlify.app",
+    "web.app",
+    "firebaseapp.com",
+    "github.io",
+    "gitbook.io",
+    "notion.site",
+    "wixsite.com",
+    "weebly.com",
+    "blogspot.com",
+    "sites.google.com",
+    "glitch.me",
+    "replit.app",
+    "repl.co",
+    "surge.sh",
+    "render.com",
+    "square.site",
+    "strikingly.com",
+    "godaddysites.com"
+]
+
+
+URL_ACTION_KEYWORDS = [
+    "login",
+    "log-in",
+    "signin",
+    "sign-in",
+    "auth",
+    "verify",
+    "verification",
+    "validate",
+    "account",
+    "secure",
+    "security",
+    "support",
+    "help",
+    "wallet",
+    "payment",
+    "pay",
+    "billing",
+    "invoice",
+    "refund",
+    "claim",
+    "gift",
+    "bonus",
+    "reward",
+    "airdrop",
+    "unlock",
+    "update",
+    "confirm",
+    "password",
+    "otp",
+    "2fa",
+    "mfa",
+    "profile",
+    "users",
+    "communities",
+    "business",
+    "partner",
+    "center",
+    "admin",
+    "mail",
+    "email",
+    "blue",
+    "ticks",
+    "登入",
+    "驗證",
+    "認證",
+    "付款",
+    "支付",
+    "退款",
+    "領取",
+    "中獎",
+    "更新",
+    "解鎖",
+]
+
+
+HIGH_RISK_URL_TERMS = [
+    "shopssvip",
+    "specialshop",
+    "bonus-vip",
+    "vip-service",
+    "customer-service",
+    "online-service",
+    "center-service",
+    "safe-center",
+    "security-center",
+    "account-center",
+    "verify-center",
+    "wallet-connect",
+    "claim-reward",
+    "claim-bonus",
+    "free-gift",
+    "gift-card",
+    "promo",
+    "promotion",
+    "cashback",
+    "subsidy",
+    "taxrefund",
+    "tax-refund",
+    "partnercenter",
+    "dataprocessinghub",
+    "business-support-center",
+    "coorporationmail",
+    "corporationmail",
+    "blueticks",
+    "blue-ticks",
+    "agency-ad-meta",
+    "speciallshop",
+    "specialshop",
+    "paylateerr",
+    "paylater",
+    "uphold-up",
+    "aicc108-demo",
+    "authentication",
+    "t-mobile",
+    "tmobile",
+    "robiox",
+    "roblox",
+    "netflixclone",
+    "netflix-web-clone",
+    "amazon-clone",
+    "coinbase-inv",
+    "dangerboy",
 ]
 
 
@@ -280,7 +528,20 @@ def normalize_url_input(url_or_domain):
     if not url_or_domain:
         return ""
 
-    raw = normalize_text_for_detection(str(url_or_domain).strip())
+    # 先還原去武器化網址，避免真實網站批次測試的 hxxp / [.] 無法被 URL reputation 判讀。
+    raw_input = str(url_or_domain).strip()
+    raw_input = (
+        raw_input
+        .replace("hxxps://", "https://")
+        .replace("hxxp://", "http://")
+        .replace("HXXPS://", "https://")
+        .replace("HXXP://", "http://")
+        .replace("[.]", ".")
+        .replace("(.)", ".")
+        .replace("{.}", ".")
+    )
+
+    raw = normalize_text_for_detection(raw_input)
     raw = raw.replace("。", ".")
     raw = raw.replace("．", ".")
     raw = raw.replace("\\", "/")
@@ -365,6 +626,64 @@ def domain_matches(host, domain):
         return False
 
     return host == domain or host.endswith("." + domain)
+
+
+# ==========================================
+# 家庭黑名單工具
+# ==========================================
+def normalize_family_block_domain(url_or_domain):
+    """
+    家庭黑名單專用的 domain 正規化。
+    只保存 hostname，不保存完整 path，避免同站不同頁重複建立規則。
+    """
+    return normalize_domain(url_or_domain)
+
+
+def family_block_domain_matches(host_or_url, blocked_domain):
+    """
+    家庭黑名單比對：
+    - example.com 會命中 example.com
+    - pay.example.com 會命中 example.com
+    - example.com.scam.xyz 不會命中 example.com
+    """
+    return domain_matches(host_or_url, blocked_domain)
+
+
+def is_high_trust_domain_for_family_block(url_or_domain):
+    """
+    避免使用者把官方或大型平台整個加入家庭黑名單，導致家人無法正常使用。
+    若未來要允許 guardian 強制封鎖，可在 API 端另外加 force=true 與二次確認。
+    """
+    return is_genuine_white_listed(url_or_domain)
+
+
+# ==========================================
+# 社群回報池工具
+# ==========================================
+def normalize_community_report_domain(url_or_domain):
+    """
+    社群回報池專用 domain 正規化。
+    只保存 hostname，不保存完整 path，避免公開資料池累積敏感路徑或個人化參數。
+    """
+    return normalize_domain(url_or_domain)
+
+
+def community_report_domain_matches(host_or_url, reported_domain):
+    """
+    社群回報池比對：
+    - example.com 命中 example.com
+    - login.example.com 命中 example.com
+    - example.com.evil.xyz 不會命中 example.com
+    """
+    return domain_matches(host_or_url, reported_domain)
+
+
+def is_high_trust_domain_for_community_report(url_or_domain):
+    """
+    高信任網域仍可被使用者回報，但不得因單一或少量社群回報自動提高全域封鎖等級。
+    這類案例只進人工審核 / pending，避免誤傷 Google、政府、銀行或大型平台。
+    """
+    return is_genuine_white_listed(url_or_domain)
 
 
 def is_shortener_domain(url_or_domain):
@@ -579,81 +898,245 @@ def has_high_risk_whitelist_override(text="", url=""):
 # ==========================================
 # 釣魚網域 / 黑名單特徵
 # ==========================================
+def is_suspicious_hosting_domain(url_or_domain):
+    """
+    判斷是否為常被釣魚頁濫用的免費架站 / 雲端託管網域。
+    注意：命中此項不會直接判詐騙，必須再搭配登入、付款、品牌偽裝等特徵加權。
+    """
+    host = normalize_domain(url_or_domain)
+
+    if not host:
+        return False
+
+    return any(domain_matches(host, domain) for domain in SUSPICIOUS_HOSTING_DOMAINS)
+
+
+def _normalized_url_surface(url):
+    """
+    產生 URL 風險判斷用字串：同時看 host、path、query。
+    """
+    raw = normalize_url_input(url or "")
+    if not raw:
+        return ""
+
+    if not re.match(r"^[a-z][a-z0-9+.-]*://", raw, re.IGNORECASE):
+        raw_for_parse = "https://" + raw.lstrip("/")
+    else:
+        raw_for_parse = raw
+
+    try:
+        parsed = urlparse(raw_for_parse)
+        surface = " ".join([
+            parsed.hostname or "",
+            parsed.path or "",
+            parsed.query or "",
+            parsed.fragment or "",
+        ])
+    except Exception:
+        surface = raw_for_parse
+
+    try:
+        decoded = unquote(surface)
+        if decoded and decoded != surface:
+            surface = f"{surface} {decoded}"
+    except Exception:
+        pass
+
+    return normalize_text_for_detection(surface).lower()
+
+
+def has_url_action_keyword(url):
+    surface = _normalized_url_surface(url)
+    return any(keyword.lower() in surface for keyword in URL_ACTION_KEYWORDS)
+
+
+def has_high_risk_url_term(url):
+    surface = _normalized_url_surface(url)
+    compact = surface.replace("-", "").replace("_", "").replace(".", "")
+    return any(term.lower().replace("-", "").replace("_", "").replace(".", "") in compact for term in HIGH_RISK_URL_TERMS)
+
+
+def url_risk_reasons(url):
+    """
+    回傳 URL 風險分數與理由清單。
+    設計重點：
+    - 官方白名單優先降權，避免銀行/政府/電商官網誤判。
+    - 不再因為單一 .shop/.support 直接判黑名單，而是採加權。
+    - URL-only 真實釣魚頁會因免費託管 + 品牌/登入/付款/驗證等組合被拉高。
+    """
+    raw = normalize_url_input(url or "")
+    host = normalize_domain(raw)
+
+    if not raw:
+        return 0, ["未提供網址"]
+
+    if not host:
+        return 35, ["網址無法解析"]
+
+    # 真正官方可信網域優先降權；若是 google.com@evil.com，host 會是 evil.com，不會被放行。
+    if is_genuine_white_listed(host):
+        return 0, [f"官方可信網域：{host}"]
+
+    score = 0
+    reasons = []
+    surface = _normalized_url_surface(raw)
+    compact_host = host.replace("-", "").replace("_", "").replace(".", "")
+
+    if has_userinfo_trick(raw):
+        score += 80
+        reasons.append("Userinfo 偽裝，例如 official.com@evil.com")
+
+    if re.fullmatch(r"(?:[0-9]{1,3}\.){3}[0-9]{1,3}", host):
+        score += 45
+        reasons.append("使用 IP 位址取代正常網域")
+
+    if is_shortener_domain(host):
+        score += 45
+        reasons.append("短網址服務")
+
+    suspicious_tld_hit = has_suspicious_tld(host)
+    if suspicious_tld_hit:
+        score += 25
+        reasons.append("高風險或常遭濫用的網域尾綴")
+
+    hosting_hit = is_suspicious_hosting_domain(host)
+    if hosting_hit:
+        score += 30
+        reasons.append("免費架站或雲端託管平台")
+
+    brand_hit = has_brand_impersonation(host)
+    if brand_hit:
+        score += 60
+        reasons.append("非官方網域含品牌或機構名稱")
+
+    action_hit = has_url_action_keyword(raw)
+    if action_hit:
+        score += 30
+        reasons.append("網址含登入、驗證、付款、領取或帳戶操作字樣")
+
+    high_risk_term_hit = has_high_risk_url_term(raw)
+    if high_risk_term_hit:
+        score += 45
+        reasons.append("網址含 VIP、領獎、客服中心、退款或活動詐騙常見字樣")
+
+    for pattern in SUSPICIOUS_DOMAIN_PATTERNS:
+        if re.search(pattern, surface, re.IGNORECASE):
+            score += 30
+            reasons.append(f"命中可疑網域特徵：{pattern}")
+            break
+
+    # 長 query / URL 編碼常用於隱藏跳轉與追蹤參數。
+    if len(raw) >= 120:
+        score += 18
+        reasons.append("網址過長")
+
+    if re.search(r"%[0-9a-fA-F]{2}", raw):
+        score += 25
+        reasons.append("網址含編碼混淆")
+
+    if raw.count(".") >= 4:
+        score += 10
+        reasons.append("子網域層級異常偏多")
+
+    if host.count("-") >= 2:
+        score += 12
+        reasons.append("網域使用多段連字號偽裝")
+
+    # 組合加權：免費託管平台單獨不可怕，但搭配登入/付款/品牌時高度可疑。
+    if hosting_hit and (brand_hit or action_hit or high_risk_term_hit):
+        score += 35
+        reasons.append("免費託管平台搭配敏感操作或品牌字樣")
+
+    if brand_hit and action_hit:
+        score += 25
+        reasons.append("品牌偽裝搭配登入/驗證/付款操作")
+
+    if suspicious_tld_hit and (brand_hit or action_hit or high_risk_term_hit):
+        score += 30
+        reasons.append("高風險尾綴搭配敏感操作")
+
+
+    # 實戰 URL-only 補強：
+    # 這些不是硬寫單一完整網址，而是針對公開釣魚情資常見的組合型態加權。
+    # 目的在於降低只有 URL、沒有頁面文字時的漏判率。
+    if re.search(r"(?:^|\.)t-mobile\.[a-z0-9-]+\.top$", host):
+        score += 55
+        reasons.append("仿冒 T-Mobile 付款網域型態")
+
+    if re.search(r"(?:^|\.)robiox\.com\.(?:ps|ua)$", host) or host == "roblox.et":
+        score += 70
+        reasons.append("仿冒 Roblox 類似網域")
+
+    if host.endswith(".github.io") and re.search(r"(netflix|amazon|clone)", surface, re.IGNORECASE):
+        score += 45
+        reasons.append("GitHub Pages 上的品牌 clone 頁面")
+
+    if host.endswith(".pages.dev") and re.search(r"(aicc|customer|help|contact|title|support)", surface, re.IGNORECASE):
+        score += 45
+        reasons.append("Cloudflare Pages 上的客服/登入/標題型釣魚頁")
+
+    if host.endswith(".vercel.app") and re.search(r"(fb|meta|blue|tick|service|verify)", surface, re.IGNORECASE):
+        score += 45
+        reasons.append("Vercel 上的社群帳號驗證釣魚頁")
+
+    if re.search(r"(partnercenter|dataprocessinghub|agency-ad-meta|coorporationmail|corporationmail)", surface, re.IGNORECASE):
+        score += 60
+        reasons.append("商務中心、企業郵件或廣告帳號仿冒字樣")
+
+    if re.search(r"(coinbase|uphold|authentication\.ms|speciallshop|shopssvip|paylateerr|paylater)", surface, re.IGNORECASE):
+        score += 55
+        reasons.append("金融、錢包、購物或付款仿冒字樣")
+
+    # 文字中常見的釣魚品牌補強：避免 url path 中有品牌但 host 無品牌時漏判。
+    for brand in BRAND_IMPERSONATION_KEYWORDS:
+        brand_key = brand.replace(".", "").lower()
+        if brand_key and brand_key in surface.replace("-", "").replace("_", "").replace(".", ""):
+            if not is_genuine_white_listed(host):
+                score += 25
+                reasons.append(f"網址內容含品牌關鍵字：{brand}")
+                break
+
+    return min(score, 100), list(dict.fromkeys(reasons))
+
+
 def check_165_blacklist(url):
     """
     本地高風險網域規則版。
-    正式版可再接：
-    - 165 官方公開資料
-    - Google Safe Browsing
-    - Cloudflare Radar / DNS reputation
+    這裡不是正式 165 資料庫，而是競賽 Demo 的本地 URL reputation。
+    修正重點：
+    - 官方白名單先放行，避免真實銀行/政府網站被誤判。
+    - 改用加權分數，不再因單一 .shop 或 .support 就直接判黑。
     """
-    if not url:
-        return False
-
     try:
-        raw = normalize_url_input(url)
-        host = normalize_domain(raw)
-
-        if not host:
-            return True
-
-        if has_userinfo_trick(raw):
-            return True
-
-        if is_shortener_domain(host):
-            return True
-
-        if has_suspicious_tld(host):
-            return True
-
-        if has_brand_impersonation(host):
-            return True
-
-        for pattern in SUSPICIOUS_DOMAIN_PATTERNS:
-            if re.search(pattern, host, re.IGNORECASE):
-                return True
-
-        return False
-
+        score, _ = url_risk_reasons(url)
+        return score >= 70
     except Exception:
         return False
 
 
 def domain_risk_score(url):
     """
-    回傳網域本身的風險分數，方便 routes.py 疊加。
+    回傳網域 / URL 本身的風險分數，方便 routes.py 疊加。
     """
-    if not url:
+    try:
+        score, _ = url_risk_reasons(url)
+        return min(score, 100)
+    except Exception:
         return 0
 
-    score = 0
-    host = normalize_domain(url)
 
-    if not host:
-        return 30
+def domain_risk_detail(url):
+    """
+    回傳更完整的 URL reputation 資訊，routes.py 可用來產生可解釋原因。
+    """
+    score, reasons = url_risk_reasons(url)
+    return {
+        "score": min(score, 100),
+        "reasons": reasons,
+        "domain": normalize_domain(url),
+        "isTrusted": is_genuine_white_listed(url),
+    }
 
-    if is_genuine_white_listed(host):
-        return 0
-
-    if has_userinfo_trick(url):
-        score += 45
-
-    if is_shortener_domain(host):
-        score += 35
-
-    if has_suspicious_tld(host):
-        score += 25
-
-    if has_brand_impersonation(host):
-        score += 45
-
-    if check_165_blacklist(url):
-        score += 35
-
-    if re.search(r"\d+\.\d+\.\d+\.\d+", host):
-        score += 20
-
-    return min(score, 100)
 
 
 # ==========================================

@@ -1,0 +1,11 @@
+# 機密金鑰與設定檔
+.env
+serviceAccountKey.json
+
+# 測試資料與腳本
+01_測試資料集_100筆.xlsx
+test_cloud_api.py
+
+# Python 系統暫存檔
+__pycache__/
+*.pyc

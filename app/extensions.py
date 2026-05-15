@@ -136,7 +136,7 @@ socketio = SocketIO(
 # ==========================================
 firebase_initialized = False
 
-KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "serviceAccountKey.json")
+KEY_PATH = os.getenv("FIREBASE_KEY_PATH", "config/serviceAccountKey.json")
 
 # development / competition 可沿用原 Demo 資料庫網址；production 必須從環境變數設定，避免正式版硬寫專案資源。
 DEFAULT_DEMO_DATABASE_URL = "https://antifraud-ai-94d72-default-rtdb.asia-southeast1.firebasedatabase.app"
