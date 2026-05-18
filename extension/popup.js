@@ -344,11 +344,283 @@ async function getApiHeaders() {
     return headers;
 }
 
+
+// ==========================================
+// 家庭邀請 QR Code / LINE 分享
+// ==========================================
+function normalizeFamilyCode(code) {
+    const value = String(code || "").trim().toUpperCase().replace(/^AISHIELD:/, "").replace(/^FAM-/, "");
+    return /^[A-Z0-9]{6}$/.test(value) ? value : "";
+}
+
+function buildInviteText(familyID = currentFamilyID) {
+    const code = normalizeFamilyCode(familyID);
+    return code ? `aishield:${code}` : "";
+}
+
+function drawFinder(matrix, x, y) {
+    for (let dy = -1; dy <= 7; dy++) {
+        for (let dx = -1; dx <= 7; dx++) {
+            const xx = x + dx;
+            const yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= 21 || yy >= 21) continue;
+            const inOuter = dx >= 0 && dx <= 6 && dy >= 0 && dy <= 6;
+            const inInner = dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4;
+            const onBorder = dx === 0 || dx === 6 || dy === 0 || dy === 6;
+            matrix[yy][xx] = inOuter && (onBorder || inInner);
+        }
+    }
+}
+
+function gfMul(a, b) {
+    let result = 0;
+    while (b > 0) {
+        if (b & 1) result ^= a;
+        a <<= 1;
+        if (a & 0x100) a ^= 0x11D;
+        b >>= 1;
+    }
+    return result & 0xFF;
+}
+
+function gfPow2(exp) {
+    let value = 1;
+    for (let i = 0; i < exp; i++) value = gfMul(value, 2);
+    return value;
+}
+
+function rsGenerator(degree) {
+    let poly = [1];
+    for (let i = 0; i < degree; i++) {
+        const next = new Array(poly.length + 1).fill(0);
+        const root = gfPow2(i);
+        for (let j = 0; j < poly.length; j++) {
+            next[j] ^= gfMul(poly[j], root);
+            next[j + 1] ^= poly[j];
+        }
+        poly = next;
+    }
+    return poly;
+}
+
+function rsRemainder(data, degree) {
+    const gen = rsGenerator(degree);
+    const result = new Array(degree).fill(0);
+    data.forEach(byte => {
+        const factor = byte ^ result[0];
+        result.shift();
+        result.push(0);
+        for (let i = 0; i < degree; i++) {
+            result[i] ^= gfMul(gen[i + 1], factor);
+        }
+    });
+    return result;
+}
+
+function appendBits(bits, value, length) {
+    for (let i = length - 1; i >= 0; i--) bits.push((value >>> i) & 1);
+}
+
+function makeQrMatrixV1L(text) {
+    const bytes = Array.from(new TextEncoder().encode(String(text || "")));
+    if (bytes.length > 17) throw new Error("QR 資料過長");
+
+    const dataBits = [];
+    appendBits(dataBits, 0b0100, 4); // byte mode
+    appendBits(dataBits, bytes.length, 8);
+    bytes.forEach(byte => appendBits(dataBits, byte, 8));
+    appendBits(dataBits, 0, Math.min(4, 152 - dataBits.length));
+    while (dataBits.length % 8 !== 0) dataBits.push(0);
+
+    const dataCodewords = [];
+    for (let i = 0; i < dataBits.length; i += 8) {
+        let value = 0;
+        for (let j = 0; j < 8; j++) value = (value << 1) | dataBits[i + j];
+        dataCodewords.push(value);
+    }
+    for (let pad = 0; dataCodewords.length < 19; pad++) {
+        dataCodewords.push(pad % 2 === 0 ? 0xEC : 0x11);
+    }
+
+    const ecc = rsRemainder(dataCodewords, 7);
+    const codewords = dataCodewords.concat(ecc);
+    const bits = [];
+    codewords.forEach(byte => appendBits(bits, byte, 8));
+
+    const size = 21;
+    const matrix = Array.from({ length: size }, () => Array(size).fill(null));
+
+    drawFinder(matrix, 0, 0);
+    drawFinder(matrix, 14, 0);
+    drawFinder(matrix, 0, 14);
+
+    for (let i = 8; i < 13; i++) {
+        matrix[6][i] = i % 2 === 0;
+        matrix[i][6] = i % 2 === 0;
+    }
+
+    matrix[13][8] = true; // dark module
+
+    // Reserve format information cells.
+    const reserve = [[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],[7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]];
+    for (let i = 0; i < 8; i++) reserve.push([20 - i, 8]);
+    for (let i = 8; i < 15; i++) reserve.push([8, 6 + i]);
+    reserve.forEach(([x, y]) => { if (matrix[y] && matrix[y][x] === null) matrix[y][x] = false; });
+
+    let bitIndex = 0;
+    let upward = true;
+    for (let right = size - 1; right >= 1; right -= 2) {
+        if (right === 6) right--;
+        for (let vert = 0; vert < size; vert++) {
+            const y = upward ? size - 1 - vert : vert;
+            for (let x = right; x >= right - 1; x--) {
+                if (matrix[y][x] !== null) continue;
+                let bit = bitIndex < bits.length ? bits[bitIndex] === 1 : false;
+                bitIndex += 1;
+                if ((x + y) % 2 === 0) bit = !bit; // mask 0
+                matrix[y][x] = bit;
+            }
+        }
+        upward = !upward;
+    }
+
+    const format = 0b111011111000100; // ECC L, mask 0
+    function fbit(i) { return ((format >>> i) & 1) === 1; }
+
+    for (let i = 0; i <= 5; i++) matrix[8][i] = fbit(i);
+    matrix[8][7] = fbit(6);
+    matrix[8][8] = fbit(7);
+    matrix[7][8] = fbit(8);
+    for (let i = 9; i < 15; i++) matrix[14 - i][8] = fbit(i);
+
+    for (let i = 0; i < 8; i++) matrix[size - 1 - i][8] = fbit(i);
+    for (let i = 8; i < 15; i++) matrix[8][size - 15 + i] = fbit(i);
+
+    return matrix;
+}
+
+function renderFamilyQRCode(familyID = currentFamilyID) {
+    const code = normalizeFamilyCode(familyID);
+    const box = document.getElementById("family_qr_box");
+    const canvas = document.getElementById("family_qr_canvas");
+    const textEl = document.getElementById("family_qr_text");
+
+    if (!box || !canvas || !textEl) return;
+
+    if (!code) {
+        box.style.display = "none";
+        textEl.textContent = "";
+        return;
+    }
+
+    const inviteText = buildInviteText(code);
+    const size = 21;
+    const scale = Math.floor(canvas.width / (size + 8));
+    const offset = Math.floor((canvas.width - size * scale) / 2);
+
+    try {
+        const matrix = makeQrMatrixV1L(inviteText);
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#111827";
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (matrix[y][x]) {
+                    ctx.fillRect(offset + x * scale, offset + y * scale, scale, scale);
+                }
+            }
+        }
+
+        box.style.display = "block";
+        textEl.textContent = `掃描內容：${inviteText}`;
+    } catch (error) {
+        console.warn("家庭邀請 QR Code 產生失敗：", error);
+        box.style.display = "block";
+        textEl.textContent = `QR Code 暫時無法產生，請改用邀請碼：${inviteText}`;
+    }
+}
+
+function resetFamilyQRCodeUI() {
+    const box = document.getElementById("family_qr_box");
+    const textEl = document.getElementById("family_qr_text");
+    const btnToggleQR = document.getElementById("btn_toggle_qr");
+
+    if (box) box.style.display = "none";
+    if (textEl) textEl.textContent = "";
+    if (btnToggleQR) btnToggleQR.textContent = "顯示 QR Code 給家人掃";
+}
+
+function updateFamilyQRCodeToggleVisibility() {
+    const btnToggleQR = document.getElementById("btn_toggle_qr");
+    if (!btnToggleQR) return;
+
+    const hasFamily = normalizeFamilyCode(currentFamilyID) !== "";
+    btnToggleQR.style.display = hasFamily ? "block" : "none";
+
+    if (!hasFamily) {
+        resetFamilyQRCodeUI();
+    }
+}
+
+function toggleFamilyQRCode() {
+    const code = normalizeFamilyCode(currentFamilyID);
+    const box = document.getElementById("family_qr_box");
+    const btnToggleQR = document.getElementById("btn_toggle_qr");
+
+    if (!code) {
+        showToast("目前尚未建立或綁定家庭群組。", "error");
+        return;
+    }
+
+    if (!box) return;
+
+    const isOpen = box.style.display !== "none" && box.style.display !== "";
+
+    if (isOpen) {
+        resetFamilyQRCodeUI();
+        return;
+    }
+
+    renderFamilyQRCode(code);
+
+    if (btnToggleQR) {
+        btnToggleQR.textContent = "收起 QR Code";
+    }
+}
+
+async function shareInviteToLine() {
+    const inviteText = buildInviteText(currentFamilyID);
+    if (!inviteText) {
+        showToast("目前尚未建立或綁定家庭群組。", "error");
+        return;
+    }
+
+    const message = `AI防詐盾牌家庭守護邀請碼：${inviteText}\n請打開 AI 防詐盾牌，貼上或掃描這組代碼加入家庭守護。`;
+
+    try {
+        await navigator.clipboard.writeText(inviteText);
+    } catch (e) {
+        console.warn("邀請碼複製失敗，仍嘗試開啟 LINE 分享。", e);
+    }
+
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(message)}`;
+    try {
+        await chrome.tabs.create({ url: lineUrl });
+        showToast("已開啟 LINE 分享；QR Code 也已顯示在 Popup。", "success");
+    } catch (e) {
+        window.open(lineUrl, "_blank");
+        showToast("已複製邀請碼，請貼到 LINE 傳給家人。", "success");
+    }
+}
+
 // ==========================================
 // UI 狀態
 // ==========================================
 function updateUIAsBound(familyID) {
-    currentFamilyID = familyID || "none";
+    const normalizedFamilyID = normalizeFamilyCode(familyID);
+    currentFamilyID = normalizedFamilyID || "none";
 
     const statusText = currentFamilyID !== "none"
         ? `狀態：已綁定家庭群組 ${currentFamilyID}`
@@ -357,15 +629,39 @@ function updateUIAsBound(familyID) {
     setTextById("family-status", statusText);
     setTextById("bind-status", statusText);
 
+    const familyCodeDisplay = document.getElementById("family-code-display");
+    if (familyCodeDisplay) {
+        familyCodeDisplay.style.display = currentFamilyID !== "none" ? "block" : "none";
+    }
+
     const displayCode = document.getElementById("display_code");
-    if (displayCode && currentFamilyID !== "none") {
-        displayCode.textContent = currentFamilyID;
+    if (displayCode) {
+        displayCode.textContent = currentFamilyID !== "none" ? currentFamilyID : "------";
     }
 
     const inviteInput = document.getElementById("invite_input");
     if (inviteInput && currentFamilyID !== "none") {
         inviteInput.value = currentFamilyID;
     }
+
+    try {
+        if (currentFamilyID !== "none") {
+            localStorage.setItem("savedFamilyID", currentFamilyID);
+            localStorage.setItem("familyID", currentFamilyID);
+            localStorage.setItem("aiShieldPrimaryFamilyID", currentFamilyID); // 更新主鍵
+
+            if (typeof chrome !== "undefined" && chrome.storage?.local) {
+                chrome.storage.local.set({
+                    familyID: currentFamilyID,
+                    savedFamilyID: currentFamilyID,
+                    aiShieldPrimaryFamilyID: currentFamilyID // 更新主鍵
+                });
+            }
+        }
+    } catch (e) {}
+
+    resetFamilyQRCodeUI();
+    updateFamilyQRCodeToggleVisibility();
 }
 
 function setLoading(isLoading) {
@@ -825,6 +1121,40 @@ function getSearchQueryText(urlString = "") {
     }
 }
 
+function isRestrictedBrowserOrExtensionPage(urlString = "") {
+    const value = String(urlString || "").trim().toLowerCase();
+
+    if (!value) return true;
+
+    return (
+        value.startsWith("chrome://") ||
+        value.startsWith("chrome-extension://") ||
+        value.startsWith("edge://") ||
+        value.startsWith("about:") ||
+        value.startsWith("devtools://") ||
+        value.startsWith("view-source:chrome://") ||
+        value.startsWith("view-source:chrome-extension://")
+    );
+}
+
+function buildRestrictedPageReport(urlString = "") {
+    const value = String(urlString || "").toLowerCase();
+    const pageType = value.startsWith("chrome-extension://")
+        ? "AI 防詐盾牌擴充功能內部頁面"
+        : "瀏覽器內部頁面";
+
+    return {
+        riskScore: 0,
+        score: 0,
+        riskLevel: "安全無虞",
+        scamDNA: ["內部系統頁面放行"],
+        reason: `${pageType} 受到 Chrome 安全機制保護，擴充功能不能也不需要讀取此頁文字，因此已直接放行。`,
+        advice: "這不是一般網頁，不會進行防詐掃描；請切到外部網站後再按掃描目前頁面。",
+        restrictedPageHardPass: true,
+        references: []
+    };
+}
+
 function isInvestmentSearchQuery(urlString = "") {
     const query = getSearchQueryText(urlString);
     return /投資|股票|飆股|理財|基金|etf|虛擬貨幣|usdt|btc|crypto|加密貨幣/i.test(query);
@@ -947,6 +1277,14 @@ async function scanCurrentPage() {
             throw new Error("無法取得目前分頁。");
         }
 
+        // Chrome / Edge / 擴充功能內部頁面不能注入腳本讀文字。
+        // 先直接放行，避免 chrome.scripting.executeScript 觸發開發者錯誤：
+        // Cannot access contents of url "chrome-extension://..."。
+        if (isRestrictedBrowserOrExtensionPage(tab.url)) {
+            renderScanResult(buildRestrictedPageReport(tab.url));
+            return;
+        }
+
         // 搜尋結果頁硬放行：不送雲端、不啟動高風險倒數，避免查資料被攔截。
         if (isTrustedSearchResultPage(tab.url)) {
             renderScanResult(buildTrustedSearchPageReport(tab.url));
@@ -991,6 +1329,12 @@ async function scanCurrentPage() {
 
         try {
             if (!tab) tab = await getActiveTab();
+
+            if (isRestrictedBrowserOrExtensionPage(tab?.url || "")) {
+                renderScanResult(buildRestrictedPageReport(tab?.url || ""));
+                return;
+            }
+
             if (!maskedText && tab?.id) {
                 const rawText = await getCurrentPageText(tab.id);
                 maskedText = maskSensitiveData(rawText);
@@ -1057,15 +1401,23 @@ async function createFamily() {
             throw new Error(data.message || "建立家庭群組失敗");
         }
 
-        currentFamilyID = data.inviteCode || data.familyID || "none";
+        currentFamilyID = normalizeFamilyCode(data.inviteCode || data.familyID) || "none";
 
         const tokenKey = getAccessTokenStorageKey();
 
         await chrome.storage.local.set({
             familyID: currentFamilyID,
+            savedFamilyID: currentFamilyID,
+            aiShieldPrimaryFamilyID: currentFamilyID, // 更新主鍵
             [tokenKey]: data.accessToken || auth.accessToken || "",
             aiShieldTokenExpiresAt: data.expiresAt || 0
         });
+
+        try {
+            localStorage.setItem("familyID", currentFamilyID);
+            localStorage.setItem("savedFamilyID", currentFamilyID);
+            localStorage.setItem("aiShieldPrimaryFamilyID", currentFamilyID); // 更新主鍵
+        } catch (e) {}
 
         updateUIAsBound(currentFamilyID);
         startFamilyAlertsPolling(currentFamilyID);
@@ -1116,15 +1468,23 @@ async function joinFamily() {
             throw new Error(data.message || "加入家庭群組失敗");
         }
 
-        currentFamilyID = code;
+        currentFamilyID = normalizeFamilyCode(code) || "none";
 
         const tokenKey = getAccessTokenStorageKey();
 
         await chrome.storage.local.set({
             familyID: currentFamilyID,
+            savedFamilyID: currentFamilyID,
+            aiShieldPrimaryFamilyID: currentFamilyID, // 更新主鍵
             [tokenKey]: data.accessToken || auth.accessToken || "",
             aiShieldTokenExpiresAt: data.expiresAt || 0
         });
+
+        try {
+            localStorage.setItem("familyID", currentFamilyID);
+            localStorage.setItem("savedFamilyID", currentFamilyID);
+            localStorage.setItem("aiShieldPrimaryFamilyID", currentFamilyID); // 更新主鍵
+        } catch (e) {}
 
         updateUIAsBound(currentFamilyID);
         startFamilyAlertsPolling(currentFamilyID);
@@ -1294,16 +1654,16 @@ function openDashboard() {
 }
 
 function copyInviteCode() {
-    if (!currentFamilyID || currentFamilyID === "none") {
+    const text = buildInviteText(currentFamilyID);
+
+    if (!text) {
         showToast("目前尚未建立或綁定家庭群組。", "error");
         return;
     }
 
-    const text = `aishield:${currentFamilyID}`;
-
     navigator.clipboard.writeText(text)
         .then(() => {
-            showToast(`已複製邀請碼：${text}`, "success");
+            showToast(`已複製邀請碼：${text}，可貼到 LINE 傳給家人。`, "success");
         })
         .catch(() => {
             showToast(`邀請碼：${text}`, "info");
@@ -1371,6 +1731,10 @@ function bindEvents() {
     const btnReportPage = document.getElementById("btn_report_page");
     const inviteInput = document.getElementById("invite_input");
     const codeBox = document.getElementById("code_box");
+    const displayCode = document.getElementById("display_code");
+    const btnCopyInvite = document.getElementById("btn_copy_invite");
+    const btnShareLine = document.getElementById("btn_share_line");
+    const btnToggleQR = document.getElementById("btn_toggle_qr");
 
     if (scanBtn) {
         scanBtn.addEventListener("click", scanCurrentPage);
@@ -1414,6 +1778,22 @@ function bindEvents() {
     if (codeBox) {
         codeBox.addEventListener("click", copyInviteCode);
     }
+
+    if (displayCode) {
+        displayCode.addEventListener("click", copyInviteCode);
+    }
+
+    if (btnCopyInvite) {
+        btnCopyInvite.addEventListener("click", copyInviteCode);
+    }
+
+    if (btnShareLine) {
+        btnShareLine.addEventListener("click", shareInviteToLine);
+    }
+
+    if (btnToggleQR) {
+        btnToggleQR.addEventListener("click", toggleFamilyQRCode);
+    }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -1428,7 +1808,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const storage = await chrome.storage.local.get(["userID", "familyID"]);
 
     currentUserID = storage.userID || currentUserID || "anonymous";
-    currentFamilyID = storage.familyID || currentFamilyID || "none";
+    currentFamilyID = normalizeFamilyCode(storage.familyID) || currentFamilyID || "none";
 
     updateUIAsBound(currentFamilyID);
 

@@ -444,6 +444,54 @@ document.addEventListener('DOMContentLoaded', async () => {
         return Boolean(getConfigValue('REQUIRE_AUTH_TOKEN', true));
     }
 
+    function hasChromeRuntimeMessaging() {
+        return typeof chrome !== 'undefined' &&
+            chrome.runtime &&
+            typeof chrome.runtime.sendMessage === 'function';
+    }
+
+    function sendRuntimeMessage(message) {
+        return new Promise((resolve, reject) => {
+            if (!hasChromeRuntimeMessaging()) {
+                reject(new Error('chrome.runtime messaging is unavailable'));
+                return;
+            }
+
+            chrome.runtime.sendMessage(message, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || 'chrome.runtime.sendMessage failed'));
+                    return;
+                }
+                resolve(response || {});
+            });
+        });
+    }
+
+    function createJsonResponse(ok, status, data) {
+        return {
+            ok,
+            status,
+            async json() {
+                return data || {};
+            }
+        };
+    }
+
+    async function apiFetch(path, body) {
+        const response = await sendRuntimeMessage({
+            action: 'blockedApiRequest',
+            path,
+            method: 'POST',
+            body
+        });
+
+        if (response.status !== 'success') {
+            throw new Error(response.message || 'API request failed');
+        }
+
+        return createJsonResponse(Boolean(response.ok), Number(response.statusCode || 0), response.data || {});
+    }
+
     async function getCurrentIdentity() {
         const fallback = {
             userID: 'anonymous',
@@ -488,6 +536,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         const expiresKey = getTokenExpiresAtStorageKey();
 
         try {
+            if (hasChromeRuntimeMessaging()) {
+                try {
+                    const auth = await sendRuntimeMessage({ action: 'ensureAccessToken' });
+                    if (auth.status === 'success' && auth.accessToken) {
+                        await chrome.storage.local.set({
+                            [tokenKey]: auth.accessToken,
+                            userID: auth.userID || 'anonymous',
+                            familyID: auth.familyID || 'none',
+                            [installKey]: auth.installID || ''
+                        });
+                        return auth.accessToken;
+                    }
+                } catch (messageError) {
+                    console.warn('攔截頁向背景服務取得 token 失敗，改用本地快取。', messageError);
+                }
+            }
+
             const storage = await chrome.storage.local.get(['userID', 'familyID', tokenKey, installKey, expiresKey]);
 
             let installID = storage[installKey];
@@ -509,28 +574,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (token && expiresAt - Date.now() > refreshWindow) {
                 return token;
             }
-
-            const response = await fetch(`${getApiBaseUrl()}/api/auth/install`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ installID, userID, familyID: storage.familyID || 'none' })
-            });
-
-            let data = {};
-            try { data = await response.json(); } catch (e) {}
-
-            if (response.ok && data.accessToken) {
-                await chrome.storage.local.set({
-                    [tokenKey]: data.accessToken,
-                    [expiresKey]: data.expiresAt || 0,
-                    userID: data.userID || userID,
-                    familyID: data.familyID || storage.familyID || 'none'
-                });
-
-                return data.accessToken;
-            }
-
-            console.warn('攔截頁取得短效 token 失敗：', data.message || response.status);
         } catch (e) {
             console.warn('攔截頁取得短效 token 失敗，請確認 API 是否可用。', e);
         }
@@ -724,11 +767,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (communityStatusNoteEl) communityStatusNoteEl.textContent = '系統正在查詢此網域是否已存在於社群防詐回報池。';
 
         try {
-            const response = await fetch(`${getApiBaseUrl()}/api/community/domain_status`, {
-                method: 'POST',
-                headers: await getApiHeaders(),
-                body: JSON.stringify({ url: rawUrl, domain: host })
-            });
+            const response = await apiFetch('/api/community/domain_status', { url: rawUrl, domain: host });
 
             let data = {};
             try { data = await response.json(); } catch (e) {}
@@ -859,11 +898,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             action_type: 'blocked_page_confirmed_scam'
         };
 
-        const response = await fetch(`${getApiBaseUrl()}/api/family/block_domain`, {
-            method: 'POST',
-            headers: await getApiHeaders(),
-            body: JSON.stringify(payload)
-        });
+        const response = await apiFetch('/api/family/block_domain', payload);
 
         let data = {};
         try { data = await response.json(); } catch (e) {}
@@ -976,11 +1011,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             action_type: 'blocked_page_report_scam'
         };
 
-        const response = await fetch(`${getApiBaseUrl()}/api/report_scam`, {
-            method: 'POST',
-            headers: await getApiHeaders(),
-            body: JSON.stringify(payload)
-        });
+        const response = await apiFetch('/api/report_scam', payload);
 
         let data = {};
         try { data = await response.json(); } catch (e) {}
@@ -1134,11 +1165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             action_type: 'blocked_page_false_positive'
         };
 
-        const response = await fetch(`${getApiBaseUrl()}/api/report_false_positive`, {
-            method: 'POST',
-            headers: await getApiHeaders(),
-            body: JSON.stringify(payload)
-        });
+        const response = await apiFetch('/api/report_false_positive', payload);
 
         if (!response.ok) {
             throw new Error(`後端回報失敗 (${response.status})`);
@@ -1158,15 +1185,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         try {
-            const response = await fetch(`${getApiBaseUrl()}/api/whitelist/check`, {
-                method: 'POST',
-                headers: await getApiHeaders(),
-                body: JSON.stringify({
-                    url: rawUrl,
-                    domain: host,
-                    userID: identity.userID,
-                    familyID: identity.familyID
-                })
+            const response = await apiFetch('/api/whitelist/check', {
+                url: rawUrl,
+                domain: host,
+                userID: identity.userID,
+                familyID: identity.familyID
             });
 
             if (!response.ok) {

@@ -132,6 +132,11 @@ function getBackgroundScanCooldownMs() {
     return Number(getConfigValue('BACKGROUND_SCAN_COOLDOWN_MS', 30000)) || 30000;
 }
 
+function isBackgroundAutoScanDisabled() {
+    const value = getConfigValue('DISABLE_BACKGROUND_AUTO_SCAN', true);
+    return value === true || value === 'true' || value === 1 || value === '1';
+}
+
 function getCaptureQuality() {
     return Number(getConfigValue('CAPTURE_JPEG_QUALITY', 30)) || 30;
 }
@@ -767,6 +772,15 @@ async function sendScanLog(payload) {
 // 自動背景掃描
 // ==========================================
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    // 競賽 Demo 預設關閉背景自動巡邏掃描，避免與 content.js 即時掃描同頁重複觸發。
+    // 仍保留右鍵手動掃描、圖片輔助掃描、攔截頁跳轉、截圖蒐證與通知功能。
+    if (isBackgroundAutoScanDisabled()) {
+        if (changeInfo.status === 'complete' && tab && tab.url && !isSystemPage(tab.url)) {
+            console.log('🟡 [背景自動掃描關閉] Demo 模式只保留 content.js 即時掃描，避免同頁重複掃描：', tab.url);
+        }
+        return;
+    }
+
     if (changeInfo.status !== 'complete') return;
     if (!tab || !tab.url) return;
     if (isSystemPage(tab.url)) return;
@@ -1023,6 +1037,62 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // ==========================================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
+    if (request.action === "ensureAccessToken") {
+        (async () => {
+            try {
+                const identity = await ensureInstallIdentity();
+                sendResponse({
+                    status: "success",
+                    accessToken: identity.accessToken || "",
+                    userID: identity.userID || "anonymous",
+                    familyID: identity.familyID || "none",
+                    installID: identity.installID || ""
+                });
+            } catch (error) {
+                sendResponse({
+                    status: "error",
+                    message: error && error.message ? error.message : "ensureAccessToken failed"
+                });
+            }
+        })();
+        return true;
+    }
+
+    if (request.action === "blockedApiRequest") {
+        (async () => {
+            try {
+                const path = String(request.path || "");
+                if (!path.startsWith("/api/")) {
+                    throw new Error("Unsupported API path");
+                }
+
+                const response = await fetchWithRetry(`${getApiBaseUrl()}${path}`, {
+                    method: request.method || "POST",
+                    headers: await getApiHeaders(),
+                    body: request.body ? JSON.stringify(request.body) : undefined
+                });
+
+                let data = null;
+                try { data = await response.json(); } catch (e) {}
+
+                sendResponse({
+                    status: "success",
+                    ok: response.ok,
+                    statusCode: response.status,
+                    data
+                });
+            } catch (error) {
+                sendResponse({
+                    status: "error",
+                    ok: false,
+                    statusCode: 0,
+                    message: error && error.message ? error.message : "blockedApiRequest failed"
+                });
+            }
+        })();
+        return true;
+    }
+
     // 專門處理無視 CSP 阻擋的特權跳轉。
     // 重要：一定要回傳真實結果，讓 content.js 可在失敗時啟動前台備援跳轉。
     if (request.action === "redirect_to_blocked") {
@@ -1177,14 +1247,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     allow_screenshot_save: Boolean(getConfigValue('SAVE_FULL_SCREENSHOT_BY_DEFAULT', false))
                 });
             } else {
-                await sendScanLog({
-                    url: originalUrl,
-                    text: `【緊急攔截】${request.reason || ""}`,
-                    image_url: "",
-                    userID: storage.userID || "anonymous",
-                    familyID: storage.familyID || "none",
-                    is_urgent: false
-                });
+                // 避免攔截後再補打一筆 /scan，造成 Dashboard / LINE 顯示同一事件被掃描兩次。
+                // 截圖受限時仍完成攔截，但不再補送掃描紀錄。
+                console.log('🟡 [攔截去重] 未取得截圖，略過補送 /scan，避免重複掃描紀錄：', originalUrl);
             }
 
             sendResponse({

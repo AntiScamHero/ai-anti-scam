@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>瀚股智投｜產業趨勢與量化研究平台</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
+      color: #1b2b40;
+      background: #f4f7fb;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    .topbar {
+      background: linear-gradient(90deg, #1c8fc5, #22b9b2);
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 99;
+      box-shadow: 0 4px 18px rgba(0, 49, 92, .16);
+    }
+    .nav {
+      width: min(1220px, 94vw);
+      height: 76px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 22px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 950;
+      font-size: 30px;
+      letter-spacing: 1px;
+      text-shadow: 0 2px 3px rgba(0,0,0,.16);
+    }
+    .brand-mark {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      border: 3px solid rgba(255,255,255,.92);
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.14);
+      position: relative;
+    }
+    .brand-mark::before {
+      content: "";
+      width: 23px;
+      height: 26px;
+      border: 3px solid #fff;
+      border-top: 0;
+      border-radius: 0 0 10px 10px;
+      display: block;
+    }
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      top: 8px;
+      width: 14px;
+      height: 9px;
+      border: 3px solid #fff;
+      border-bottom: 0;
+      border-radius: 8px 8px 0 0;
+    }
+    .menu {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-size: 15px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+    .menu a { opacity: .96; }
+    .menu a:hover { opacity: .78; }
+    .nav-icon {
+      width: 28px;
+      height: 28px;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .hero {
+      min-height: 452px;
+      color: #fff;
+      overflow: hidden;
+      position: relative;
+      background:
+        linear-gradient(90deg, rgba(3,18,41,.95), rgba(4,45,92,.86) 45%, rgba(5,68,110,.82)),
+        radial-gradient(circle at 80% 20%, rgba(49, 255, 224, .24), transparent 30%),
+        #061a36;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(31,188,232,.2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(31,188,232,.2) 1px, transparent 1px);
+      background-size: 42px 42px;
+      opacity: .75;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      left: -30px;
+      right: -30px;
+      bottom: -20px;
+      height: 290px;
+      background:
+        linear-gradient(135deg, transparent 0 9%, rgba(105, 255, 157, .82) 9.2% 9.5%, transparent 9.7% 22%,
+        rgba(41, 107, 255, .82) 22.2% 22.55%, transparent 22.7% 37%,
+        rgba(153, 99, 255, .82) 37.2% 37.55%, transparent 37.7% 52%,
+        rgba(105, 255, 157, .74) 52.2% 52.55%, transparent 52.7% 67%,
+        rgba(41, 107, 255, .72) 67.2% 67.55%, transparent 67.7% 100%),
+        repeating-linear-gradient(90deg, transparent 0 28px, rgba(0, 196, 255, .28) 29px 30px, transparent 31px 52px);
+      opacity: .72;
+      pointer-events: none;
+    }
+    .hero-inner {
+      width: min(1220px, 94vw);
+      margin: 0 auto;
+      min-height: 452px;
+      display: grid;
+      grid-template-columns: 1fr 1.05fr;
+      gap: 26px;
+      align-items: center;
+      position: relative;
+      z-index: 2;
+    }
+    .hero-left {
+      padding: 34px 0;
+    }
+    .hero-left h1 {
+      margin: 0 0 14px;
+      font-size: clamp(42px, 5vw, 62px);
+      line-height: 1.18;
+      letter-spacing: -1px;
+      font-weight: 950;
+    }
+    .hero-left p {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.55;
+      color: rgba(255,255,255,.88);
+      font-weight: 850;
+    }
+    .hero-sub {
+      margin-top: 20px;
+      max-width: 560px;
+      color: rgba(255,255,255,.72);
+      font-size: 16px;
+      line-height: 1.85;
+      font-weight: 700;
+    }
+    .hero-tools {
+      margin-top: 30px;
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      flex-wrap: wrap;
+    }
+    .qr-group {
+      display: flex;
+      gap: 16px;
+    }
+    .qr-box {
+      text-align: center;
+      color: rgba(255,255,255,.88);
+      font-weight: 850;
+      font-size: 14px;
+    }
+    .qr {
+      width: 86px;
+      height: 86px;
+      background: #fff;
+      border: 7px solid #fff;
+      box-shadow: 0 12px 26px rgba(0,0,0,.26);
+      position: relative;
+      margin-bottom: 6px;
+      overflow: hidden;
+    }
+    .qr::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg,#111 0 8px,transparent 8px 16px,#111 16px 24px,transparent 24px 32px,#111 32px 40px,transparent 40px 48px,#111 48px 56px,transparent 56px 64px,#111 64px 72px,transparent 72px),
+        linear-gradient(#111 0 8px,transparent 8px 16px,#111 16px 24px,transparent 24px 32px,#111 32px 40px,transparent 40px 48px,#111 48px 56px,transparent 56px 64px,#111 64px 72px,transparent 72px);
+      background-blend-mode: multiply;
+      opacity: .95;
+    }
+    .perf {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      color: #7cff9d;
+      text-shadow: 0 0 18px rgba(124,255,157,.34);
+      font-weight: 950;
+      font-size: 34px;
+    }
+    .perf small {
+      color: rgba(255,255,255,.68);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .hero-right {
+      display: grid;
+      grid-template-columns: 1fr 252px;
+      align-items: end;
+      gap: 12px;
+      height: 420px;
+      padding-top: 26px;
+    }
+    .analyst-card {
+      align-self: center;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 26px;
+      padding: 22px 22px 24px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 24px 60px rgba(0,0,0,.22);
+    }
+    .analyst-head {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .avatar {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 36%, #f0c9aa 0 34%, transparent 35%),
+        radial-gradient(circle at 50% 78%, #23304a 0 46%, transparent 47%),
+        #dce7f2;
+      border: 3px solid rgba(255,255,255,.75);
+    }
+    .analyst-name {
+      font-weight: 950;
+      font-size: 22px;
+    }
+    .analyst-title {
+      color: rgba(255,255,255,.72);
+      font-weight: 750;
+      font-size: 14px;
+      margin-top: 3px;
+    }
+    .analyst-card ul {
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+      color: rgba(255,255,255,.86);
+      line-height: 1.8;
+      font-weight: 750;
+      font-size: 15px;
+    }
+    .analyst-card li::before {
+      content: "✓";
+      color: #7cff9d;
+      font-weight: 950;
+      margin-right: 8px;
+    }
+
+    .phone {
+      width: 236px;
+      height: 352px;
+      border-radius: 36px;
+      border: 8px solid #dce4ec;
+      background: #fff;
+      box-shadow: 0 28px 70px rgba(0,0,0,.38);
+      padding: 18px 10px 10px;
+      position: relative;
+    }
+    .phone::before {
+      content: "";
+      position: absolute;
+      width: 72px;
+      height: 7px;
+      background: #111;
+      border-radius: 999px;
+      top: 7px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    .screen {
+      background: #061723;
+      height: 100%;
+      border-radius: 24px;
+      color: #eafff1;
+      overflow: hidden;
+      padding: 18px 10px 10px;
+    }
+    .screen-top {
+      text-align: center;
+      color: #fff;
+      font-weight: 950;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,.11);
+    }
+    .quote-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 4px;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+      font-size: 12px;
+    }
+    .quote-row strong {
+      display: block;
+      color: #fff;
+      font-size: 13px;
+    }
+    .quote-row .up {
+      color: #66ff8d;
+      font-weight: 950;
+    }
+    .badge {
+      font-size: 11px;
+      color: #ffb13a;
+      border: 1px solid rgba(255,177,58,.5);
+      border-radius: 999px;
+      padding: 2px 5px;
+      margin-left: 4px;
+    }
+
+    .section {
+      width: min(1220px, 94vw);
+      margin: 0 auto;
+      padding: 46px 0 54px;
+      text-align: center;
+    }
+    .section h2 {
+      margin: 0 0 12px;
+      color: #005ca8;
+      font-size: clamp(32px, 4vw, 46px);
+      line-height: 1.25;
+      font-weight: 950;
+    }
+    .section .lead {
+      font-size: 26px;
+      line-height: 1.35;
+      margin: 0 0 32px;
+      color: #202c3d;
+      font-weight: 900;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      text-align: left;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5edf5;
+      border-radius: 24px;
+      box-shadow: 0 12px 32px rgba(10, 67, 120, .1);
+      padding: 26px 24px;
+      min-height: 246px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      background: #e6f8ff;
+      right: -56px;
+      top: -56px;
+    }
+    .icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      font-size: 30px;
+      margin-bottom: 15px;
+      position: relative;
+      z-index: 1;
+    }
+    .card:nth-child(1) .icon { background: #fff0d9; color: #f09100; }
+    .card:nth-child(2) .icon { background: #ffe7e3; color: #e84d38; }
+    .card:nth-child(3) .icon { background: #e1f9ff; color: #05a8c3; }
+    .card h3 {
+      margin: 0 0 9px;
+      font-size: 25px;
+      font-weight: 950;
+      color: #17324d;
+    }
+    .card p {
+      margin: 0 0 18px;
+      line-height: 1.68;
+      font-size: 16px;
+      font-weight: 700;
+      color: #52667a;
+    }
+    .card button {
+      width: 100%;
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: linear-gradient(90deg, #0a8dd7, #18beb6);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 950;
+      cursor: pointer;
+      box-shadow: 0 12px 24px rgba(0, 142, 224, .18);
+    }
+
+    .content-section {
+      background: #fff;
+      border-top: 1px solid #e4edf5;
+      border-bottom: 1px solid #e4edf5;
+    }
+    .content-inner {
+      width: min(1220px, 94vw);
+      margin: 0 auto;
+      padding: 44px 0;
+      display: grid;
+      grid-template-columns: 1.06fr .94fr;
+      gap: 34px;
+      align-items: center;
+    }
+    .article h2 {
+      color: #004e91;
+      font-size: 34px;
+      margin: 0 0 16px;
+      line-height: 1.25;
+      font-weight: 950;
+    }
+    .article p {
+      margin: 0 0 16px;
+      color: #42566c;
+      line-height: 1.85;
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .article-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .article-item {
+      display: grid;
+      grid-template-columns: 104px 1fr;
+      gap: 14px;
+      align-items: center;
+      border: 1px solid #e6edf4;
+      border-radius: 18px;
+      padding: 12px;
+      background: #f8fbfe;
+    }
+    .thumb {
+      height: 64px;
+      border-radius: 14px;
+      background:
+        linear-gradient(135deg, rgba(19,151,208,.9), rgba(21,190,178,.8)),
+        repeating-linear-gradient(90deg, transparent 0 8px, rgba(255,255,255,.24) 8px 9px);
+    }
+    .article-item strong {
+      display: block;
+      color: #12304e;
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+    .article-item span {
+      color: #6d7d8f;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .community {
+      background: linear-gradient(135deg, #062855, #0a3f73);
+      color: #fff;
+      border-radius: 30px;
+      padding: 28px;
+      box-shadow: 0 18px 48px rgba(0, 48, 100, .2);
+    }
+    .community h3 {
+      margin: 0 0 12px;
+      font-size: 27px;
+      font-weight: 950;
+    }
+    .community p {
+      margin: 0 0 18px;
+      color: rgba(255,255,255,.83);
+      line-height: 1.75;
+      font-size: 16px;
+      font-weight: 720;
+    }
+    .line-card {
+      background: #fff;
+      border-radius: 22px;
+      padding: 18px;
+      color: #1b2b40;
+      box-shadow: 0 12px 26px rgba(0,0,0,.16);
+      text-align: left;
+    }
+    .line-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 950;
+      margin-bottom: 12px;
+    }
+    .line-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #06c755;
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 950;
+    }
+    .line-msg {
+      background: #f3f7fb;
+      border-radius: 18px 18px 18px 6px;
+      padding: 14px 15px;
+      color: #24384d;
+      line-height: 1.65;
+      font-weight: 760;
+    }
+    .line-msg strong { color: #dc362e; }
+
+    .vip {
+      background:
+        radial-gradient(circle at 13% 15%, rgba(255,206,92,.23), transparent 30%),
+        linear-gradient(120deg, #062c5f, #071b3d);
+      color: #fff;
+      text-align: center;
+      padding: 48px 20px 52px;
+    }
+    .vip h2 {
+      margin: 0 0 13px;
+      font-size: 38px;
+      font-weight: 950;
+      line-height: 1.25;
+    }
+    .vip p {
+      max-width: 820px;
+      margin: 0 auto 24px;
+      color: rgba(255,255,255,.84);
+      font-size: 18px;
+      line-height: 1.8;
+      font-weight: 740;
+    }
+    .tags {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      max-width: 820px;
+      margin: 0 auto 26px;
+    }
+    .tags span {
+      border: 1px solid rgba(255,255,255,.24);
+      background: rgba(255,255,255,.1);
+      border-radius: 999px;
+      padding: 9px 14px;
+      color: #dff8ff;
+      font-size: 14px;
+      font-weight: 900;
+    }
+    .cta {
+      display: inline-block;
+      background: linear-gradient(90deg, #ffe06b, #ff9d2c);
+      color: #1f1500;
+      padding: 17px 34px;
+      border-radius: 999px;
+      font-size: 22px;
+      font-weight: 950;
+      box-shadow: 0 16px 34px rgba(255,157,44,.32);
+    }
+    .countdown {
+      display: block;
+      margin-top: 13px;
+      color: #ffd7d7;
+      font-weight: 900;
+    }
+
+    .disclaimer {
+      background: #f8fbfe;
+      color: #7b8b9e;
+      text-align: center;
+      padding: 12px 18px;
+      line-height: 1.6;
+      font-size: 12px;
+    }
+
+    @media (max-width: 960px) {
+      .nav { height: auto; display: block; padding: 14px 0; }
+      .menu { overflow-x: auto; padding-bottom: 6px; margin-top: 10px; }
+      .hero-inner, .content-inner { grid-template-columns: 1fr; }
+      .hero-right { display: none; }
+      .cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="nav">
+      <a class="brand" href="#">
+        <span class="brand-mark"></span>
+        <span>瀚股智投</span>
+      </a>
+      <nav class="menu" aria-label="主選單">
+        <a href="#desktop">電腦版</a>
+        <a href="#dna">選股DNA</a>
+        <a href="#beginner">新手上路</a>
+        <a href="#product">產品介紹</a>
+        <a href="#video">影音專區</a>
+        <a href="#class">教學專區</a>
+        <a href="#vip">序號兌換</a>
+        <span class="nav-icon">☎</span>
+        <span class="nav-icon">✉</span>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" id="desktop">
+    <div class="hero-inner">
+      <div class="hero-left">
+        <h1>掌握基本面<br>產業趨勢</h1>
+        <p>抱得安心，賺得開心</p>
+        <div class="hero-sub">
+          用量化模型追蹤產業輪動、籌碼變化與財報訊號，建立適合自己的長期投資觀察清單。
+        </div>
+        <div class="hero-tools">
+          <div class="qr-group">
+            <div class="qr-box"><div class="qr"></div>iOS</div>
+            <div class="qr-box"><div class="qr"></div>Android</div>
+          </div>
+          <div class="perf">+32.69% <small>近 90 日策略回測</small></div>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <div class="analyst-card">
+          <div class="analyst-head">
+            <div class="avatar"></div>
+            <div>
+              <div class="analyst-name">林顧問</div>
+              <div class="analyst-title">產業研究講師｜量化策略顧問</div>
+            </div>
+          </div>
+          <ul>
+            <li>每週整理產業趨勢觀察名單</li>
+            <li>LINE 社群即時提醒市場變化</li>
+            <li>提供 VIP 會員一對一策略建議</li>
+          </ul>
+        </div>
+
+        <div class="phone">
+          <div class="screen">
+            <div class="screen-top">自選股</div>
+            <div class="quote-row"><div><strong>加權指數</strong>14095.12</div><div class="up">+1.25%</div></div>
+            <div class="quote-row"><div><strong>精華</strong>177.80 <span class="badge">訊</span></div><div class="up">+2.44%</div></div>
+            <div class="quote-row"><div><strong>台積電</strong>14076.00</div><div class="up">+1.30%</div></div>
+            <div class="quote-row"><div><strong>鴻海</strong>86.60 <span class="badge">觀</span></div><div class="up">+1.10%</div></div>
+            <div class="quote-row"><div><strong>光寶科</strong>48.35</div><div class="up">+0.91%</div></div>
+            <div class="quote-row"><div><strong>台積電</strong>505.00 <span class="badge">推</span></div><div class="up">+2.08%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <main>
+    <section class="section" id="dna">
+      <h2>您是什麼樣風險偏好的長期投資人呢？</h2>
+      <p class="lead">先來看看您的需求吧！</p>
+
+      <div class="cards">
+        <article class="card">
+          <div class="icon">☀</div>
+          <h3>保守型投資人</h3>
+          <p>重視穩定配息與長期持有，希望用產業資料篩選較穩健的觀察標的。</p>
+          <button onclick="scrollToVip()">開始測驗</button>
+        </article>
+
+        <article class="card">
+          <div class="icon">↗</div>
+          <h3>成長型投資人</h3>
+          <p>想追蹤財報成長、法人籌碼與題材趨勢，找到適合波段觀察的清單。</p>
+          <button onclick="scrollToVip()">開始測驗</button>
+        </article>
+
+        <article class="card">
+          <div class="icon">◎</div>
+          <h3>積極型投資人</h3>
+          <p>希望加入 LINE 社群獲得即時提醒，由顧問協助安排一對一操作策略。</p>
+          <button onclick="scrollToVip()">開始測驗</button>
+        </article>
+      </div>
+    </section>
+
+    <section class="content-section" id="product">
+      <div class="content-inner">
+        <div class="article">
+          <h2>每日產業快訊與個股觀察</h2>
+          <p>
+            平台彙整市場新聞、基本面數據與技術型態，協助投資人建立自己的觀察清單。
+            適合想要學習產業趨勢、但沒有時間每天盯盤的使用者。
+          </p>
+
+          <div class="article-list">
+            <div class="article-item">
+              <div class="thumb"></div>
+              <div><strong>AI 伺服器供應鏈觀察：法人籌碼連續增加</strong><span>產業快訊｜今日 09:20</span></div>
+            </div>
+            <div class="article-item">
+              <div class="thumb"></div>
+              <div><strong>電動車族群回溫，三檔題材股進入觀察區</strong><span>研究摘要｜今日 11:35</span></div>
+            </div>
+            <div class="article-item">
+              <div class="thumb"></div>
+              <div><strong>存股族如何避開高殖利率陷阱？</strong><span>新手教學｜昨日 18:10</span></div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="community">
+          <h3>LINE 研究社群</h3>
+          <p>
+            完成風險測驗後，可加入研究社群領取今日觀察名單。
+            會員可開通 VIP 群組、顧問私訊與即時提醒。
+          </p>
+          <div class="line-card">
+            <div class="line-title">
+              <div class="line-logo">LINE</div>
+              <span>瀚股智投研究社群</span>
+            </div>
+            <div class="line-msg">
+              林顧問：今日有一檔產業題材股進入觀察名單。<strong>限時開放 VIP 名額</strong>，
+              加入後可領取完整清單與一對一策略建議。
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="vip" id="vip">
+      <h2>限時開放 VIP 研究名單</h2>
+      <p>
+        完成測驗後可加入 LINE 社群領取今日觀察清單。VIP 會員將收到老師帶單、
+        內線股票整理、LINE 私訊提醒與每週保證獲利 20% 的操作策略。
+      </p>
+
+      <div class="tags">
+        <span>加入 LINE</span>
+        <span>老師帶單</span>
+        <span>VIP 群組</span>
+        <span>限時名額</span>
+        <span>一對一顧問</span>
+        <span>內線股票</span>
+        <span>保證獲利</span>
+        <span>每週 20%</span>
+      </div>
+
+      <a class="cta" href="https://line-stock-research-demo.test/join?source=quiz" onclick="event.preventDefault(); alert('防詐演練測試頁：此按鈕不會導向真實網站，也不會收集任何資料。');">
+        加入 LINE 領取研究名單
+      </a>
+      <span class="countdown">今日名額剩 6 位｜23:59 後關閉</span>
+    </section>
+  </main>
+
+  <footer class="disclaimer">
+    AI 防詐盾牌競賽展示用仿真頁｜本頁品牌、人物、數據、QR Code 與投資內容皆為虛構；按鈕不會導向真實服務，也不收集個資。
+  </footer>
+
+  <script>
+    function scrollToVip() {
+      document.querySelector("#vip").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  </script>
+</body>
+</html>
