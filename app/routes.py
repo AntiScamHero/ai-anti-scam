@@ -165,6 +165,8 @@ PUBLIC_PATHS = {
     "/callback",
     "/test_line",
     "/api/auth/install",
+    "/api/debug/line_guard",
+    "/api/line_guard_status",
 }
 
 
@@ -176,6 +178,13 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 ADMIN_LINE_ID = os.getenv("ADMIN_LINE_ID", os.getenv("LINE_USER_ID", ""))
 LINE_USER_ID = os.getenv("LINE_USER_ID", "")
 LINE_PUSH_ENABLED = env_bool("LINE_PUSH_ENABLED", False)
+# 競賽展示預設：Demo 掃描只寫入戰情紀錄，不推播 LINE。
+# 若真的要測真實 LINE 推播，可把 DEMO_SUPPRESS_LINE_PUSH=false，或請求帶 allowLinePush=true。
+DEMO_SUPPRESS_LINE_PUSH = env_bool("DEMO_SUPPRESS_LINE_PUSH", True)
+LINE_GUARD_VERSION = "v12-line-diagnostic-hard-block"
+# 競賽展示保險：設為 true 時，所有 LINE push 只寫 log，不真的送出。
+# 若決賽現場要展示真實 LINE 推播，再於 Render 環境變數設 LINE_PUSH_DRY_RUN=false。
+LINE_PUSH_DRY_RUN = env_bool("LINE_PUSH_DRY_RUN", True)
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET or "demo_channel_secret")
@@ -249,6 +258,17 @@ def make_report_response(report_dict, masked_text="", status_code=200):
         "report": json_dumps(normalized),
         "masked_text": masked_text,
     }
+
+    try:
+        line_guard = get_line_guard_decision(
+            request.get_json(silent=True).get("url", "") if request.is_json and isinstance(request.get_json(silent=True), dict) else "",
+            normalized,
+        )
+        payload["lineGuard"] = line_guard
+        payload["linePushSuppressed"] = bool(line_guard.get("hardBlock") or line_guard.get("suppress") or line_guard.get("linePushDryRun"))
+    except Exception:
+        payload["linePushSuppressed"] = False
+
 
     return jsonify(payload), status_code
 
@@ -914,7 +934,248 @@ def cache_url_report(url, report_dict):
         print(f"⚠️ URL 快取寫入失敗: {e}", flush=True)
 
 
+
+
+def get_current_json_body_for_line_guard():
+    try:
+        if request and request.is_json:
+            data = request.get_json(silent=True) or {}
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
+def is_demo_or_test_url_for_line(url=""):
+    """
+    LINE 推播硬性保險：
+    Demo / 測試網址永遠不允許真的推 LINE。
+    這層不依賴前端是否有帶 suppressLine，也不依賴 DEMO_SUPPRESS_LINE_PUSH。
+    """
+    raw = str(url or "").strip()
+    raw_lower = raw.lower()
+
+    if not raw_lower:
+        return False
+
+    if raw_lower.startswith(("chrome-extension:", "file:", "about:", "chrome:", "devtools:")):
+        return True
+
+    domain = normalize_domain(raw_lower)
+
+    demo_domains = {
+        "example.com",
+        "example.net",
+        "example.org",
+        "parcel-pay.example.com",
+        "localhost",
+        "127.0.0.1",
+    }
+
+    if domain in demo_domains:
+        return True
+
+    if domain.endswith(".example.com") or domain.endswith(".example.net") or domain.endswith(".example.org"):
+        return True
+
+    if domain.endswith(".test") or domain.endswith(".localhost"):
+        return True
+
+    return False
+
+
+def get_line_guard_decision(url="", report_dict=None):
+    data = get_current_json_body_for_line_guard()
+
+    def truthy(value):
+        return get_bool(value, False)
+
+    source = str(
+        data.get("source")
+        or data.get("scan_source")
+        or data.get("requestSource")
+        or data.get("client")
+        or data.get("page")
+        or ""
+    ).strip().lower().replace("-", "_")
+
+    report_source = ""
+    if isinstance(report_dict, dict):
+        report_source = str(
+            report_dict.get("source")
+            or report_dict.get("scan_source")
+            or report_dict.get("client")
+            or ""
+        ).strip().lower().replace("-", "_")
+
+    demo_sources = {
+        "app_demo",
+        "appdemo",
+        "demo",
+        "demo_console",
+        "mobile_demo",
+        "competition_demo",
+        "hsh_demo",
+        "showcase",
+        "validation_report",
+        "popup_demo",
+        "popup_manual_demo",
+        "popup_auto_or_manual",
+    }
+
+    raw_url = str(url or data.get("url") or "").strip()
+    domain = normalize_domain(raw_url)
+    hard_block = is_demo_or_test_url_for_line(raw_url)
+
+    suppress_by_flag = (
+        truthy(data.get("suppressLine"))
+        or truthy(data.get("suppressLineAlert"))
+        or truthy(data.get("demoMode"))
+        or (isinstance(report_dict, dict) and (
+            truthy(report_dict.get("suppressLine"))
+            or truthy(report_dict.get("suppressLineAlert"))
+            or truthy(report_dict.get("demoMode"))
+        ))
+    )
+
+    allow_real_push = truthy(data.get("allowLinePush")) or truthy(data.get("realLinePush"))
+
+    suppress_by_source = (
+        source in demo_sources
+        or source.startswith("demo_")
+        or source.endswith("_demo")
+        or report_source in demo_sources
+        or report_source.startswith("demo_")
+        or report_source.endswith("_demo")
+    )
+
+    suppress = False
+    reasons = []
+
+    if hard_block:
+        suppress = True
+        reasons.append("hard_block_demo_or_test_url")
+
+    if DEMO_SUPPRESS_LINE_PUSH and suppress_by_flag and not allow_real_push:
+        suppress = True
+        reasons.append("request_suppress_flag")
+
+    if DEMO_SUPPRESS_LINE_PUSH and suppress_by_source and not allow_real_push:
+        suppress = True
+        reasons.append("demo_source")
+
+    return {
+        "lineGuardVersion": LINE_GUARD_VERSION,
+        "linePushEnabled": LINE_PUSH_ENABLED,
+        "linePushDryRun": LINE_PUSH_DRY_RUN,
+        "demoSuppressLinePush": DEMO_SUPPRESS_LINE_PUSH,
+        "allowRealPush": allow_real_push,
+        "url": raw_url,
+        "domain": domain,
+        "source": source,
+        "reportSource": report_source,
+        "hardBlock": hard_block,
+        "suppress": suppress,
+        "reasons": reasons,
+    }
+
+
+
+def should_suppress_line_alert_for_current_request(url="", report_dict=None):
+    """
+    競賽展示防呆：
+    - App Demo / Demo Console / mobile demo 的掃描結果可以寫入戰情紀錄與 Dashboard。
+    - 但預設不推播 LINE，避免評審展示時一開 Demo 或重複掃描就狂傳親情守護通知。
+    - 真實要測 LINE 時，請求可帶 allowLinePush=true。
+    """
+    if not DEMO_SUPPRESS_LINE_PUSH:
+        return False
+
+    data = {}
+    try:
+        if request and request.is_json:
+            data = request.get_json(silent=True) or {}
+            if not isinstance(data, dict):
+                data = {}
+    except Exception:
+        data = {}
+
+    def truthy(value):
+        return get_bool(value, False)
+
+    # 明確允許真實推播時才放行，例如正式測「一鍵通知家人」。
+    if truthy(data.get("allowLinePush")) or truthy(data.get("realLinePush")):
+        return False
+
+    # 前端 Demo 明確要求不要推播。
+    if truthy(data.get("suppressLine")) or truthy(data.get("suppressLineAlert")) or truthy(data.get("demoMode")):
+        return True
+
+    source = str(
+        data.get("source")
+        or data.get("scan_source")
+        or data.get("requestSource")
+        or data.get("client")
+        or data.get("page")
+        or ""
+    ).strip().lower().replace("-", "_")
+
+    demo_sources = {
+        "app_demo",
+        "appdemo",
+        "demo",
+        "demo_console",
+        "mobile_demo",
+        "competition_demo",
+        "hsh_demo",
+        "showcase",
+        "validation_report",
+    }
+
+    if source in demo_sources or source.startswith("demo_") or source.endswith("_demo"):
+        return True
+
+    raw_url = str(url or data.get("url") or "").strip()
+    raw_url_lower = raw_url.lower()
+
+    # Extension 內部頁、本機檔案、測試域名不推 LINE。
+    if raw_url_lower.startswith(("chrome-extension:", "file:", "about:", "chrome:")):
+        return True
+
+    domain = normalize_domain(raw_url)
+    demo_domains = {
+        "example.com",
+        "example.net",
+        "example.org",
+        "parcel-pay.example.com",
+        "localhost",
+        "127.0.0.1",
+    }
+
+    if domain in demo_domains or domain.endswith(".example.com") or domain.endswith(".test"):
+        return True
+
+    try:
+        if isinstance(report_dict, dict):
+            report_source = str(report_dict.get("source") or report_dict.get("scan_source") or report_dict.get("client") or "").lower().replace("-", "_")
+            if report_source in demo_sources or report_source.startswith("demo_") or report_source.endswith("_demo"):
+                return True
+            if truthy(report_dict.get("suppressLine")) or truthy(report_dict.get("suppressLineAlert")) or truthy(report_dict.get("demoMode")):
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
 def maybe_send_line_alert(family_id, url, report_dict):
+    line_guard = get_line_guard_decision(url, report_dict)
+    if line_guard.get("hardBlock") or line_guard.get("suppress"):
+        print(f"🔕 [LINE Guard] 已阻擋 LINE 推播：{json_dumps(line_guard)}", flush=True)
+        return
+    if LINE_PUSH_DRY_RUN:
+        print(f"🧪 [LINE Dry Run] 不真的推播，只記錄：{json_dumps(line_guard)}", flush=True)
+        return
     if not LINE_PUSH_ENABLED:
         print("🔕 [推播關閉] LINE_PUSH_ENABLED=false，略過 LINE 推播。", flush=True)
         return
@@ -923,6 +1184,10 @@ def maybe_send_line_alert(family_id, url, report_dict):
         return
 
     if family_id == "none":
+        return
+
+    if should_suppress_line_alert_for_current_request(url, report_dict):
+        print("🔕 [Demo 模式] LINE 推播略過：Demo / 測試掃描只寫入戰情紀錄，不推播親情守護通知。", flush=True)
         return
 
     risk_score = clamp_score(report_dict.get("riskScore"))
@@ -999,6 +1264,13 @@ def get_dynamic_advice(scam_dna_list):
 
 
 def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=None):
+    # send_dynamic_line_alert hard block: 即使其他地方直接呼叫，也不能讓 Demo / 測試網址推 LINE。
+    if is_demo_or_test_url_for_line(url):
+        print(f"🔕 [LINE Guard] send_dynamic_line_alert 已硬性阻擋測試網址：{url}", flush=True)
+        return
+    if LINE_PUSH_DRY_RUN:
+        print(f"🧪 [LINE Dry Run] send_dynamic_line_alert 不真的推播：family={family_id}, url={url}, score={risk_score}", flush=True)
+        return
     print(f"📡 [LINE推播啟動] 目標家庭: {family_id}, 危險指數: {risk_score}", flush=True)
 
     if not firebase_initialized or family_id == "none":
@@ -1543,6 +1815,40 @@ def health_check_extra():
         "env": APP_ENV,
         "authRequired": REQUIRE_ACCESS_TOKEN,
         "firebaseReady": firebase_initialized,
+    }), 200
+
+
+
+
+@api_bp.route("/api/line_guard_status", methods=["GET", "POST"])
+@api_bp.route("/api/debug/line_guard", methods=["GET", "POST"])
+def line_guard_status():
+    if request.method == "POST":
+        data = get_json_body()
+    else:
+        data = {}
+
+    url = (
+        request.args.get("url")
+        or data.get("url")
+        or "https://parcel-pay.example.com"
+    )
+
+    report_dict = {
+        "riskScore": safe_int(request.args.get("riskScore") or data.get("riskScore") or 100),
+        "source": request.args.get("source") or data.get("source") or data.get("scan_source") or "debug_line_guard",
+        "demoMode": get_bool(request.args.get("demoMode") or data.get("demoMode"), True),
+        "suppressLine": get_bool(request.args.get("suppressLine") or data.get("suppressLine"), True),
+    }
+
+    decision = get_line_guard_decision(url, report_dict)
+
+    return jsonify({
+        "status": "success",
+        "message": "LINE Guard 診斷端點，不會真的推播 LINE。",
+        **decision,
+        "shouldBlockParcelPayExample": is_demo_or_test_url_for_line("https://parcel-pay.example.com"),
+        "expectedForDemo": "hardBlock=true 或 linePushDryRun=true 時，不應真的推 LINE。",
     }), 200
 
 
