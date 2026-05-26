@@ -28,7 +28,8 @@
 
     const SAMPLE_TEXTS = {
       high: decodeDemoText("5oKo55qE5YyF6KO56YWN6YCB5aSx5pWX77yM6KuL56uL5Y2z6KOc57mz6YGL6LK75Lim6Ly45YWl5L+h55So5Y2h6LOH5paZ77yM6YC+5pyf5bCH6YCA5Zue44CC"),
-      mid: decodeDemoText("6ICB5bir5LuK5aSp6ZaL5pS+5oqV6LOH576k57WE5ZCN6aGN77yM6Lef5Zau5pON5L2c5Y+v5o6M5o+h6aOG6IKh5qmf5pyD77yM5oOz5LqG6Kej6KuL5Yqg5YWlIExJTkXjgII=")
+      mid: decodeDemoText("6ICB5bir5LuK5aSp6ZaL5pS+5oqV6LOH576k57WE5ZCN6aGN77yM6Lef5Zau5pON5L2c5Y+v5o6M5o+h6aOG6IKh5qmf5pyD77yM5oOz5LqG6Kej6KuL5Yqg5YWlIExJTkXjgII="),
+      low: decodeDemoText("6YCZ5piv5LiA5YmH5LiA6Iis5rS75YuV6YCa55+l77yM6KuL6Iez5a6Y5pa557ay56uZ5p+l55yL5rS75YuV5pmC6ZaT6IiH5Zyw6bue44CC")
     };
 
 
@@ -498,12 +499,43 @@
     }
 
     function setSample(type) {
-      if (type === "high") {
+      const normalized = String(type || "").toLowerCase();
+      if (normalized === "high") {
         $("targetUrl").value = "https://parcel-pay.example.com";
         $("message").value = SAMPLE_TEXTS.high;
-      } else {
+      } else if (normalized === "mid") {
         $("targetUrl").value = "";
         $("message").value = SAMPLE_TEXTS.mid;
+      } else {
+        $("targetUrl").value = "https://www.gov.tw";
+        $("message").value = SAMPLE_TEXTS.low;
+      }
+    }
+
+    function loadSelectedCaseFromConsole() {
+      const params = getUrlParams();
+      const caseFromUrl = String(params.get("case") || params.get("caseType") || "").toLowerCase();
+
+      if (["high", "mid", "low"].includes(caseFromUrl)) {
+        setSample(caseFromUrl);
+        $("scanHint").textContent = `已從 Demo Console 自動帶入${caseFromUrl === "high" ? "高風險" : caseFromUrl === "mid" ? "中風險" : "低風險"}案例。`;
+        return true;
+      }
+
+      try {
+        const raw = localStorage.getItem("AI_SHIELD_SELECTED_DEMO_CASE");
+        if (!raw) return false;
+        const payload = JSON.parse(raw);
+        const selectedAt = new Date(payload.selectedAt || 0).getTime();
+        const isFresh = selectedAt && Date.now() - selectedAt < 10 * 60 * 1000;
+        if (!isFresh) return false;
+
+        if (payload.url !== undefined) $("targetUrl").value = String(payload.url || "");
+        if (payload.text) $("message").value = String(payload.text || "");
+        $("scanHint").textContent = `已從 Demo Console 自動帶入${payload.label || "展示案例"}。`;
+        return true;
+      } catch (e) {
+        return false;
       }
     }
 
@@ -513,6 +545,7 @@
       saveFamilyID(await getStoredFamilyID());
       updateModeUI();
       renderHistory();
+      loadSelectedCaseFromConsole();
 
       $("familyCodeInput").addEventListener("input", event => {
         event.target.value = normalizeFamilyCode(event.target.value);
@@ -525,6 +558,7 @@
 
       $("sampleHigh").addEventListener("click", () => setSample("high"));
       $("sampleMid").addEventListener("click", () => setSample("mid"));
+      $("sampleLow")?.addEventListener("click", () => setSample("low"));
 
       $("scanBtn").addEventListener("click", async () => {
         const text = $("message").value.trim();

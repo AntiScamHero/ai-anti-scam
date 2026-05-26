@@ -50,8 +50,6 @@ const CONFIG = Object.freeze({
     DEMO_MODE: false,
     POPUP_ALLOW_OFFLINE_FALLBACK: true,
     POPUP_AUTO_SCAN_ON_OPEN: false,
-    DEMO_SUPPRESS_LINE_PUSH: true,
-    LINE_PUSH_DRY_RUN: true,
     ENABLE_FAKE_DATA_INJECTION: false,
 
     // 👨‍👩‍👧 家庭代碼共用主鍵：Demo Console / App Demo / Popup / Dashboard 統一讀寫這個 key。

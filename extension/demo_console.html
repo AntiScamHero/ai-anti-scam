@@ -50,7 +50,9 @@
     .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);opacity:0;background:rgba(15,23,42,.92);color:#fff;border-radius:999px;padding:13px 18px;font-weight:1000;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,.25);transition:.22s;text-align:center;max-width:min(680px,92vw)}
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
     @media(max-width:960px){body{padding:16px}.hero,.grid{grid-template-columns:1fr}.status-grid,.actions{grid-template-columns:1fr}.row{grid-template-columns:1fr}}
-  </style>
+  
+.case .btn + .btn{margin-top:10px;}
+</style>
 </head>
 <body data-ai-shield-skip-scan="true">
   <main class="wrap">
@@ -124,9 +126,24 @@
         <div class="card">
           <div class="title"><div><h2>三組展示案例</h2><p class="muted">現場固定用這三組，避免臨場輸入不穩。</p></div></div>
           <div class="cases">
-            <div class="case"><div class="case-head"><h3>案例 A：訊息測試</h3><span class="tag high">高等級</span></div><div class="case-text" id="caseHigh">點擊「複製案例」後，系統會將測試文字放入剪貼簿。</div><button class="btn soft" type="button" data-copy="caseHigh">複製案例</button></div>
-            <div class="case"><div class="case-head"><h3>案例 B：社群測試</h3><span class="tag mid">中等級</span></div><div class="case-text" id="caseMid">點擊「複製案例」後，系統會將測試文字放入剪貼簿。</div><button class="btn soft" type="button" data-copy="caseMid">複製案例</button></div>
-            <div class="case"><div class="case-head"><h3>一般活動通知</h3><span class="tag low">低等級</span></div><div class="case-text" id="caseLow">點擊「複製案例」後，系統會將測試文字放入剪貼簿。</div><button class="btn soft" type="button" data-copy="caseLow">複製案例</button></div>
+            <div class="case">
+              <div class="case-head"><h3>案例 A：訊息測試</h3><span class="tag high">高等級</span></div>
+              <div class="case-text" id="caseHigh">AI 已準備高等級測試情境；點擊下方按鈕會直接帶入 App Demo，不必手動複製貼上。</div>
+              <button class="btn primary" type="button" data-load-case="high">直接帶入 App Demo</button>
+              <button class="btn soft" type="button" data-copy="caseHigh">只複製文字</button>
+            </div>
+            <div class="case">
+              <div class="case-head"><h3>案例 B：社群測試</h3><span class="tag mid">中等級</span></div>
+              <div class="case-text" id="caseMid">AI 已準備中等級測試情境；點擊下方按鈕會直接帶入 App Demo，不必手動複製貼上。</div>
+              <button class="btn primary" type="button" data-load-case="mid">直接帶入 App Demo</button>
+              <button class="btn soft" type="button" data-copy="caseMid">只複製文字</button>
+            </div>
+            <div class="case">
+              <div class="case-head"><h3>一般活動通知</h3><span class="tag low">低等級</span></div>
+              <div class="case-text" id="caseLow">AI 已準備低等級對照情境；點擊下方按鈕會直接帶入 App Demo，不必手動複製貼上。</div>
+              <button class="btn primary" type="button" data-load-case="low">直接帶入 App Demo</button>
+              <button class="btn soft" type="button" data-copy="caseLow">只複製文字</button>
+            </div>
           </div>
         </div>
       </aside>

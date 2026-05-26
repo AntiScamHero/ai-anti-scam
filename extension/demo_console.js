@@ -225,11 +225,12 @@
       if(!opened) showToast("瀏覽器阻擋新視窗，請允許彈出視窗後再試。");
     }
 
-    function buildAppUrl(forceFallback=false){
+    function buildAppUrl(forceFallback=false, caseType=""){
       const params = new URLSearchParams();
       if (getFamilyID()) params.set("familyID", getFamilyID());
       params.set("demoMode", "1");
       params.set("suppressLine", "1");
+      if (caseType) params.set("case", caseType);
       if (forceFallback) params.set("forceFallback", "1");
       return `AI防詐盾牌_AppDemo.html?${params.toString()}`;
     }
@@ -254,6 +255,61 @@
         caseLow: DEMO_CASE_TEXTS.low
       };
       copyText(map[id] || $(id)?.textContent || "");
+    }
+
+    function getDemoCasePayload(type){
+      const normalized = String(type || "").toLowerCase();
+      if (normalized === "high") {
+        return {
+          type: "high",
+          url: "https://parcel-pay.example.com",
+          text: DEMO_CASE_TEXTS.high,
+          label: "案例 A：訊息測試"
+        };
+      }
+      if (normalized === "mid") {
+        return {
+          type: "mid",
+          url: "",
+          text: DEMO_CASE_TEXTS.mid,
+          label: "案例 B：社群測試"
+        };
+      }
+      return {
+        type: "low",
+        url: "https://www.gov.tw",
+        text: DEMO_CASE_TEXTS.low,
+        label: "一般活動通知"
+      };
+    }
+
+    function saveDemoCaseForApp(type){
+      const payload = getDemoCasePayload(type);
+      try {
+        localStorage.setItem("AI_SHIELD_SELECTED_DEMO_CASE", JSON.stringify({
+          ...payload,
+          familyID: getFamilyID(),
+          suppressLine: true,
+          demoMode: true,
+          selectedAt: new Date().toISOString()
+        }));
+        localStorage.setItem("AI_SHIELD_SELECTED_DEMO_CASE_TYPE", payload.type);
+      } catch (e) {}
+
+      try {
+        const channel = new BroadcastChannel("ai-shield-demo-case");
+        channel.postMessage({ type: "demoCase:selected", payload });
+        channel.close();
+      } catch (e) {}
+
+      return payload;
+    }
+
+    async function openAppWithCase(type, forceFallback=false){
+      const payload = saveDemoCaseForApp(type);
+      await syncFamilyID();
+      showToast(`已帶入${payload.label}，正在開啟 App Demo`);
+      openPage(buildAppUrl(forceFallback, payload.type));
     }
 
     function fallbackCopy(text){
@@ -303,8 +359,7 @@
       });
 
       $("openAppBtn").addEventListener("click", async () => {
-        await syncFamilyID();
-        openPage(buildAppUrl(false));
+        await openAppWithCase("high", false);
       });
 
       $("openDashboardBtn").addEventListener("click", async () => {
@@ -314,12 +369,12 @@
 
       $("openFallbackDemoBtn").addEventListener("click", async () => {
         localStorage.setItem(FORCE_KEY,"1");
-        await syncFamilyID();
         updateModeUI();
-        openPage(buildAppUrl(true));
+        await openAppWithCase("high", true);
       });
 
       document.querySelectorAll("[data-open]").forEach(btn => btn.addEventListener("click", () => openPage(btn.dataset.open)));
+      document.querySelectorAll("[data-load-case]").forEach(btn => btn.addEventListener("click", () => openAppWithCase(btn.dataset.loadCase)));
       document.querySelectorAll("[data-copy]").forEach(btn => btn.addEventListener("click", () => copyCase(btn.dataset.copy)));
     });
   

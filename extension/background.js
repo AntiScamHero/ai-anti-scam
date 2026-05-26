@@ -24,6 +24,12 @@ const SYSTEM_PAGES = [
     'welcome.html',
     'popup.html',
     'mobile_demo.html',
+    'demo_console.html',
+    'validation_report.html',
+    'test.html',
+    'help.html',
+    'ai防詐盾牌_appdemo.html',
+    'AI防詐盾牌_AppDemo.html',
     'render.com',
     'github.com',
     'localhost',
@@ -59,44 +65,49 @@ chrome.runtime.onInstalled.addListener((details) => {
         chrome.tabs.create({ url: "welcome.html" }).catch(() => {});
     }
 
-    if (getConfigValue('ENABLE_SERVICE_WORKER_HEARTBEAT', false)) {
+    if (getConfigValue('ENABLE_SERVICE_WORKER_HEARTBEAT', false) && chrome.alarms && chrome.alarms.create) {
         chrome.alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: 1 });
     }
 
-    chrome.contextMenus.removeAll(() => {
-        chrome.contextMenus.create({
-            id: "scan-text",
-            title: "🛡️ 掃描這段可疑話術",
-            contexts: ["selection"]
-        });
+    if (chrome.contextMenus && chrome.contextMenus.removeAll && chrome.contextMenus.create) {
+        chrome.contextMenus.removeAll(() => {
+            chrome.contextMenus.create({
+                id: "scan-text",
+                title: "🛡️ 掃描這段可疑話術",
+                contexts: ["selection"]
+            });
 
-        chrome.contextMenus.create({
-            id: "scan-link",
-            title: "🛡️ 掃描此危險連結",
-            contexts: ["link"]
-        });
+            chrome.contextMenus.create({
+                id: "scan-link",
+                title: "🛡️ 掃描此危險連結",
+                contexts: ["link"]
+            });
 
-        chrome.contextMenus.create({
-            id: "scan-image",
-            title: "🛡️ 掃描這張可疑圖片",
-            contexts: ["image"]
+            chrome.contextMenus.create({
+                id: "scan-image",
+                title: "🛡️ 掃描這張可疑圖片",
+                contexts: ["image"]
+            });
         });
-    });
+    }
 });
 
 chrome.runtime.onStartup.addListener(() => {
     if (!getConfigValue('ENABLE_SERVICE_WORKER_HEARTBEAT', false)) return;
+    if (!chrome.alarms || !chrome.alarms.get || !chrome.alarms.create) return;
 
     chrome.alarms.get(KEEP_ALIVE_ALARM, (alarm) => {
         if (!alarm) chrome.alarms.create(KEEP_ALIVE_ALARM, { periodInMinutes: 1 });
     });
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === KEEP_ALIVE_ALARM && getConfigValue('HEARTBEAT_LOG_ENABLED', false)) {
-        console.log("💓 [心跳機制] 防詐盾牌 Service Worker 事件喚醒", new Date().toLocaleTimeString());
-    }
-});
+if (chrome.alarms && chrome.alarms.onAlarm) {
+    chrome.alarms.onAlarm.addListener((alarm) => {
+        if (alarm.name === KEEP_ALIVE_ALARM && getConfigValue('HEARTBEAT_LOG_ENABLED', false)) {
+            console.log("💓 [心跳機制] 防詐盾牌 Service Worker 事件喚醒", new Date().toLocaleTimeString());
+        }
+    });
+}
 
 // ==========================================
 // 共用工具
@@ -457,7 +468,25 @@ function domainMatchesHost(host, domain) {
 
 function isSystemPage(rawUrl) {
     if (!rawUrl) return true;
-    return SYSTEM_PAGES.some(keyword => rawUrl.includes(keyword));
+
+    const original = String(rawUrl || '');
+    const lowerOriginal = original.toLowerCase();
+    let decoded = original;
+
+    try {
+        decoded = decodeURIComponent(original);
+    } catch (e) {}
+
+    const lowerDecoded = String(decoded || '').toLowerCase();
+
+    if (lowerOriginal.startsWith('chrome-extension:') || lowerDecoded.startsWith('chrome-extension:')) {
+        return true;
+    }
+
+    return SYSTEM_PAGES.some(keyword => {
+        const key = String(keyword || '').toLowerCase();
+        return lowerOriginal.includes(key) || lowerDecoded.includes(key);
+    });
 }
 
 async function getCleanTemporaryWhitelist() {
@@ -526,19 +555,48 @@ function localHeuristicScore(text, url = '') {
         [/法院|檢察官|警察|偵查不公開|監管帳戶/i, 55],
         [/斷電|停水|欠費|包裹|補繳|運費不足/i, 35],
         [/bit\.ly|tinyurl|reurl|shorturl|\.xyz|\.top|\.claim/i, 35],
-        [/google\.com\.|yahoo\.com\.|gov\.tw\.|line\.me\./i, 60]
+        [/(?:^|[\s:/@?&=.-])(?:google|yahoo)\.com\.[a-z0-9-]+\.(?:xyz|top|vip|cc|click|shop|site|online|club|info|buzz|icu|cn|ru)(?:[\/\s?#:]|$)/i, 60],
+        [/(?:^|[\s:/@?&=.-])gov\.tw\.[a-z0-9-]+\.(?:xyz|top|vip|cc|click|shop|site|online|club|info|buzz|icu|cn|ru)(?:[\/\s?#:]|$)/i, 60],
+        [/(?:^|[\s:/@?&=.-])line\.me\.[a-z0-9-]+\.(?:xyz|top|vip|cc|click|shop|site|online|club|info|buzz|icu|cn|ru)(?:[\/\s?#:]|$)/i, 60]
     ];
     let score = 0;
     for (const [regex, value] of patterns) {
         if (regex.test(combined)) score += value;
     }
-    return Math.min(100, score);
+    return applyOfficialLineHeuristicGuard(url, text, Math.min(100, score));
 }
 
 
 // ==========================================
 // AI 平台誤判保護：DeepSeek / ChatGPT / Claude
 // ==========================================
+
+function isOfficialLineHost(rawUrl = '') {
+    const host = normalizeHost(rawUrl);
+    return (
+        host === 'line.me' ||
+        host.endsWith('.line.me') ||
+        host === 'lin.ee' ||
+        host.endsWith('.lin.ee') ||
+        host === 'line.naver.jp' ||
+        host.endsWith('.line.naver.jp')
+    );
+}
+
+function applyOfficialLineHeuristicGuard(rawUrl = '', text = '', score = 0) {
+    if (!isOfficialLineHost(rawUrl)) return score;
+
+    const combined = String(text || '').toLowerCase();
+
+    const hasStrongAction =
+        /(?:請|立即|馬上|現在|立刻).{0,16}(輸入|匯款|轉帳|付款|掃描|掃qr|掃 qr|下載|安裝)|輸入.{0,10}(驗證碼|信用卡|提款卡密碼|銀行帳號|身分證)|下載\s*apk|匯款到|轉帳到|掃.{0,8}qr.{0,8}(付款|匯款|驗證|解鎖)/i.test(combined);
+
+    if (hasStrongAction) return score;
+
+    return Math.min(Number(score || 0), 35);
+}
+
+
 function isAiPlatformUrl(rawUrl = '') {
     const host = normalizeHost(rawUrl);
 
@@ -927,6 +985,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 // ==========================================
 // 右鍵選單掃描
 // ==========================================
+if (chrome.contextMenus && chrome.contextMenus.onClicked) {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     let targetData = "";
     let scanType = "";
@@ -1031,6 +1090,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         });
     }
 });
+
+
+}
 
 // ==========================================
 // Content Script 訊息

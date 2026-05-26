@@ -41,7 +41,7 @@
     .secondary{background:#eef4ff;color:#1457bd;border:1px solid #cfdefa}
     .green{background:#e6f8ee;color:#0f7a35;border:1px solid #c3efd3}
     .danger{background:#ffe9e9;color:#c62828;border:1px solid #ffcaca}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.row.three{grid-template-columns:1fr 1fr 1fr}@media(max-width:420px){.row.three{grid-template-columns:1fr}}
     .pill{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:1000}
     .pill-blue{background:#e9f3ff;color:#1457bd}.pill-green{background:#dcfce7;color:#166534}.pill-yellow{background:#fef3c7;color:#92400e}.pill-red{background:#fee2e2;color:#991b1b}
     .result{display:none;border-left:7px solid #94a3b8}
@@ -92,12 +92,13 @@
       <label for="message">測試內容</label>
       <textarea id="message" placeholder="貼上簡訊、LINE 訊息或網頁文字..."></textarea>
 
-      <div class="row">
+      <div class="row three">
         <button class="secondary" id="sampleHigh">高風險範例</button>
         <button class="secondary" id="sampleMid">中風險範例</button>
+        <button class="secondary" id="sampleLow">低風險範例</button>
       </div>
       <button class="primary" id="scanBtn">立即掃描</button>
-      <p class="muted" id="scanHint" style="margin-top:10px;">尚未掃描。</p>
+      <p class="muted" id="scanHint" style="margin-top:10px;">尚未掃描。可從 Demo Console 一鍵帶入案例。</p>
     </section>
 
     <section class="card result" id="resultCard">

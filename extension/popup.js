@@ -1375,13 +1375,7 @@ async function scanCurrentPage() {
             text: maskedText,
             userID: currentUserID || "anonymous",
             familyID: currentFamilyID || "none",
-            source: "popup_demo",
-            requestSource: "popup_demo",
-            scan_source: "popup_demo",
-            demoMode: true,
-            suppressLine: true,
-            suppressLineAlert: true,
-            allowLinePush: false,
+            scan_source: "popup_auto_or_manual",
             page_category: isAiPlatform ? "ai_platform" : "normal_page",
             ai_platform_guard: isAiPlatform
         });
