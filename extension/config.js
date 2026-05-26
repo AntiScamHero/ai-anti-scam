@@ -8,6 +8,7 @@
 const CONFIG = Object.freeze({
     EXTENSION_MODE: "competition",
     API_BASE_URL: "https://ai-anti-scam.onrender.com",
+    SCAN_API_PATH: "/api/scan",
 
     // 🔐 短效權杖與安裝身分
     ACCESS_TOKEN_STORAGE_KEY: "aiShieldAccessToken",
@@ -48,7 +49,29 @@ const CONFIG = Object.freeze({
     AI_SHIELD_DEMO_MODE: false,
     DEMO_MODE: false,
     POPUP_ALLOW_OFFLINE_FALLBACK: true,
+    POPUP_AUTO_SCAN_ON_OPEN: false,
+    DEMO_SUPPRESS_LINE_PUSH: true,
+    LINE_PUSH_DRY_RUN: true,
     ENABLE_FAKE_DATA_INJECTION: false,
+
+    // 👨‍👩‍👧 家庭代碼共用主鍵：Demo Console / App Demo / Popup / Dashboard 統一讀寫這個 key。
+    SHARED_FAMILY_ID_KEY: "AI_SHIELD_FAMILY_ID",
+
+    // 🧪 競賽展示內部頁：自動掃描會跳過，避免自己的測試文字被誤攔。
+    INTERNAL_DEMO_PAGES: [
+        "AI防詐盾牌_AppDemo.html",
+        "demo_console.html",
+        "validation_report.html",
+        "dashboard.html",
+        "blocked.html",
+        "simulator.html",
+        "welcome.html",
+        "popup.html",
+        "mobile_demo.html",
+        "help.html",
+        "test.html"
+    ],
+
 
     TRUSTED_DOMAINS: [
         "wikipedia.org",
@@ -64,6 +87,11 @@ const CONFIG = Object.freeze({
         "twitter.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
         "x.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
         "instagram.com": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+        // 🌟 LINE 官方與短連結高信譽保護：只掃 UGC，不封鎖整個通訊工具
+        "line.me": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+        "liff.line.me": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+        "lin.ee": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
+        "line.naver.jp": { category: "social", reputation: 95, riskThreshold: 110, scanMode: "ugc" },
         "wikipedia.org": { category: "reference", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "ccsh.tn.edu.tw": { category: "education", reputation: 100, riskThreshold: 120, scanMode: "ugc" },
         "github.com": { category: "development", reputation: 100, riskThreshold: 120, scanMode: "ugc" },

@@ -16,8 +16,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const FAMILY_ID_UPDATED_AT_KEY = "aiShieldFamilyBindingUpdatedAt";
 
     const FAMILY_ID_STORAGE_KEYS = [
-        FAMILY_ID_PRIMARY_KEY,
         "savedFamilyID",
+        FAMILY_ID_PRIMARY_KEY,
+        "AI_SHIELD_FAMILY_ID",
         "boundFamilyID",
         "currentFamilyID",
         "familyCode",

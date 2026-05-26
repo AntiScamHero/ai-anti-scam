@@ -37,44 +37,46 @@ const DASHBOARD_LOCAL_CLEAR_AFTER_KEY = "aiShieldDashboardLocalClearAfterByFamil
 
 // 家庭代碼只能有一個正式來源：歡迎頁 / 家庭綁定卡片建立的代碼。
 // Dashboard 不再自己產生新代碼，也不再讓後端回傳代碼覆蓋目前綁定。
-const FAMILY_ID_PRIMARY_KEY = "aiShieldPrimaryFamilyID";
+const FAMILY_ID_PRIMARY_KEY = "AI_SHIELD_FAMILY_ID";
 const FAMILY_ID_UPDATED_AT_KEY = "aiShieldFamilyBindingUpdatedAt";
 
 const FAMILY_ID_STORAGE_KEYS = [
-    FAMILY_ID_PRIMARY_KEY,
     "savedFamilyID",
+    FAMILY_ID_PRIMARY_KEY,
+    "AI_SHIELD_FAMILY_ID",
     "boundFamilyID",
     "currentFamilyID",
     "familyCode",
+    "dashboardFamilyID",
+    "popupFamilyID",
+    "aiShieldFamilyID",
     "familyID",
     "family_id",
-    "aiShieldFamilyID",
-    "dashboardFamilyID",
     "familyInviteCode",
     "guardianFamilyID",
     "guardianCode",
     "aiShieldGuardianCode",
     "aiShieldBoundFamilyCode",
-    "popupFamilyID",
     "popupSavedFamilyID"
 ];
 
 const FAMILY_ID_WRITE_KEYS = [
+    "savedFamilyID",
     FAMILY_ID_PRIMARY_KEY,
-    "familyID",
+    "AI_SHIELD_FAMILY_ID",
     "currentFamilyID",
     "boundFamilyID",
     "familyCode",
-    "family_id",
-    "aiShieldFamilyID",
     "dashboardFamilyID",
-    "savedFamilyID",
+    "popupFamilyID",
+    "aiShieldFamilyID",
+    "familyID",
+    "family_id",
     "familyInviteCode",
     "guardianFamilyID",
     "guardianCode",
     "aiShieldGuardianCode",
     "aiShieldBoundFamilyCode",
-    "popupFamilyID",
     "popupSavedFamilyID"
 ];
 
@@ -2023,7 +2025,7 @@ async function startSocket() {
     applyFamilyIDToDashboard(familyID);
 
     if (!hasRealSocketIOClient()) {
-        await startFallbackPolling("Socket.IO 官方 client 未載入，已自動改用資料更新模式；資料仍會正常顯示。若要即時推播，請換成官方 socket.io.min.js。");
+        await startFallbackPolling("目前使用資料更新模式，系統仍會持續同步家庭戰情資料。");
         return;
     }
 

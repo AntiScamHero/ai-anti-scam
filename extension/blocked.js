@@ -1696,7 +1696,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (manualLeaveBtn) {
-        let countdown = 5;
+        let countdown = 12;
         manualLeaveBtn.textContent = `聽從建議，安全離開此網頁 (${countdown} 秒後自動撤離)`;
 
         const autoEvacuateTimer = setInterval(() => {
@@ -1824,6 +1824,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ==========================================
     startCooldown();
     setupMascotFallback();
+
+    // ==========================================
+    // 攔截成功後自動播放國台語雙語語音提醒
+    // ==========================================
+    window.__AI_SHIELD_PENDING_VOICE__ = true;
+
+    if (window.AIShieldVoice && typeof window.AIShieldVoice.speakWarning === 'function') {
+        window.AIShieldVoice.speakWarning();
+    } else {
+        window.dispatchEvent(new CustomEvent('AIShieldVoiceRequest'));
+
+        setTimeout(() => {
+            if (window.AIShieldVoice && typeof window.AIShieldVoice.speakWarning === 'function') {
+                window.AIShieldVoice.speakWarning();
+            }
+        }, 800);
+    }
     if (chatStatusEl) chatStatusEl.textContent = '尚未展開';
     try {
         const identityForDetail = await getCurrentIdentity();

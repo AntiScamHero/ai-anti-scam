@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-TW">
+<meta charset="utf-8">
+<title>AI 防詐盾牌 LINE Guard 診斷</title>
+<body style="font-family:Microsoft JhengHei, sans-serif; padding:24px; line-height:1.7">
+<h1>LINE Guard 診斷頁</h1>
+<p>按下面按鈕會呼叫 /api/line_guard_status，不會真的推播 LINE。</p>
+<button id="btn">測試 parcel-pay.example.com 是否會被硬性阻擋</button>
+<pre id="out" style="white-space:pre-wrap;background:#f3f4f6;padding:16px;border-radius:12px"></pre>
+<script>
+document.getElementById('btn').onclick = async () => {
+  const base = 'https://ai-anti-scam.onrender.com';
+  const url = base + '/api/line_guard_status?url=' + encodeURIComponent('https://parcel-pay.example.com');
+  const res = await fetch(url);
+  const data = await res.json();
+  document.getElementById('out').textContent = JSON.stringify(data, null, 2);
+};
+</script>
+</body>
+</html>

@@ -19,11 +19,112 @@
     window.__AI_SHIELD_CONTENT_SCRIPT_LOADED__ = true;
 
     // ------------------------------------------------------------
+    // 競賽展示 / Extension 內部頁白名單：最前置判斷
+    // 避免 demo_console.html / App Demo 內含詐騙測試文字而被自己的 Content Script 誤攔。
+    // ------------------------------------------------------------
+    const AI_SHIELD_INTERNAL_PAGE_KEYWORDS_PRECHECK = [
+        "demo_console.html",
+        "ai防詐盾牌_appdemo.html",
+        "AI防詐盾牌_AppDemo.html",
+        "validation_report.html",
+        "dashboard.html",
+        "blocked.html",
+        "simulator.html",
+        "welcome.html",
+        "popup.html",
+        "mobile_demo.html",
+        "help.html",
+        "test.html"
+    ];
+
+    function aiShieldSafeDecodePrecheck(value) {
+        try {
+            return decodeURIComponent(String(value || ""));
+        } catch (e) {
+            return String(value || "");
+        }
+    }
+
+    function aiShieldIsInternalPagePrecheck() {
+        const href = String(window.location.href || "");
+        const path = String(window.location.pathname || "");
+        const decodedHref = aiShieldSafeDecodePrecheck(href);
+        const decodedPath = aiShieldSafeDecodePrecheck(path);
+
+        const protocol = String(window.location.protocol || "").toLowerCase();
+        if (protocol === "chrome-extension:" || protocol.startsWith("chrome-extension:")) {
+            return true;
+        }
+
+        const haystacks = [
+            href.toLowerCase(),
+            path.toLowerCase(),
+            decodedHref.toLowerCase(),
+            decodedPath.toLowerCase()
+        ];
+
+        return AI_SHIELD_INTERNAL_PAGE_KEYWORDS_PRECHECK.some(keyword => {
+            const key = String(keyword || "").toLowerCase();
+            return haystacks.some(text => text.includes(key));
+        });
+    }
+
+    if (aiShieldIsInternalPagePrecheck()) {
+        window.__AI_SHIELD_SKIP_SCAN__ = true;
+        console.log("🛡️ AI 防詐盾牌：內部展示頁已加入白名單，跳過自動掃描。");
+        return;
+    }
+
+
+    // ------------------------------------------------------------
     // 可信網域與特殊頁面判斷
     // ------------------------------------------------------------
     function normalizeDomainHost(host) {
         return String(host || "").replace(/^www\./, "").toLowerCase();
     }
+
+    const AI_SHIELD_INTERNAL_PAGE_KEYWORDS = [
+        "mobile_demo.html",
+        "ai防詐盾牌_appdemo.html",
+        "AI防詐盾牌_AppDemo.html",
+        "demo_console.html",
+        "validation_report.html",
+        "dashboard.html",
+        "blocked.html",
+        "simulator.html",
+        "welcome.html",
+        "popup.html",
+        "help.html",
+        "test.html"
+    ];
+
+    function safeDecodeUrlText(value) {
+        try {
+            return decodeURIComponent(String(value || ""));
+        } catch (e) {
+            return String(value || "");
+        }
+    }
+
+    function isAiShieldInternalDemoPage(urlString = window.location.href) {
+        const href = String(urlString || "");
+        const decodedHref = safeDecodeUrlText(href);
+        const pathname = String(window.location.pathname || "");
+        const decodedPathname = safeDecodeUrlText(pathname);
+
+        const haystacks = [
+            href.toLowerCase(),
+            decodedHref.toLowerCase(),
+            pathname.toLowerCase(),
+            decodedPathname.toLowerCase()
+        ];
+
+        return AI_SHIELD_INTERNAL_PAGE_KEYWORDS.some(keyword => {
+            const key = String(keyword || "").toLowerCase();
+            return haystacks.some(text => text.includes(key));
+        });
+    }
+
 
     function isGoogleDomain(host) {
         const cleanHost = normalizeDomainHost(host);
@@ -72,6 +173,12 @@
 
             if (isTrustedSearchResultUrl(window.location.href)) return true;
 
+            if (isAiShieldInternalDemoPage(window.location.href)) return true;
+
+            if (href.includes("demo_console.html") || pathname.endsWith("/demo_console.html")) return true;
+            if (href.includes("ai防詐盾牌_appdemo.html") || href.includes("ai%E9%98%B2") || pathname.toLowerCase().includes("appdemo.html")) return true;
+            if (href.includes("validation_report.html") || pathname.endsWith("/validation_report.html")) return true;
+            if (href.includes("test.html") || pathname.endsWith("/test.html")) return true;
             if (href.includes("mobile_demo.html") || pathname.endsWith("/mobile_demo.html")) return true;
             if (href.includes("blocked.html") || pathname.endsWith("/blocked.html")) return true;
             if (href.includes("simulator.html") || pathname.endsWith("/simulator.html")) return true;
@@ -234,6 +341,7 @@
     function isSystemPage() {
         const href = window.location.href;
         return window.location.protocol === "chrome-extension:" ||
+            isAiShieldInternalDemoPage(href) ||
             href.includes("dashboard.html") ||
             href.includes("blocked.html") ||
             href.includes("simulator.html") ||

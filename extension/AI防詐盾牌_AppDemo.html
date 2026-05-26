@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta name="ai-shield-skip-scan" content="true" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AI Shield｜行動端 App Demo</title>
+<style>
+    :root {
+      --blue:#1769e8; --blue2:#0f4fb7; --green:#16a34a; --yellow:#f59e0b; --red:#dc2626;
+      --ink:#0f172a; --sub:#475569; --line:#dbe7ff; --soft:#f3f7ff;
+      --shadow:0 18px 46px rgba(23,105,232,.13);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:"Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
+      color:var(--ink);
+      background:linear-gradient(180deg,#f7fbff 0%,#edf4ff 100%);
+    }
+    .app{width:min(480px,100%);margin:0 auto;min-height:100vh;padding:20px 16px 34px}
+    .hero,.card{
+      background:#fff;border:1px solid rgba(46,100,190,.14);border-radius:24px;
+      box-shadow:var(--shadow);padding:20px;margin-bottom:16px;
+    }
+    .badge{display:inline-flex;padding:7px 12px;border-radius:999px;background:#e9f2ff;color:#1c5fb8;font-size:13px;font-weight:1000;margin-bottom:12px}
+    h1{margin:0 0 8px;font-size:30px;line-height:1.15}
+    h2{font-size:20px;margin:0 0 12px}
+    p{line-height:1.65;margin:0;color:#526075;font-weight:700}
+    label{display:block;font-weight:1000;margin:12px 0 8px}
+    input,textarea{
+      width:100%;border:2px solid #cfd8e8;border-radius:16px;padding:13px;font-size:15px;outline:none;background:#fbfdff;color:var(--ink);
+    }
+    textarea{min-height:132px;resize:vertical}
+    input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(23,105,232,.11)}
+    button{
+      width:100%;border:0;border-radius:16px;padding:14px 16px;font-size:16px;font-weight:1000;cursor:pointer;margin-top:10px;
+    }
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .primary{background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff}
+    .secondary{background:#eef4ff;color:#1457bd;border:1px solid #cfdefa}
+    .green{background:#e6f8ee;color:#0f7a35;border:1px solid #c3efd3}
+    .danger{background:#ffe9e9;color:#c62828;border:1px solid #ffcaca}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;font-size:12px;font-weight:1000}
+    .pill-blue{background:#e9f3ff;color:#1457bd}.pill-green{background:#dcfce7;color:#166534}.pill-yellow{background:#fef3c7;color:#92400e}.pill-red{background:#fee2e2;color:#991b1b}
+    .result{display:none;border-left:7px solid #94a3b8}
+    .result.high{border-left-color:var(--red)}.result.mid{border-left-color:var(--yellow)}.result.low{border-left-color:var(--green)}
+    .score{font-size:46px;font-weight:1000;line-height:1;margin:10px 0;color:var(--blue)}
+    .score.high{color:var(--red)}.score.mid{color:var(--yellow)}.score.low{color:var(--green)}
+    .level{font-size:21px;font-weight:1000}
+    .meta{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+    .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .tag{display:inline-flex;padding:7px 10px;border-radius:10px;background:#eef5ff;color:#1457bd;font-size:13px;font-weight:1000}
+    .tag.danger{background:#fee2e2;color:#991b1b;border:0}
+    .case,.history-item{background:#f8fbff;border:1px solid #dbe7ff;border-radius:14px;padding:12px;margin-top:10px}
+    .case b,.history-item b{color:#1b64d8}
+    .muted{font-size:13px;color:#6b7280;font-weight:800}
+    .hide{display:none!important}
+    .family-box{background:#eef7ff;border:1px solid #cde4ff;border-radius:18px;padding:14px;margin-top:12px;text-align:center}
+    .code{font-size:22px;font-weight:1000;letter-spacing:4px;color:#1769e8}
+  </style>
+</head>
+<body data-ai-shield-skip-scan="true">
+  <main class="app">
+    <section class="hero">
+      <div class="badge">手機端輔助防護 Demo</div>
+      <h1>AI Shield</h1>
+      <p>貼上測試內容或網址，系統會優先呼叫雲端 AI；若網路或後端不穩，會自動切換本機備援。</p>
+      <div class="meta">
+        <span class="pill pill-blue" id="modePill">雲端 AI 優先</span>
+        <span class="pill pill-green">家庭代碼：<strong id="familyCodeText">尚未綁定</strong></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>API 與家庭設定</h2>
+      <label for="apiUrl">API 位置</label>
+      <input id="apiUrl" value="https://ai-anti-scam.onrender.com/api/scan" />
+      <p class="muted" style="margin-top:8px;">建議使用 /api/scan。也可填 Render 網址或本機 http://127.0.0.1:5000/api/scan。</p>
+
+      <label for="familyCodeInput">家庭代碼</label>
+      <input id="familyCodeInput" maxlength="6" value="" style="text-align:center;letter-spacing:4px;font-weight:1000;" />
+      <button class="secondary" id="syncFamilyBtn">同步家庭代碼</button>
+    </section>
+
+    <section class="card">
+      <h2>掃描測試內容</h2>
+      <label for="targetUrl">測試網址（可不填）</label>
+      <input id="targetUrl" placeholder="例如：https://example.com/pay" />
+
+      <label for="message">測試內容</label>
+      <textarea id="message" placeholder="貼上簡訊、LINE 訊息或網頁文字..."></textarea>
+
+      <div class="row">
+        <button class="secondary" id="sampleHigh">高風險範例</button>
+        <button class="secondary" id="sampleMid">中風險範例</button>
+      </div>
+      <button class="primary" id="scanBtn">立即掃描</button>
+      <p class="muted" id="scanHint" style="margin-top:10px;">尚未掃描。</p>
+    </section>
+
+    <section class="card result" id="resultCard">
+      <div class="level" id="riskLevel">--</div>
+      <div class="score" id="scoreBox"><span id="riskScore">--</span><span style="font-size:18px;"> / 100</span></div>
+      <div class="meta">
+        <span class="pill pill-blue" id="sourcePill">判定來源：--</span>
+        <span class="pill pill-green" id="familyPill">家庭：--</span>
+      </div>
+
+      <p id="summary">尚未掃描</p>
+      <p id="reason" style="margin-top:10px;"></p>
+      <p id="advice" style="margin-top:10px;font-weight:900;"></p>
+
+      <div class="tags" id="tagList"></div>
+      <div id="cases"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button class="secondary" id="voiceZhBtn">國語提醒</button>
+        <button class="secondary" id="voiceTwBtn">雙語提醒</button>
+      </div>
+      <button class="danger" id="notifyBtn">一鍵通知家人</button>
+      <button class="green" id="openDashboardBtn">開啟家庭戰情室</button>
+    </section>
+
+    <section class="card" id="historyCard">
+      <h2>本機掃描紀錄</h2>
+      <div id="historyList"><p class="muted">尚無紀錄。</p></div>
+    </section>
+
+    <audio id="bilingualWarningAudio" src="ai_shield_bilingual_warning.mp3" preload="auto"></audio>
+  </main>
+  <script src="AI防詐盾牌_AppDemo.js"></script>
+</body>
+</html>

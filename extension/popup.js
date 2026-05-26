@@ -19,6 +19,86 @@ let latestScanReport = null;
 let goldenCountdownTimer = null;
 let didAutoScanOnOpen = false;
 
+
+const SHARED_FAMILY_ID_KEY = "AI_SHIELD_FAMILY_ID";
+const FAMILY_ID_SYNC_KEYS = [
+    "savedFamilyID",
+    "aiShieldPrimaryFamilyID",
+    SHARED_FAMILY_ID_KEY,
+    "currentFamilyID",
+    "boundFamilyID",
+    "familyCode",
+    "dashboardFamilyID",
+    "popupFamilyID",
+    "aiShieldFamilyID",
+    "familyID"
+];
+
+function pickBestFamilyIDFromStorage(storage = {}) {
+    for (const key of FAMILY_ID_SYNC_KEYS) {
+        const normalized = normalizeFamilyCode(storage?.[key]);
+        if (normalized) return normalized;
+    }
+    return "";
+}
+
+function buildSharedFamilyPayload(familyID, extra = {}) {
+    const normalized = normalizeFamilyCode(familyID);
+    const payload = {
+        ...extra,
+        aiShieldFamilyBindingUpdatedAt: new Date().toISOString(),
+        aiShieldFamilyBindingSource: "popup-sync"
+    };
+    FAMILY_ID_SYNC_KEYS.forEach(key => {
+        payload[key] = normalized;
+    });
+    return payload;
+}
+
+async function persistSharedFamilyID(familyID, extra = {}) {
+    const normalized = normalizeFamilyCode(familyID);
+    if (!normalized) return "";
+
+    try {
+        FAMILY_ID_SYNC_KEYS.forEach(key => localStorage.setItem(key, normalized));
+        localStorage.setItem("aiShieldFamilyBindingUpdatedAt", new Date().toISOString());
+        localStorage.setItem("aiShieldFamilyBindingSource", "popup-sync");
+    } catch (e) {}
+
+    try {
+        if (typeof chrome !== "undefined" && chrome.storage?.local) {
+            await chrome.storage.local.set(buildSharedFamilyPayload(normalized, extra));
+        }
+    } catch (e) {}
+
+    return normalized;
+}
+
+function setupPopupFamilyStorageListener() {
+    try {
+        if (typeof chrome === "undefined" || !chrome.storage?.onChanged) return;
+
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+            if (areaName !== "local") return;
+
+            const touched = FAMILY_ID_SYNC_KEYS.some(key => Boolean(changes[key]));
+            if (!touched) return;
+
+            chrome.storage.local.get(FAMILY_ID_SYNC_KEYS).then(storage => {
+                const nextFamilyID = pickBestFamilyIDFromStorage(storage);
+                if (!nextFamilyID || nextFamilyID === currentFamilyID) return;
+
+                currentFamilyID = nextFamilyID;
+                updateUIAsBound(currentFamilyID);
+                startFamilyAlertsPolling(currentFamilyID);
+                showToast(`家庭代碼已同步：${currentFamilyID}`, "success");
+            }).catch(() => {});
+        });
+    } catch (e) {}
+}
+
+
+
 // ==========================================
 // CONFIG / 基本工具
 // ==========================================
@@ -271,7 +351,7 @@ async function ensureInstallIdentity() {
         installKey,
         expiresKey,
         "userID",
-        "familyID"
+        ...FAMILY_ID_SYNC_KEYS
     ]);
 
     let installID = storage[installKey];
@@ -286,7 +366,7 @@ async function ensureInstallIdentity() {
         await chrome.storage.local.set({ userID });
     }
 
-    const familyID = storage.familyID || "none";
+    const familyID = pickBestFamilyIDFromStorage(storage) || "none";
     const token = storage[tokenKey] || "";
     const expiresAt = Number(storage[expiresKey] || 0) * 1000;
     const refreshWindow = Number(getConfigValue("TOKEN_REFRESH_WINDOW_MS", 300000));
@@ -646,16 +726,10 @@ function updateUIAsBound(familyID) {
 
     try {
         if (currentFamilyID !== "none") {
-            localStorage.setItem("savedFamilyID", currentFamilyID);
-            localStorage.setItem("familyID", currentFamilyID);
-            localStorage.setItem("aiShieldPrimaryFamilyID", currentFamilyID); // 更新主鍵
+            FAMILY_ID_SYNC_KEYS.forEach(key => localStorage.setItem(key, currentFamilyID));
 
             if (typeof chrome !== "undefined" && chrome.storage?.local) {
-                chrome.storage.local.set({
-                    familyID: currentFamilyID,
-                    savedFamilyID: currentFamilyID,
-                    aiShieldPrimaryFamilyID: currentFamilyID // 更新主鍵
-                });
+                chrome.storage.local.set(buildSharedFamilyPayload(currentFamilyID));
             }
         }
     } catch (e) {}
@@ -1301,7 +1375,13 @@ async function scanCurrentPage() {
             text: maskedText,
             userID: currentUserID || "anonymous",
             familyID: currentFamilyID || "none",
-            scan_source: "popup_auto_or_manual",
+            source: "popup_demo",
+            requestSource: "popup_demo",
+            scan_source: "popup_demo",
+            demoMode: true,
+            suppressLine: true,
+            suppressLineAlert: true,
+            allowLinePush: false,
             page_category: isAiPlatform ? "ai_platform" : "normal_page",
             ai_platform_guard: isAiPlatform
         });
@@ -1405,19 +1485,10 @@ async function createFamily() {
 
         const tokenKey = getAccessTokenStorageKey();
 
-        await chrome.storage.local.set({
-            familyID: currentFamilyID,
-            savedFamilyID: currentFamilyID,
-            aiShieldPrimaryFamilyID: currentFamilyID, // 更新主鍵
+        await persistSharedFamilyID(currentFamilyID, {
             [tokenKey]: data.accessToken || auth.accessToken || "",
             aiShieldTokenExpiresAt: data.expiresAt || 0
         });
-
-        try {
-            localStorage.setItem("familyID", currentFamilyID);
-            localStorage.setItem("savedFamilyID", currentFamilyID);
-            localStorage.setItem("aiShieldPrimaryFamilyID", currentFamilyID); // 更新主鍵
-        } catch (e) {}
 
         updateUIAsBound(currentFamilyID);
         startFamilyAlertsPolling(currentFamilyID);
@@ -1472,19 +1543,10 @@ async function joinFamily() {
 
         const tokenKey = getAccessTokenStorageKey();
 
-        await chrome.storage.local.set({
-            familyID: currentFamilyID,
-            savedFamilyID: currentFamilyID,
-            aiShieldPrimaryFamilyID: currentFamilyID, // 更新主鍵
+        await persistSharedFamilyID(currentFamilyID, {
             [tokenKey]: data.accessToken || auth.accessToken || "",
             aiShieldTokenExpiresAt: data.expiresAt || 0
         });
-
-        try {
-            localStorage.setItem("familyID", currentFamilyID);
-            localStorage.setItem("savedFamilyID", currentFamilyID);
-            localStorage.setItem("aiShieldPrimaryFamilyID", currentFamilyID); // 更新主鍵
-        } catch (e) {}
 
         updateUIAsBound(currentFamilyID);
         startFamilyAlertsPolling(currentFamilyID);
@@ -1648,9 +1710,21 @@ async function reportCurrentPage() {
 }
 
 function openDashboard() {
-    chrome.tabs.create({
-        url: chrome.runtime.getURL("dashboard.html")
-    });
+    const familyID = normalizeFamilyCode(currentFamilyID) || pickBestFamilyIDFromStorage({ familyID: currentFamilyID }) || "";
+    const dashboardUrl = familyID
+        ? chrome.runtime.getURL(`dashboard.html?familyID=${encodeURIComponent(familyID)}&autoStart=1`)
+        : chrome.runtime.getURL("dashboard.html");
+
+    chrome.tabs.create({ url: dashboardUrl });
+}
+
+function openDemoConsole() {
+    const familyID = normalizeFamilyCode(currentFamilyID) || pickBestFamilyIDFromStorage({ familyID: currentFamilyID }) || "";
+    const consoleUrl = familyID
+        ? chrome.runtime.getURL(`demo_console.html?familyID=${encodeURIComponent(familyID)}`)
+        : chrome.runtime.getURL("demo_console.html");
+
+    chrome.tabs.create({ url: consoleUrl });
 }
 
 function copyInviteCode() {
@@ -1727,6 +1801,7 @@ function bindEvents() {
     const btnCreateFamily = document.getElementById("btn_create_family");
     const btnJoinFamily = document.getElementById("btn_join_family");
     const btnOpenDashboard = document.getElementById("btn_open_dashboard");
+    const btnOpenConsole = document.getElementById("btn_open_console");
     const btnSafeExit = document.getElementById("btn_safe_exit");
     const btnReportPage = document.getElementById("btn_report_page");
     const inviteInput = document.getElementById("invite_input");
@@ -1750,6 +1825,10 @@ function bindEvents() {
 
     if (btnOpenDashboard) {
         btnOpenDashboard.addEventListener("click", openDashboard);
+    }
+
+    if (btnOpenConsole) {
+        btnOpenConsole.addEventListener("click", openDemoConsole);
     }
 
     if (btnSafeExit) {
@@ -1805,12 +1884,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         console.debug("Popup 身分初始化暫時不可用，稍後掃描會自動降級處理。", e);
     }
 
-    const storage = await chrome.storage.local.get(["userID", "familyID"]);
+    const storage = await chrome.storage.local.get(["userID", ...FAMILY_ID_SYNC_KEYS]);
 
     currentUserID = storage.userID || currentUserID || "anonymous";
-    currentFamilyID = normalizeFamilyCode(storage.familyID) || currentFamilyID || "none";
+    currentFamilyID = pickBestFamilyIDFromStorage(storage) || normalizeFamilyCode(currentFamilyID) || "none";
 
     updateUIAsBound(currentFamilyID);
+    setupPopupFamilyStorageListener();
 
     if (currentFamilyID && currentFamilyID !== "none") {
         startFamilyAlertsPolling(currentFamilyID);
@@ -1823,8 +1903,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         currentFamilyID
     });
 
-    // Popup 開啟後自動檢查一次；雲端 API 優先，失敗時靜默改用本機 AI 備援。
-    if (!didAutoScanOnOpen) {
+    // v9：競賽展示預設不在 Popup 開啟時自動掃描，避免一開 Demo 就送出家庭/LINE 通知。
+    // 需要自動掃描時，可在 config.js 將 POPUP_AUTO_SCAN_ON_OPEN 設為 true。
+    if (getConfigValue("POPUP_AUTO_SCAN_ON_OPEN", false) && !didAutoScanOnOpen) {
         didAutoScanOnOpen = true;
         setTimeout(() => {
             scanCurrentPage().catch(error => {
