@@ -2,8 +2,14 @@
 # AI 防詐盾牌 - Flask / Socket.IO 入口
 
 # ⚠️ 關鍵修復：必須在所有 import 的最前面執行 Monkey Patch！
-# from gevent import monkey    <-- 加上 #
-# monkey.patch_all()           <-- 加上 #
+# Render 使用 gevent-websocket Gunicorn worker 時，若 ssl / requests / urllib3
+# 比 gevent monkey patch 更早被載入，Socket.IO / WebSocket 可能出現非同步警告或不穩。
+# 因此這段必須放在 app.py 最前面，且要早於 os、Flask、routes、extensions 等所有 import。
+try:
+    from gevent import monkey
+    monkey.patch_all()
+except Exception as exc:
+    print(f"⚠️ gevent monkey patch 略過：{exc}", flush=True)
 
 import os
 
