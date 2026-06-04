@@ -187,7 +187,7 @@ LINE_PUSH_ENABLED = env_bool("LINE_PUSH_ENABLED", False)
 # 競賽展示預設：Demo 掃描只寫入戰情紀錄，不推播 LINE。
 # 若真的要測真實 LINE 推播，可把 DEMO_SUPPRESS_LINE_PUSH=false，或請求帶 allowLinePush=true。
 DEMO_SUPPRESS_LINE_PUSH = env_bool("DEMO_SUPPRESS_LINE_PUSH", True)
-LINE_GUARD_VERSION = "v12-line-diagnostic-hard-block"
+LINE_GUARD_VERSION = "v13-line-toggle-final"
 # 競賽展示保險：設為 true 時，所有 LINE push 只寫 log，不真的送出。
 # 若決賽現場要展示真實 LINE 推播，再於 Render 環境變數設 LINE_PUSH_DRY_RUN=false。
 LINE_PUSH_DRY_RUN = env_bool("LINE_PUSH_DRY_RUN", True)
@@ -1094,7 +1094,7 @@ def get_line_guard_decision(url="", report_dict=None):
 
     raw_url = str(url or data.get("url") or "").strip()
     domain = normalize_domain(raw_url)
-    hard_block = is_demo_or_test_url_for_line(raw_url)
+    raw_hard_block = is_demo_or_test_url_for_line(raw_url)
 
     suppress_by_flag = (
         truthy(data.get("suppressLine"))
@@ -1113,6 +1113,9 @@ def get_line_guard_decision(url="", report_dict=None):
         or ALLOW_DEMO_LINE_PUSH
     )
 
+    # allowRealPush=true 時，Demo / file:// 只保留診斷資訊，不再視為硬性阻擋。
+    hard_block = raw_hard_block and not allow_real_push
+
     suppress_by_source = (
         source in demo_sources
         or source.startswith("demo_")
@@ -1125,7 +1128,7 @@ def get_line_guard_decision(url="", report_dict=None):
     suppress = False
     reasons = []
 
-    if hard_block and not allow_real_push:
+    if hard_block:
         suppress = True
         reasons.append("hard_block_demo_or_test_url")
 
@@ -1148,6 +1151,7 @@ def get_line_guard_decision(url="", report_dict=None):
         "source": source,
         "reportSource": report_source,
         "hardBlock": hard_block,
+        "rawHardBlock": raw_hard_block,
         "suppress": suppress,
         "reasons": reasons,
     }
