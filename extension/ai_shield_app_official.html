@@ -1,0 +1,2037 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta name="ai-shield-skip-scan" content="true" />
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AI Shield｜AI 防詐盾牌</title>
+  <link rel="manifest" href="manifest.json?v=20260528-v10-ai-assistant-clean-ui" />
+  <meta name="theme-color" content="#1769e8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="防詐盾牌" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <style>
+    :root {
+      --blue: #1769e8;
+      --blue-2: #0f4fb7;
+      --cyan: #15b8d6;
+      --green: #16a34a;
+      --yellow: #f59e0b;
+      --red: #dc2626;
+      --pink: #ec6aa5;
+      --ink: #0f172a;
+      --sub: #475569;
+      --soft: #f3f7ff;
+      --line: #dbe7ff;
+      --card: #ffffff;
+      --shadow: 0 18px 44px rgba(31, 105, 232, 0.14);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Microsoft JhengHei", "PingFang TC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 8%, rgba(23,105,232,.18), transparent 28%),
+        radial-gradient(circle at 84% 20%, rgba(236,106,165,.16), transparent 28%),
+        linear-gradient(160deg, #eef7ff 0%, #ffffff 50%, #fff6e8 100%);
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      padding: 24px 14px 28px;
+    }
+
+    button, input, textarea { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+
+    .phone {
+      width: min(430px, 100%);
+      min-height: min(900px, 100vh - 52px);
+      background: #f8fbff;
+      border: 10px solid #0b1f45;
+      border-radius: 44px;
+      box-shadow: 0 24px 80px rgba(12, 28, 60, .22);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .status-bar {
+      height: 34px;
+      padding: 9px 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 900;
+      background: rgba(248,251,255,.92);
+    }
+
+    .status-icons { letter-spacing: 1px; }
+
+    .app-shell {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .screen-area {
+      flex: 1;
+      overflow: auto;
+      padding: 14px 18px 92px;
+      scroll-behavior: smooth;
+    }
+
+    .screen { display: none; animation: fadeIn .22s ease; }
+    .screen.active { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .top-card {
+      background:
+        radial-gradient(circle at 85% 12%, rgba(21,184,214,.14), transparent 30%),
+        linear-gradient(135deg, #ffffff, #eef6ff);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #e9f3ff;
+      color: #1457bd;
+      border: 1px solid #cfe3ff;
+      font-size: 12px;
+      font-weight: 1000;
+      margin-bottom: 12px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 30px; line-height: 1.16; letter-spacing: .2px; }
+    h2 { font-size: 22px; line-height: 1.25; }
+    h3 { font-size: 17px; line-height: 1.35; }
+
+    .lead {
+      margin-top: 10px;
+      color: var(--sub);
+      font-size: 15px;
+      line-height: 1.65;
+      font-weight: 750;
+    }
+
+    .hero-row {
+      display: grid;
+      grid-template-columns: 1fr 128px;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .mascot {
+      width: 132px;
+      max-width: 100%;
+      align-self: end;
+      filter: drop-shadow(0 18px 24px rgba(23, 105, 232, .22));
+      transform: translateY(8px);
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .quick-card, .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 10px 28px rgba(23, 105, 232, .08);
+    }
+
+    .quick-card {
+      padding: 14px;
+      min-height: 112px;
+      text-align: left;
+      color: var(--ink);
+      cursor: pointer;
+      transition: .18s ease;
+    }
+
+    .quick-card:hover { transform: translateY(-2px); }
+    .quick-icon { font-size: 27px; margin-bottom: 8px; }
+    .quick-card strong { display: block; font-size: 15px; line-height: 1.3; }
+    .quick-card span { display: block; margin-top: 5px; color: var(--sub); font-size: 12px; line-height: 1.45; font-weight: 700; }
+
+    .card { padding: 18px; margin-bottom: 13px; }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 2px 0 12px;
+    }
+
+    .section-title small {
+      color: var(--sub);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .notice {
+      padding: 13px 14px;
+      border-radius: var(--radius-md);
+      background: #fff8e6;
+      border: 1px solid #ffe0a3;
+      color: #7a4b00;
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 850;
+      margin-bottom: 13px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 1000;
+      margin: 0 0 8px;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 2px solid #cbdaf4;
+      border-radius: 17px;
+      padding: 13px 14px;
+      outline: none;
+      background: #fbfdff;
+      color: var(--ink);
+      font-size: 15px;
+      line-height: 1.55;
+      font-weight: 750;
+    }
+
+    textarea { min-height: 132px; resize: vertical; }
+    input:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(23,105,232,.12); }
+
+    .field-group { display: grid; gap: 14px; }
+
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .pill {
+      border: 1px solid #cfe0ff;
+      background: #eef5ff;
+      color: #1557b0;
+      border-radius: 999px;
+      padding: 9px 11px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 1000;
+      width: auto;
+      margin: 0;
+    }
+
+    .btn {
+      width: 100%;
+      border: 0;
+      border-radius: 18px;
+      padding: 15px 16px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 1000;
+      margin-top: 12px;
+      transition: .18s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: linear-gradient(135deg, var(--blue), var(--blue-2)); color: #fff; box-shadow: 0 12px 24px rgba(23,105,232,.24); }
+    .btn-soft { background: #eef5ff; color: #1457bd; border: 1px solid #cfdefa; }
+    .btn-danger { background: #ffe8e8; color: #b91c1c; border: 1px solid #ffcaca; }
+    .btn-green { background: #e6f8ee; color: #0f7a35; border: 1px solid #c3efd3; }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .scan-loading {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      margin-top: 12px;
+      border-radius: 18px;
+      background: #eef6ff;
+      color: #1457bd;
+      font-weight: 1000;
+    }
+    .scan-loading.active { display: flex; }
+    .spinner {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 4px solid #c9dcff;
+      border-top-color: var(--blue);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .result-hero {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-bottom: 13px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .result-hero.high { border-color: #fecaca; background: linear-gradient(180deg, #fff, #fff3f3); }
+    .result-hero.mid { border-color: #fde68a; background: linear-gradient(180deg, #fff, #fff9ea); }
+    .result-hero.low { border-color: #bbf7d0; background: linear-gradient(180deg, #fff, #f0fff5); }
+
+    .warn-img {
+      width: 74px;
+      height: 74px;
+      object-fit: contain;
+      margin-bottom: 4px;
+      filter: drop-shadow(0 10px 14px rgba(220,38,38,.20));
+    }
+
+    .score {
+      font-size: 68px;
+      font-weight: 1000;
+      letter-spacing: -2px;
+      line-height: 1;
+      margin: 8px 0;
+    }
+    .score.high { color: var(--red); }
+    .score.mid { color: var(--yellow); }
+    .score.low { color: var(--green); }
+    .score span { font-size: 19px; letter-spacing: 0; color: var(--sub); }
+
+    .risk-level {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      padding: 9px 15px;
+      border-radius: 999px;
+      font-size: 16px;
+      font-weight: 1000;
+      margin-bottom: 8px;
+    }
+    .risk-level.high { background: #fee2e2; color: #b91c1c; }
+    .risk-level.mid { background: #fef3c7; color: #92400e; }
+    .risk-level.low { background: #dcfce7; color: #166534; }
+
+
+    .mode-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 12px 13px;
+      border-radius: 17px;
+      border: 1px solid #cfe0ff;
+      background: linear-gradient(135deg, #eef5ff, #f7fbff);
+      color: #1457bd;
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 900;
+    }
+    .mode-banner strong {
+      display: block;
+      font-size: 14px;
+      color: #0f4fb7;
+      margin-bottom: 2px;
+    }
+    .mode-banner.fallback {
+      background: linear-gradient(135deg, #fff7df, #fffaf0);
+      border-color: #ffe0a3;
+      color: #8a5200;
+    }
+    .mode-banner.fallback strong { color: #92400e; }
+    .mode-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 99px;
+      background: #16a34a;
+      margin-top: 5px;
+      flex: 0 0 auto;
+      box-shadow: 0 0 0 4px rgba(22,163,74,.12);
+    }
+    .mode-banner.fallback .mode-dot {
+      background: #f59e0b;
+      box-shadow: 0 0 0 4px rgba(245,158,11,.14);
+    }
+
+    .source-pill {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0 auto 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #eef5ff;
+      color: #1457bd;
+      border: 1px solid #cfdefa;
+      font-size: 12px;
+      font-weight: 1000;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .data-row {
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 10px;
+      padding: 12px 0;
+      border-bottom: 1px solid #edf3ff;
+      align-items: start;
+    }
+    .data-row:last-child { border-bottom: 0; padding-bottom: 0; }
+    .data-label { color: var(--sub); font-size: 13px; font-weight: 1000; }
+    .data-value { color: var(--ink); font-size: 14px; font-weight: 850; line-height: 1.65; word-break: break-word; }
+
+    .tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag {
+      display: inline-flex;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #eef5ff;
+      border: 1px solid #d7e6ff;
+      color: #1557b0;
+      font-size: 12px;
+      font-weight: 1000;
+    }
+    .tag.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+
+    .family-card {
+      background: linear-gradient(135deg, #ffffff, #f2fbff);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      margin-bottom: 13px;
+    }
+    .family-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .family-avatar { width: 54px; height: 54px; border-radius: 18px; background: #eaf5ff; display: grid; place-items: center; overflow: hidden; flex: 0 0 auto; }
+    .family-avatar img { width: 58px; object-fit: contain; }
+
+    .line-bubble {
+      background: #e6f8ee;
+      border: 1px solid #c2ebd0;
+      color: #135d2d;
+      border-radius: 20px 20px 20px 7px;
+      padding: 14px;
+      font-size: 14px;
+      line-height: 1.6;
+      font-weight: 850;
+    }
+
+    .history-item {
+      display: grid;
+      grid-template-columns: 50px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid #edf3ff;
+    }
+    .history-item:last-child { border-bottom: 0; }
+    .history-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      font-weight: 1000;
+    }
+    .history-icon.high { background: #fee2e2; color: #b91c1c; }
+    .history-icon.mid { background: #fef3c7; color: #92400e; }
+    .history-icon.low { background: #dcfce7; color: #166534; }
+    .history-title { font-size: 14px; font-weight: 1000; line-height: 1.3; }
+    .history-sub { margin-top: 3px; color: var(--sub); font-size: 12px; font-weight: 800; }
+    .history-score { font-size: 18px; font-weight: 1000; }
+
+    .bottom-nav {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      padding: 10px 12px 14px;
+      background: rgba(255,255,255,.94);
+      border-top: 1px solid #dce8fb;
+      backdrop-filter: blur(12px);
+    }
+    .nav-btn {
+      border: 0;
+      background: transparent;
+      color: #64748b;
+      border-radius: 17px;
+      padding: 9px 5px;
+      cursor: pointer;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      font-weight: 1000;
+    }
+    .nav-btn span { font-size: 21px; line-height: 1; }
+    .nav-btn.active { color: #1457bd; background: #e9f3ff; }
+
+    .demo-label {
+      position: absolute;
+      top: 42px;
+      right: 18px;
+      z-index: 5;
+      background: rgba(15,23,42,.82);
+      color: #fff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 1000;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--sub);
+      padding: 26px 12px;
+      font-size: 14px;
+      line-height: 1.7;
+      font-weight: 800;
+    }
+
+
+
+    /* ==============================
+       長輩友善強化版：大字級、高對比、大觸控區
+       ============================== */
+    h1 { font-size: 34px; line-height: 1.22; letter-spacing: .5px; }
+    h2 { font-size: 26px; line-height: 1.32; }
+    h3 { font-size: 22px; line-height: 1.42; }
+
+    .lead {
+      font-size: 18px;
+      line-height: 1.72;
+      font-weight: 850;
+      color: #334155;
+    }
+
+    .badge {
+      font-size: 16px;
+      padding: 10px 16px;
+      line-height: 1.25;
+    }
+
+    .notice {
+      font-size: 17px;
+      line-height: 1.68;
+      padding: 16px 18px;
+    }
+
+    label {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    input, textarea {
+      font-size: 18px;
+      line-height: 1.68;
+      padding: 16px;
+      border-radius: 20px;
+      min-height: 58px;
+    }
+
+    textarea { min-height: 156px; }
+
+    .btn {
+      font-size: 20px;
+      padding: 18px 18px;
+      min-height: 60px;
+      border-radius: 24px;
+    }
+
+    .pill {
+      font-size: 16px;
+      padding: 13px 18px;
+      min-height: 48px;
+    }
+
+    .quick-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .quick-card {
+      padding: 18px;
+      min-height: 138px;
+      border-radius: 26px;
+    }
+
+    .quick-icon { font-size: 38px; margin-bottom: 12px; }
+    .quick-card strong { font-size: 19px; line-height: 1.35; }
+    .quick-card span { font-size: 15px; line-height: 1.55; margin-top: 8px; font-weight: 800; }
+
+    .risk-level {
+      font-size: 22px;
+      padding: 12px 24px;
+      margin-bottom: 10px;
+    }
+
+    .source-pill {
+      font-size: 16px;
+      padding: 10px 16px;
+      max-width: 100%;
+    }
+
+    .data-row {
+      grid-template-columns: 96px 1fr;
+      gap: 14px;
+      padding: 16px 0;
+    }
+
+    .data-label { font-size: 16px; color: #334155; }
+    .data-value { font-size: 18px; line-height: 1.72; font-weight: 900; }
+
+    .tag {
+      font-size: 15px;
+      padding: 9px 13px;
+      line-height: 1.35;
+    }
+
+    .line-bubble {
+      font-size: 18px;
+      line-height: 1.7;
+      padding: 18px;
+    }
+
+    .history-title { font-size: 17px; line-height: 1.45; }
+    .history-sub { font-size: 14px; line-height: 1.45; }
+    .history-score { font-size: 22px; }
+
+    .nav-btn {
+      font-size: 13px;
+      padding: 10px 5px;
+      min-height: 64px;
+    }
+    .nav-btn span { font-size: 25px; }
+
+    .demo-label {
+      font-size: 12px;
+      padding: 7px 11px;
+    }
+
+    .elder-verdict {
+      border-radius: 28px;
+      padding: 22px 18px;
+      margin-bottom: 16px;
+      text-align: center;
+      border: 3px solid transparent;
+    }
+    .elder-verdict.high { background: #fff1f2; border-color: #fb7185; color: #991b1b; }
+    .elder-verdict.mid { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+    .elder-verdict.low { background: #ecfdf5; border-color: #16a34a; color: #14532d; }
+    .elder-verdict-title { font-size: 31px; line-height: 1.2; font-weight: 1000; letter-spacing: .5px; }
+    .elder-verdict-desc { margin-top: 10px; font-size: 20px; line-height: 1.55; font-weight: 950; }
+
+    .big-action-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .big-action-btn {
+      border: 2px solid #cfe0ff;
+      background: linear-gradient(135deg, #ffffff, #eef6ff);
+      color: #0f356f;
+      border-radius: 25px;
+      padding: 18px;
+      min-height: 74px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(23,105,232,.09);
+      font-weight: 1000;
+    }
+    .big-action-btn .big-icon { font-size: 34px; flex: 0 0 auto; }
+    .big-action-btn strong { display: block; font-size: 20px; line-height: 1.3; }
+    .big-action-btn span { display: block; margin-top: 4px; color: #475569; font-size: 15px; line-height: 1.45; font-weight: 850; }
+
+    .ocr-panel {
+      display: none;
+      margin-top: 14px;
+      padding: 16px;
+      border-radius: 22px;
+      background: #f8fbff;
+      border: 1px solid #dbe7ff;
+    }
+    .ocr-panel.active { display: block; }
+    .ocr-preview-wrap {
+      display: none;
+      margin-top: 12px;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #eef5ff;
+      border: 1px solid #d7e6ff;
+    }
+    .ocr-preview-wrap.active { display: block; }
+    .ocr-preview-wrap img {
+      display: block;
+      width: 100%;
+      max-height: 260px;
+      object-fit: contain;
+      background: #fff;
+    }
+    .ocr-status {
+      margin-top: 12px;
+      color: #1457bd;
+      font-size: 17px;
+      line-height: 1.6;
+      font-weight: 950;
+    }
+    .ocr-progress {
+      display: none;
+      height: 12px;
+      margin-top: 10px;
+      background: #dbeafe;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .ocr-progress.active { display: block; }
+    .ocr-progress > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #1769e8, #15b8d6);
+      transition: width .25s ease;
+    }
+    .ocr-text-box {
+      display: none;
+      margin-top: 12px;
+    }
+    .ocr-text-box.active { display: block; }
+
+    .info-card {
+      background: linear-gradient(135deg, #ffffff, #f4fbff);
+      border: 1px solid #dbe7ff;
+      border-radius: 24px;
+      padding: 17px;
+      margin-top: 12px;
+    }
+    .info-card h3 { color: #0f4fb7; }
+
+    .voice-status {
+      margin-top: 10px;
+      color: #1457bd;
+      font-size: 16px;
+      line-height: 1.6;
+      font-weight: 950;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+
+    /* ==============================
+       正式 App 視覺校正：分層大字體、真實手機比例、圖片備援
+       ============================== */
+    .demo-label { display: none !important; }
+
+    h1 { font-size: 30px; line-height: 1.18; letter-spacing: .3px; }
+    h2 { font-size: 23px; line-height: 1.32; }
+    h3 { font-size: 18px; line-height: 1.42; }
+
+    .lead {
+      font-size: 16px;
+      line-height: 1.68;
+      font-weight: 820;
+      color: #334155;
+    }
+
+    .badge {
+      font-size: 14px;
+      padding: 8px 13px;
+      line-height: 1.25;
+    }
+
+    .notice {
+      font-size: 15px;
+      line-height: 1.62;
+      padding: 14px 15px;
+    }
+
+    label { font-size: 16px; margin-bottom: 9px; }
+
+    input, textarea {
+      font-size: 17px;
+      line-height: 1.62;
+      padding: 15px;
+      border-radius: 18px;
+      min-height: 54px;
+    }
+    textarea { min-height: 142px; }
+
+    .btn {
+      font-size: 18px;
+      padding: 16px 17px;
+      min-height: 56px;
+      border-radius: 21px;
+    }
+
+    .pill {
+      font-size: 14px;
+      padding: 11px 15px;
+      min-height: 44px;
+    }
+
+    .hero-row { grid-template-columns: 1fr 110px; gap: 10px; align-items: end; }
+    .mascot-slot {
+      width: 110px;
+      min-height: 128px;
+      display: grid;
+      place-items: end center;
+      align-self: end;
+    }
+    .mascot {
+      width: 110px;
+      max-width: 100%;
+      align-self: end;
+      filter: drop-shadow(0 16px 22px rgba(23, 105, 232, .22));
+      transform: translateY(6px);
+    }
+    .mascot-fallback {
+      width: 102px;
+      height: 116px;
+      border-radius: 30px 30px 24px 24px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, #e9f5ff, #ffffff);
+      border: 2px solid #cfe3ff;
+      box-shadow: 0 14px 24px rgba(23,105,232,.15);
+      color: #0f4fb7;
+      font-weight: 1000;
+    }
+    .mascot-fallback[hidden] { display: none !important; }
+    .mascot-fallback span { font-size: 42px; line-height: 1; }
+    .mascot-fallback b { font-size: 18px; margin-top: -18px; }
+    .mascot-fallback.girl { background: linear-gradient(145deg, #fff0f7, #ffffff); border-color: #ffd1e5; color: #b91c65; }
+
+    .quick-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .quick-card { padding: 15px; min-height: 118px; border-radius: 24px; }
+    .quick-icon { font-size: 32px; margin-bottom: 9px; }
+    .quick-card strong { font-size: 17px; line-height: 1.35; }
+    .quick-card span { font-size: 13px; line-height: 1.5; margin-top: 6px; font-weight: 800; }
+
+    .risk-level { font-size: 20px; padding: 11px 20px; margin-bottom: 10px; }
+    .source-pill { font-size: 14px; padding: 9px 14px; max-width: 100%; }
+    .score { font-size: 62px; }
+
+    .data-row { grid-template-columns: 88px 1fr; gap: 12px; padding: 14px 0; }
+    .data-label { font-size: 14px; color: #334155; }
+    .data-value { font-size: 16px; line-height: 1.68; font-weight: 880; }
+    .tag { font-size: 14px; padding: 8px 12px; line-height: 1.35; }
+
+    .line-bubble { font-size: 16px; line-height: 1.65; padding: 16px; }
+    .history-title { font-size: 15px; line-height: 1.45; }
+    .history-sub { font-size: 13px; line-height: 1.45; }
+    .history-score { font-size: 20px; }
+
+    .nav-btn { font-size: 12px; padding: 9px 4px; min-height: 58px; }
+    .nav-btn span { font-size: 23px; }
+
+    .elder-verdict { padding: 20px 16px; margin-bottom: 15px; }
+    .elder-verdict-title { font-size: 31px; line-height: 1.2; }
+    .elder-verdict-desc { font-size: 18px; line-height: 1.55; }
+
+    .big-action-btn { padding: 16px; min-height: 70px; border-radius: 22px; }
+    .big-action-btn .big-icon { font-size: 31px; }
+    .big-action-btn strong { font-size: 18px; line-height: 1.32; }
+    .big-action-btn span { font-size: 14px; line-height: 1.45; }
+
+    .ocr-status { font-size: 15px; line-height: 1.62; }
+    .voice-status { font-size: 15px; line-height: 1.62; }
+    .avatar-fallback { font-size: 27px; }
+
+    @media (max-width: 390px) {
+      body { padding: 0; }
+      .phone { width: 100%; min-height: 100vh; border: 0; border-radius: 0; }
+      .screen-area { padding: 13px 14px 92px; }
+      .hero-row { grid-template-columns: 1fr 90px; gap: 8px; }
+      .mascot-slot { width: 90px; min-height: 106px; }
+      .mascot { width: 90px; }
+      .mascot-fallback { width: 86px; height: 98px; }
+      h1 { font-size: 28px; }
+      h2 { font-size: 22px; }
+      .lead { font-size: 16px; }
+      .quick-grid { grid-template-columns: 1fr 1fr; gap: 9px; }
+      .quick-card { min-height: 108px; padding: 13px; }
+      .quick-icon { font-size: 29px; }
+      .quick-card strong { font-size: 16px; }
+      .quick-card span { font-size: 12.5px; }
+      .elder-verdict-title { font-size: 28px; }
+      .elder-verdict-desc { font-size: 17px; }
+      .big-action-btn strong { font-size: 17px; }
+    }
+
+
+    /* ==============================
+       零成本長輩友善優化：165 大按鈕、守護人聯絡、語音呼吸燈
+       ============================== */
+    .emergency-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .btn-link {
+      text-decoration: none;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-call {
+      background: #e0f2fe;
+      color: #0369a1;
+      border: 1px solid #bae6fd;
+    }
+    .btn-guardian {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+    @keyframes pulse-recording {
+      0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.42); }
+      70% { box-shadow: 0 0 0 16px rgba(220, 38, 38, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+    }
+    .is-recording {
+      background: #fee2e2 !important;
+      border-color: #fecaca !important;
+      animation: pulse-recording 1.45s infinite;
+    }
+    .is-recording .big-icon { filter: drop-shadow(0 4px 10px rgba(220,38,38,.28)); }
+    .ocr-text-box { display: none !important; }
+
+    @media (max-width: 390px) {
+      .emergency-actions { grid-template-columns: 1fr; }
+    }
+
+
+    /* ==============================
+       PWA 安裝、一鍵貼上、防詐模擬考
+       ============================== */
+    .app-install-card {
+      background: linear-gradient(135deg, #ffffff, #eef6ff);
+      border: 1px solid #cfe0ff;
+      border-radius: 24px;
+      padding: 17px;
+      margin-top: 12px;
+    }
+    .app-install-card .lead { margin-top: 8px; }
+    .more-tools-card {
+      padding: 0;
+      overflow: hidden;
+    }
+    .more-tools-card summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 17px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 1000;
+      color: #0f356f;
+      background: linear-gradient(135deg, #ffffff, #eef6ff);
+    }
+    .more-tools-card summary::-webkit-details-marker { display: none; }
+    .more-tools-card summary::after {
+      content: "＋";
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: #e9f3ff;
+      color: #1457bd;
+      font-size: 22px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+    .more-tools-card[open] summary::after { content: "－"; }
+    .more-tools-summary-title { display: block; font-size: 18px; line-height: 1.35; }
+    .more-tools-summary-sub { display: block; margin-top: 4px; color: #64748b; font-size: 13px; line-height: 1.45; font-weight: 850; }
+    .more-tools-content {
+      padding: 0 18px 18px;
+      display: grid;
+      gap: 12px;
+    }
+    .mini-tool {
+      padding: 15px;
+      border-radius: 22px;
+      border: 1px solid #dbe7ff;
+      background: #fbfdff;
+    }
+    .mini-tool h3 { color: #0f4fb7; }
+    .mini-tool .lead { margin-top: 6px; font-size: 14px; }
+    .install-status, .clipboard-status {
+      margin-top: 9px;
+      color: #1457bd;
+      font-size: 14px;
+      line-height: 1.55;
+      font-weight: 900;
+    }
+    .clipboard-status.success { color: #15803d; }
+    .clipboard-status.warn { color: #92400e; }
+
+    .quiz-modal {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(15, 23, 42, .58);
+      backdrop-filter: blur(8px);
+    }
+    .quiz-modal[hidden] { display: none !important; }
+    .quiz-card {
+      width: min(390px, 100%);
+      max-height: calc(100vh - 72px);
+      overflow: auto;
+      background: #ffffff;
+      border-radius: 30px;
+      padding: 20px;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, .35);
+      border: 1px solid #dbe7ff;
+    }
+    .quiz-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+    .quiz-close {
+      width: 42px;
+      height: 42px;
+      border: 0;
+      border-radius: 99px;
+      background: #eef5ff;
+      color: #1457bd;
+      font-weight: 1000;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+    .quiz-question {
+      margin: 12px 0;
+      padding: 16px;
+      border-radius: 22px;
+      background: #f8fbff;
+      border: 1px solid #dbe7ff;
+      color: #10233f;
+      font-size: 17px;
+      line-height: 1.65;
+      font-weight: 900;
+      white-space: pre-wrap;
+    }
+    .quiz-options {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .quiz-feedback {
+      display: none;
+      margin-top: 13px;
+      padding: 14px;
+      border-radius: 20px;
+      font-size: 16px;
+      line-height: 1.62;
+      font-weight: 900;
+    }
+    .quiz-feedback.active { display: block; }
+    .quiz-feedback.correct {
+      background: #dcfce7;
+      color: #14532d;
+      border: 1px solid #bbf7d0;
+    }
+    .quiz-feedback.wrong {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    .quiz-progress {
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 1000;
+      margin-top: 5px;
+    }
+    .quiz-score {
+      color: #1457bd;
+      font-size: 15px;
+      font-weight: 1000;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 390px) {
+      .quiz-modal { padding: 12px; }
+      .quiz-card { border-radius: 24px; padding: 17px; }
+      .quiz-question { font-size: 16px; }
+    }
+
+
+
+    /* ==============================
+       網址照妖鏡：主網域視覺化解析
+       ============================== */
+    .url-mirror-card[hidden] { display: none !important; }
+    .url-mirror-box {
+      padding: 15px;
+      border-radius: 20px;
+      background: #fff7f7;
+      border: 1px solid #fecaca;
+      color: #334155;
+      font-size: 16px;
+      line-height: 1.68;
+      font-weight: 900;
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
+    .url-mirror-highlight {
+      display: inline-block;
+      color: #b91c1c;
+      background: #ffe4e6;
+      border: 2px solid #fecaca;
+      border-radius: 9px;
+      padding: 1px 6px;
+      margin: 0 2px;
+      font-weight: 1000;
+    }
+    .url-risk-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 11px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 1000;
+      line-height: 1.35;
+    }
+    .url-risk-badge.high { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .url-risk-badge.mid { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .url-risk-badge.low { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+
+  
+    /* ==============================
+       持續優化：最新警戒、個資保護視覺化、誤判回報
+       ============================== */
+    .fraud-alert-ticker {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      padding: 12px 13px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #fff1f2, #fff7ed);
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      box-shadow: 0 10px 24px rgba(220, 38, 38, .10);
+    }
+    .fraud-alert-label {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #991b1b;
+      font-size: 14px;
+      font-weight: 1000;
+      border: 1px solid #fecaca;
+    }
+    .fraud-alert-track {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      font-size: 15px;
+      font-weight: 950;
+      line-height: 1.5;
+    }
+    .fraud-alert-track span {
+      display: inline-block;
+      padding-left: 100%;
+      animation: fraudTicker 23s linear infinite;
+    }
+    @keyframes fraudTicker {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-100%); }
+    }
+    .privacy-mask-status {
+      display: none;
+      margin: 12px 0 2px;
+      padding: 13px 14px;
+      border-radius: 18px;
+      background: #ecfdf5;
+      border: 1px solid #bbf7d0;
+      color: #14532d;
+      font-size: 15px;
+      line-height: 1.62;
+      font-weight: 950;
+    }
+    .privacy-mask-status.active { display: block; }
+    .privacy-mask-status strong { color: #0f7a35; }
+    .privacy-mask-flash {
+      border-color: #16a34a !important;
+      box-shadow: 0 0 0 4px rgba(22, 163, 74, .16) !important;
+      color: #0f7a35 !important;
+      background: #f0fdf4 !important;
+    }
+    .btn-report {
+      background: #f8fafc;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }
+    .report-status {
+      margin-top: 8px;
+      color: #475569;
+      font-size: 14px;
+      line-height: 1.55;
+      font-weight: 900;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .fraud-alert-track span { animation: none; padding-left: 0; }
+    }
+    @media (max-width: 390px) {
+      .fraud-alert-ticker { padding: 10px 11px; }
+      .fraud-alert-label { font-size: 13px; }
+      .fraud-alert-track { font-size: 14px; }
+    }
+
+
+    /* ==============================
+       生活情境急救模式：一鍵求救卡 + 緊急脫身鈴
+       ============================== */
+    .scenario-rescue-block {
+      margin: 0 0 16px;
+      padding: 17px;
+      border-radius: 26px;
+      border: 2px solid #ffd1d1;
+      background: linear-gradient(135deg, #fff7f7, #ffffff 56%, #f3f8ff);
+      box-shadow: 0 12px 28px rgba(220, 38, 38, .08);
+    }
+    .scenario-rescue-block .section-title { margin-bottom: 8px; }
+    .scenario-rescue-block .lead { margin-top: 0; font-size: 15px; }
+    .scenario-rescue-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 13px;
+    }
+    .scenario-card {
+      width: 100%;
+      border: 2px solid #fecaca;
+      border-radius: 24px;
+      padding: 16px;
+      min-height: 78px;
+      background: #fff;
+      color: #7f1d1d;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 10px 22px rgba(220, 38, 38, .07);
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .scenario-card:hover { transform: translateY(-1px); box-shadow: 0 14px 28px rgba(220, 38, 38, .11); }
+    .scenario-card .scenario-icon { font-size: 34px; flex: 0 0 auto; }
+    .scenario-card strong { display: block; font-size: 18px; line-height: 1.35; }
+    .scenario-card span span { display: block; margin-top: 4px; color: #7c2d12; font-size: 14px; line-height: 1.45; font-weight: 850; }
+
+    .escape-fab {
+      position: absolute;
+      right: 16px;
+      bottom: 94px;
+      z-index: 35;
+      width: 88px;
+      min-height: 88px;
+      border: 0;
+      border-radius: 28px;
+      background: linear-gradient(135deg, #dc2626, #991b1b);
+      color: #fff;
+      box-shadow: 0 18px 34px rgba(185, 28, 28, .35);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      gap: 2px;
+      padding: 9px;
+      font-weight: 1000;
+      line-height: 1.15;
+    }
+    .escape-fab-icon { font-size: 28px; line-height: 1; }
+    .escape-fab-text { font-size: 14px; letter-spacing: .5px; }
+    .escape-fab.is-ringing { animation: escapePulse .72s ease-in-out infinite; }
+    @keyframes escapePulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 18px 34px rgba(185, 28, 28, .35); }
+      50% { transform: scale(1.07); box-shadow: 0 20px 42px rgba(185, 28, 28, .52); }
+    }
+
+    .escape-modal {
+      position: absolute;
+      inset: 0;
+      z-index: 70;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, .58);
+      backdrop-filter: blur(7px);
+    }
+    .escape-modal[hidden] { display: none !important; }
+    .escape-panel {
+      width: 100%;
+      max-width: 372px;
+      border-radius: 32px;
+      background: #fff;
+      border: 1px solid #fecaca;
+      box-shadow: 0 26px 64px rgba(15, 23, 42, .35);
+      overflow: hidden;
+    }
+    .escape-call-screen {
+      padding: 24px 20px 20px;
+      color: #fff;
+      background:
+        radial-gradient(circle at 80% 10%, rgba(255,255,255,.26), transparent 30%),
+        linear-gradient(145deg, #dc2626, #7f1d1d);
+      text-align: center;
+    }
+    .escape-wave {
+      width: 82px;
+      height: 82px;
+      margin: 0 auto 13px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.18);
+      border: 2px solid rgba(255,255,255,.52);
+      font-size: 40px;
+      animation: escapePulse .82s ease-in-out infinite;
+    }
+    .escape-call-screen h2 { color: #fff; font-size: 27px; }
+    .escape-call-screen p { margin-top: 8px; color: rgba(255,255,255,.92); font-weight: 900; line-height: 1.55; }
+    .escape-script {
+      padding: 18px 20px 4px;
+      color: #7f1d1d;
+      font-weight: 1000;
+      line-height: 1.65;
+      font-size: 18px;
+    }
+    .escape-script strong { display: block; color: #991b1b; font-size: 21px; margin-bottom: 6px; }
+    .escape-status {
+      padding: 0 20px 12px;
+      color: #475569;
+      font-size: 14px;
+      line-height: 1.55;
+      font-weight: 850;
+    }
+    .escape-actions {
+      display: grid;
+      gap: 10px;
+      padding: 0 20px 22px;
+    }
+    .escape-actions .btn { margin-top: 0; }
+    .escape-actions .btn-link {
+      display: block;
+      text-align: center;
+      text-decoration: none;
+      background: #eef5ff;
+      color: #1457bd;
+      border: 1px solid #cfdefa;
+    }
+
+    @media (max-width: 390px) {
+      .escape-fab { width: 78px; min-height: 78px; right: 12px; bottom: 92px; border-radius: 24px; }
+      .escape-fab-icon { font-size: 25px; }
+      .escape-fab-text { font-size: 12px; }
+      .scenario-card strong { font-size: 16px; }
+    }
+
+
+    /* ==============================
+       安全 QR 掃碼器：實體 QR Code 先掃描、不直接開啟
+       ============================== */
+    .qr-scanner-panel {
+      display: none;
+      margin: -2px 0 16px;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 2px solid #1769e8;
+      background: #ffffff;
+      box-shadow: 0 14px 30px rgba(23,105,232,.16);
+    }
+    .qr-scanner-panel.active { display: block; }
+    .qr-scanner-top {
+      background: linear-gradient(135deg, #1769e8, #0f4fb7);
+      color: #ffffff;
+      padding: 13px 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 16px;
+      font-weight: 1000;
+    }
+    .qr-close-btn {
+      border: 0;
+      background: rgba(255,255,255,.18);
+      color: #ffffff;
+      width: 38px;
+      height: 38px;
+      border-radius: 13px;
+      cursor: pointer;
+      font-size: 23px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+    }
+    #qr-reader {
+      width: 100%;
+      min-height: 260px;
+      background: #020617;
+    }
+    #qr-reader video {
+      border-radius: 0 0 20px 20px;
+    }
+    .qr-status {
+      padding: 13px 15px;
+      background: #f8fbff;
+      color: #1457bd;
+      border-top: 1px solid #dbe7ff;
+      font-size: 15px;
+      line-height: 1.6;
+      font-weight: 900;
+    }
+    .qr-status.error { color: #991b1b; background: #fff1f2; }
+    .qr-status.success { color: #166534; background: #ecfdf5; }
+
+
+    /* ==============================
+       v10 AI 助理極簡版：去表單化 + 漸進式工具 + 緊急求救分流
+       ============================== */
+    .ai-assistant-hero {
+      background:
+        radial-gradient(circle at 78% 14%, rgba(255,255,255,.44), transparent 28%),
+        radial-gradient(circle at 10% 90%, rgba(21,184,214,.18), transparent 32%),
+        linear-gradient(145deg, #ffffff, #edf6ff 58%, #fff8eb);
+    }
+    .ai-orb-wrap {
+      width: 104px;
+      height: 104px;
+      margin: 0 auto 14px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at 32% 26%, #ffffff, #dff1ff 42%, #1769e8 100%);
+      box-shadow: 0 18px 42px rgba(23,105,232,.28), inset 0 0 20px rgba(255,255,255,.7);
+      position: relative;
+      isolation: isolate;
+    }
+    .ai-orb-wrap::before,
+    .ai-orb-wrap::after {
+      content: "";
+      position: absolute;
+      inset: -8px;
+      border-radius: inherit;
+      border: 2px solid rgba(23,105,232,.18);
+      animation: aiOrbPulse 2.2s ease-in-out infinite;
+      z-index: -1;
+    }
+    .ai-orb-wrap::after { inset: -15px; animation-delay: .55s; opacity: .72; }
+    .ai-orb-face { font-size: 44px; filter: drop-shadow(0 8px 14px rgba(15,79,183,.22)); }
+    @keyframes aiOrbPulse {
+      0%, 100% { transform: scale(.94); opacity: .38; }
+      50% { transform: scale(1.08); opacity: .82; }
+    }
+    .ai-helper-card { text-align: center; padding: 22px 18px; }
+    .ai-helper-card h1 { margin-top: 4px; }
+    .ai-helper-card .lead { max-width: 320px; margin-left: auto; margin-right: auto; }
+    .ai-magic-card {
+      border: 1px solid #cfe0ff;
+      background: linear-gradient(180deg, #ffffff, #f7fbff);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      margin-bottom: 13px;
+    }
+    .ai-input-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: #0f356f;
+      font-size: 17px;
+      font-weight: 1000;
+    }
+    .ai-input-label small { color: #64748b; font-size: 12px; font-weight: 900; }
+    .ai-magic-input {
+      min-height: 176px;
+      border-radius: 26px;
+      border: 2px solid #bcd5ff;
+      background: #ffffff;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.8);
+      font-size: 18px;
+      line-height: 1.72;
+    }
+    .ai-primary-btn {
+      min-height: 68px;
+      font-size: 20px;
+      border-radius: 24px;
+      box-shadow: 0 16px 30px rgba(23,105,232,.26);
+    }
+    .ai-tool-toggle {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .ai-plus {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      background: #dbeafe;
+      color: #0f4fb7;
+      font-size: 22px;
+      line-height: 1;
+    }
+    .ai-tool-panel {
+      display: none;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 24px;
+      background: #f1f7ff;
+      border: 1px solid #d7e6ff;
+    }
+    .ai-tool-panel.active { display: grid; }
+    .ai-tool-btn {
+      border: 1px solid #cfe0ff;
+      border-radius: 22px;
+      min-height: 86px;
+      padding: 13px 10px;
+      background: #ffffff;
+      color: #0f356f;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      box-shadow: 0 8px 18px rgba(23,105,232,.08);
+      font-weight: 1000;
+    }
+    .ai-tool-btn span { font-size: 30px; display: block; margin-bottom: 4px; }
+    .ai-helper-note {
+      margin-top: 12px;
+      color: #64748b;
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 850;
+      text-align: center;
+    }
+    .ai-thinking-card {
+      display: none;
+      text-align: center;
+      padding: 20px;
+      border-radius: 28px;
+      background: linear-gradient(135deg, #eff6ff, #ffffff 62%, #fff7ed);
+      border: 1px solid #cfe0ff;
+      color: #1457bd;
+      box-shadow: 0 14px 30px rgba(23,105,232,.13);
+    }
+    .ai-thinking-card.active { display: block; }
+    .ai-thinking-card .ai-orb-wrap { width: 80px; height: 80px; margin-bottom: 12px; }
+    .ai-thinking-card .ai-orb-face { font-size: 34px; }
+    .ai-thinking-text { font-size: 17px; line-height: 1.6; font-weight: 1000; }
+    .ai-thinking-sub { margin-top: 6px; color: #64748b; font-size: 13px; font-weight: 850; }
+    .dev-tool-panel {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 18px;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+    }
+    body.dev-mode .dev-tool-panel { display: block; }
+    .emergency-hero {
+      background:
+        radial-gradient(circle at 80% 10%, rgba(255,255,255,.34), transparent 28%),
+        linear-gradient(145deg, #fff7f7, #ffffff 56%, #eef6ff);
+      border-color: #fecaca;
+    }
+    .emergency-action-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 11px;
+    }
+    .emergency-action-card {
+      width: 100%;
+      min-height: 78px;
+      border-radius: 25px;
+      border: 2px solid #fecaca;
+      background: #fff;
+      color: #7f1d1d;
+      box-shadow: 0 10px 22px rgba(220,38,38,.08);
+      padding: 16px;
+      display: flex;
+      gap: 13px;
+      align-items: center;
+      text-align: left;
+      cursor: pointer;
+      font-weight: 1000;
+    }
+    .emergency-action-card .scenario-icon { font-size: 34px; flex: 0 0 auto; }
+    .emergency-action-card strong { display: block; font-size: 18px; line-height: 1.35; }
+    .emergency-action-card span span { display: block; margin-top: 4px; color: #7c2d12; font-size: 14px; line-height: 1.45; font-weight: 850; }
+    .emergency-direct-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    .emergency-direct-grid .btn { margin-top: 0; text-decoration: none; display: grid; place-items: center; text-align: center; }
+    body[data-current-screen="emergency"] .escape-fab { display: grid; }
+    body:not([data-current-screen="emergency"]) .escape-fab { display: none; }
+    .screen-history-link { margin-top: 12px; }
+    @media (max-width: 390px) {
+      .ai-tool-panel { grid-template-columns: 1fr; }
+      .emergency-direct-grid { grid-template-columns: 1fr; }
+      .ai-magic-input { min-height: 154px; }
+    }
+
+  </style>
+  <!-- AI_SHIELD_BUILD:20260528-v10-ai-assistant-clean-ui｜AI 助理極簡版：單一魔法框＋工具漸進展開＋緊急求救分頁＋AI 思考動畫＋隱藏展示模式 -->
+</head>
+<body data-ai-shield-skip-scan="true" data-build="20260528-v10-ai-assistant-clean-ui" data-current-screen="home">
+  <main class="phone" aria-label="AI 防詐盾牌行動端 App">
+    <audio id="bilingualWarningAudio" src="ai_shield_bilingual_warning.mp3" preload="auto"></audio>
+    <div class="status-bar">
+      <span id="clock">09:41</span>
+      <span class="status-icons">5G ▰▰▰ 🔋</span>
+    </div>
+
+    <div class="app-shell">
+      <div class="screen-area">
+        <section class="screen active" id="screen-home">
+          <div class="fraud-alert-ticker" aria-label="最新防詐警戒">
+            <div class="fraud-alert-label">🚨 最新警戒</div>
+            <div class="fraud-alert-track"><span>假包裹補繳、假退稅通知、假投資群組、假親友借錢與驗證碼詐騙近期常見；看到陌生連結、限時付款、要求保密或索取驗證碼，請先停止操作並查證。</span></div>
+          </div>
+
+          <div class="top-card">
+            <div class="hero-row">
+              <div>
+                <div class="badge">🛡️ 行動端輔助防護工具</div>
+                <h1>AI 防詐盾牌</h1>
+                <p class="lead">貼上可疑簡訊、LINE 訊息或網址，先停三秒，再讓 AI 協助判斷風險。</p>
+              </div>
+              <div class="mascot-slot" aria-label="AI 防詐盾牌男版守護公仔">
+                <img class="mascot" src="mascot-boy-new.png" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false;" />
+                <div class="mascot-fallback boy" hidden><span>🛡️</span><b>AI</b></div>
+              </div>
+            </div>
+            <div class="quick-grid">
+              <button class="quick-card" type="button" data-action="go-ai-scan">
+                <div class="quick-icon">✨</div>
+                <strong>AI 查詐騙</strong>
+                <span>訊息、網址、截圖、語音與 QR Code 都從這裡開始</span>
+              </button>
+              <button class="quick-card" type="button" data-action="go-emergency">
+                <div class="quick-icon">🚨</div>
+                <strong>緊急求救</strong>
+                <span>正在被催匯款、要求保密或不敢掛電話時使用</span>
+              </button>
+              <button class="quick-card" type="button" data-action="go-family">
+                <div class="quick-icon">👪</div>
+                <strong>家人守護</strong>
+                <span>同步高風險摘要，讓家人協助查證</span>
+              </button>
+              <button class="quick-card" type="button" data-action="go-history">
+                <div class="quick-icon">📋</div>
+                <strong>防護紀錄</strong>
+                <span>只保留風險摘要，不保留完整敏感原文</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-title">
+              <h2>今日防護狀態</h2>
+              <small>今日紀錄</small>
+            </div>
+            <div class="split">
+              <div class="notice" style="margin:0;text-align:center;">
+                <strong style="font-size:26px;color:#1769e8;display:block;" id="homeScanCount">12</strong>
+                已掃描
+              </div>
+              <div class="notice" style="margin:0;text-align:center;background:#ffecec;border-color:#ffcaca;color:#991b1b;">
+                <strong style="font-size:26px;display:block;" id="homeHighCount">2</strong>
+                高風險
+              </div>
+            </div>
+          </div>
+
+          <details class="card more-tools-card">
+            <summary>
+              <span>
+                <span class="more-tools-summary-title">更多功能</span>
+                <span class="more-tools-summary-sub">安裝、模擬考與推薦親友先收起，首頁維持清爽。</span>
+              </span>
+            </summary>
+            <div class="more-tools-content">
+              <div class="mini-tool">
+                <h3>📲 安裝到手機桌面</h3>
+                <p class="lead">可將 AI 防詐盾牌加入手機主畫面，像一般 App 一樣快速開啟。</p>
+                <button class="btn btn-primary" type="button" id="installAppBtn">加入手機主畫面</button>
+                <div class="install-status" id="installStatus" aria-live="polite">若瀏覽器支援，點擊後可直接安裝；iPhone 可從分享選單選擇「加入主畫面」。</div>
+              </div>
+              <div class="mini-tool">
+                <h3>🎮 防詐模擬考</h3>
+                <p class="lead">用 1 分鐘練習分辨詐騙訊息，答完會顯示原因與正確做法。</p>
+                <button class="btn btn-green" type="button" id="startQuizBtn">開始防詐模擬考</button>
+              </div>
+              <div class="mini-tool">
+                <h3>💌 推薦給親友</h3>
+                <p class="lead">把防詐工具分享給 LINE 群組，提醒親友遇到可疑簡訊、網址或 QR Code 先查證。</p>
+                <button class="btn btn-soft" type="button" id="shareFriendsBtn">🟢 傳送到 LINE 群組</button>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="screen" id="screen-scan">
+          <div class="top-card ai-assistant-hero ai-helper-card">
+            <div class="ai-orb-wrap" id="assistantMascotTap" aria-label="AI 防詐助理">
+              <div class="ai-orb-face">🤖</div>
+            </div>
+            <div class="badge">✨ AI 查詐騙</div>
+            <h1>你好，我是防詐 AI 助理</h1>
+            <p class="lead">把奇怪的簡訊、LINE 對話、網址或 QR Code 內容交給我，我會先幫你看是不是詐騙。</p>
+            <div class="mode-banner" id="appModeBanner">
+              <span class="mode-dot"></span>
+              <div>
+                <strong id="appModeTitle">目前模式：雲端 AI 優先</strong>
+                <span id="appModeDesc">正常模式會先連線雲端 AI，若雲端失敗才切換本機備援。</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ai-magic-card">
+            <input class="sr-only" id="screenshotInput" type="file" accept="image/*" />
+            <input class="sr-only" id="targetUrl" value="" aria-hidden="true" />
+
+            <label class="ai-input-label" for="message">
+              <span>把可疑內容貼在這裡</span>
+              <small>AI 會自動抓網址</small>
+            </label>
+            <textarea id="message" class="ai-magic-input" placeholder="例如：您的包裹配送失敗，請點擊連結補繳運費 https://...
+
+也可以貼上 LINE 對話、簡訊、網頁文字或 QR Code 掃到的內容。"></textarea>
+
+            <div class="privacy-mask-status" id="privacyMaskStatus" aria-live="polite"></div>
+
+            <button class="btn btn-primary ai-primary-btn" type="button" id="scanBtn">✨ 幫我查是不是詐騙</button>
+            <button class="btn btn-soft ai-tool-toggle" type="button" id="aiToolToggleBtn" aria-expanded="false" aria-controls="aiToolPanel">
+              <span class="ai-plus">＋</span> 我不會貼上，改用其他方式
+            </button>
+
+            <div class="ai-tool-panel" id="aiToolPanel" aria-label="輔助輸入工具">
+              <button class="ai-tool-btn" type="button" id="uploadScreenshotBtn"><span>📸</span>相簿截圖</button>
+              <button class="ai-tool-btn" type="button" id="voiceAskBtn"><span>🎙️</span>說給 AI 聽</button>
+              <button class="ai-tool-btn" type="button" id="startQrBtn"><span>📱</span>安全掃條碼</button>
+              <button class="ai-tool-btn" type="button" id="pasteClipboardBtn"><span>📋</span>貼上剪貼簿</button>
+            </div>
+            <div class="ai-helper-note">看不懂哪個按鈕沒關係，先按「幫我查」就可以；其他功能只有需要時才展開。</div>
+
+            <div class="qr-scanner-panel" id="qrScannerContainer" aria-live="polite">
+              <div class="qr-scanner-top">
+                <span>請將 QR Code 對準畫面</span>
+                <button class="qr-close-btn" type="button" id="closeQrBtn" aria-label="關閉 QR 掃描器">✕</button>
+              </div>
+              <div id="qr-reader"></div>
+              <div class="qr-status" id="qrStatus">掃描到網址後，系統會先送 AI 防詐分析，不會直接開啟網頁。</div>
+            </div>
+
+            <div class="ocr-panel" id="ocrPanel" aria-live="polite">
+              <h3>截圖辨識狀態</h3>
+              <div class="ocr-preview-wrap" id="ocrPreviewWrap"><img id="ocrPreview" alt="上傳的截圖預覽" /></div>
+              <div class="ocr-status" id="ocrStatus">請選擇一張包含可疑訊息的截圖。</div>
+              <div class="ocr-progress" id="ocrProgress"><span id="ocrProgressBar"></span></div>
+              <div class="ocr-text-box" id="ocrTextBox">
+                <label for="ocrExtractedText">OCR 辨識文字</label>
+                <textarea id="ocrExtractedText" readonly placeholder="辨識出的文字會顯示在這裡"></textarea>
+                <button class="btn btn-primary" type="button" id="scanOcrTextBtn">用辨識文字立即掃描</button>
+              </div>
+            </div>
+
+            <div class="voice-status" id="voiceStatus" aria-live="polite"></div>
+            <div class="clipboard-status" id="clipboardStatus" aria-live="polite"></div>
+
+            <div class="ai-thinking-card" id="scanLoading" aria-live="polite">
+              <div class="ai-orb-wrap"><div class="ai-orb-face">🧠</div></div>
+              <div class="ai-thinking-text" id="aiThinkingText">✨ AI 正在讀取您的內容...</div>
+              <div class="ai-thinking-sub">請先不要點連結、不要匯款、不要輸入驗證碼。</div>
+            </div>
+
+            <div class="dev-tool-panel" id="devToolPanel">
+              <div class="section-title"><h3>展示測試模式</h3><small>公仔連點 5 次開啟</small></div>
+              <div class="pill-row">
+                <button class="pill" type="button" data-sample="high">高風險範例</button>
+                <button class="pill" type="button" data-sample="mid">中風險範例</button>
+                <button class="pill" type="button" data-sample="low">低風險範例</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-result">
+          <div class="result-hero high" id="resultHero" aria-live="polite">
+            <div class="elder-verdict high" id="elderVerdict">
+              <div class="elder-verdict-title" id="elderVerdictTitle">危險！先不要點</div>
+              <div class="elder-verdict-desc" id="elderVerdictDesc">這個內容可能是詐騙，請先停下來問家人。</div>
+            </div>
+            <img class="warn-img" src="warning-new.png" alt="警示圖示" id="resultIcon" onerror="this.style.display='none';" />
+            <div class="risk-level high" id="riskLevel">高風險</div>
+            <div class="source-pill" id="analysisSource">本機輔助判斷</div>
+            <div class="score high" id="riskScore">92<span> / 100</span></div>
+            <p class="lead" id="resultSummary">偵測到補繳費用、立即操作與索取信用卡資料等高風險特徵。</p>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>AI 判斷摘要</h2></div>
+            <div class="data-row"><div class="data-label">模式</div><div class="data-value" id="modeText">雲端 AI 優先 / 失敗自動備援</div></div>
+            <div class="data-row"><div class="data-label">備援</div><div class="data-value" id="backupStatusText">雲端 API 正常，本機備援未啟動。</div></div>
+            <div class="data-row"><div class="data-label">原因</div><div class="data-value" id="reasonText">對方要求立即補繳運費，並引導輸入信用卡資料，符合常見釣魚詐騙流程。</div></div>
+            <div class="data-row"><div class="data-label">建議</div><div class="data-value" id="adviceText">不要點擊連結、不要輸入信用卡或驗證碼，先透過官方 App 或 165 查證。</div></div>
+            <div class="data-row"><div class="data-label">命中特徵</div><div class="data-value"><div class="tag-list" id="tagList"></div></div></div>
+          </div>
+
+          <div class="card url-mirror-card" id="urlMirrorCard" hidden>
+            <div class="section-title"><h2>網址照妖鏡</h2><small>主網域解析</small></div>
+            <div class="url-mirror-box" id="urlMirrorDisplay">尚未提供網址。</div>
+            <div class="data-row"><div class="data-label">真實網域</div><div class="data-value" id="urlMirrorDomain">--</div></div>
+            <div class="data-row"><div class="data-label">風險提醒</div><div class="data-value" id="urlMirrorAdvice">--</div></div>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>相似案例比對</h2><small>案例庫</small></div>
+            <div class="data-row"><div class="data-label">案例</div><div class="data-value" id="caseText">假冒物流公司補繳運費，誘導輸入信用卡卡號與簡訊驗證碼。</div></div>
+            <div class="data-row"><div class="data-label">相似度</div><div class="data-value" id="caseSimilarity">91%</div></div>
+          </div>
+
+          <div class="split">
+            <button class="btn btn-soft" type="button" id="voiceZhBtn">國語提醒</button>
+            <button class="btn btn-soft" type="button" id="voiceTwBtn">雙語提醒</button>
+          </div>
+          <button class="btn btn-danger" type="button" id="notifyFamilyBtn">同步至家庭戰情室</button>
+          <div class="emergency-actions" aria-label="緊急查證與守護人聯絡">
+            <a href="tel:165" class="btn btn-link btn-call">📞 撥打 165 查證</a>
+            <button class="btn btn-guardian" type="button" id="guardianHelpBtn">🟢 用 LINE 問家人</button>
+          </div>
+          <button class="btn btn-report" type="button" id="reportErrorBtn">📝 回報判斷不準</button>
+          <div class="report-status" id="reportStatus" aria-live="polite"></div>
+        </section>
+
+        <section class="screen" id="screen-emergency">
+          <div class="top-card emergency-hero">
+            <div class="badge">🚨 緊急求救</div>
+            <h1>很急、很害怕時，直接按這裡</h1>
+            <p class="lead">如果對方一直催你匯款、要求保密、叫你操作 ATM，先不要解釋，直接點目前狀況。</p>
+          </div>
+
+          <div class="scenario-rescue-block" id="scenarioRescueBlock">
+            <div class="section-title">
+              <h2>一鍵情境求救</h2>
+              <small>不用打字</small>
+            </div>
+            <div class="emergency-action-grid" aria-label="一鍵情境求救卡">
+              <button class="emergency-action-card" type="button" data-scenario="atm">
+                <span class="scenario-icon">🏧</span>
+                <span><strong>我人在 ATM 前</strong><span>對方叫我操作提款機、解除分期或轉帳。</span></span>
+              </button>
+              <button class="emergency-action-card" type="button" data-scenario="prosecutor">
+                <span class="scenario-icon">👮</span>
+                <span><strong>對方說是警察／檢察官</strong><span>要求我保密、視訊辦案或匯到安全帳戶。</span></span>
+              </button>
+              <button class="emergency-action-card" type="button" data-scenario="familyMoney">
+                <span class="scenario-icon">👨‍👩‍👧</span>
+                <span><strong>親友突然借錢</strong><span>說換門號、出事急用，叫我馬上匯款。</span></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>立刻中斷對方話術</h2><small>先停下來</small></div>
+            <p class="lead" style="margin-top:0;">被假檢警、假客服或假親友一直催時，先用聲音製造中斷點，照著提示掛斷電話。</p>
+            <button class="btn btn-danger" type="button" id="escapeBellMainBtn">🔔 啟動緊急脫身鈴</button>
+            <div class="emergency-direct-grid">
+              <a href="tel:165" class="btn btn-soft">📞 撥打 165</a>
+              <button class="btn btn-green" type="button" id="emergencyLineHelpBtn">🟢 LINE 問家人</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-family">
+          <div class="top-card">
+            <div class="hero-row">
+              <div>
+                <div class="badge">👨‍👩‍👧 家庭守護</div>
+                <h1>家庭聯防已同步</h1>
+                <p class="lead">當 App 偵測到高風險內容，會把摘要同步到家庭戰情室，讓家人協助提醒與查證。</p>
+              </div>
+              <div class="mascot-slot" aria-label="AI 防詐盾牌女版守護公仔">
+                <img class="mascot" src="mascot-girl-new.png" alt="" onerror="this.style.display='none';this.nextElementSibling.hidden=false;" />
+                <div class="mascot-fallback girl" hidden><span>👪</span><b>AI</b></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="family-card">
+            <div class="family-top">
+              <div class="family-avatar"><img src="warning-new.png" alt="警示" onerror="this.style.display='none';this.nextElementSibling.hidden=false;" /><span class="avatar-fallback" hidden>⚠️</span></div>
+              <div>
+                <h3>家庭戰情室同步</h3>
+                <p class="lead" style="margin-top:2px;font-size:13px;">剛剛完成一筆高風險掃描紀錄</p>
+              </div>
+            </div>
+            <div class="line-bubble" id="familyMessage">Cassie 的裝置偵測到疑似物流補繳詐騙，風險分數 92/100。請提醒使用者不要點擊連結或輸入信用卡資料。</div>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>LINE 訊息查證</h2></div>
+            <p class="lead" style="margin-top:0;">收到可疑 LINE 訊息時，可先截圖上傳或貼上內容，系統會由雲端 AI 回覆「危險、注意、安全」結果。</p>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>家庭代碼</h2></div>
+            <p class="lead" style="margin-top:0;">AISHIELD: <strong id="familyCodeText" style="color:#1769e8;font-size:22px;letter-spacing:2px;">尚未綁定</strong></p>
+            <button class="btn btn-green" type="button" id="openDashboardBtn">開啟家庭戰情室</button>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-history">
+          <div class="top-card">
+            <div class="badge">📋 掃描紀錄</div>
+            <h1>近期防護紀錄</h1>
+            <p class="lead">使用者與家人可以回看每次掃描的風險分數、類型與處理狀態。</p>
+            <button class="btn btn-soft" type="button" id="clearHistoryBtn" style="padding: 8px 12px; font-size: 13px; margin-top: 8px; width: auto;">🧹 清除本機紀錄</button>
+          </div>
+
+          <div class="card" id="historyList"></div>
+        </section>
+      </div>
+
+
+    <button class="escape-fab" type="button" id="escapeBellBtn" aria-label="啟動緊急脫身鈴">
+      <span class="escape-fab-icon">🔔</span>
+      <span class="escape-fab-text">緊急<br>脫身</span>
+    </button>
+    <div class="escape-modal" id="escapeModal" hidden role="dialog" aria-modal="true" aria-labelledby="escapeTitle">
+      <div class="escape-panel">
+        <div class="escape-call-screen">
+          <div class="escape-wave">🔔</div>
+          <h2 id="escapeTitle">緊急脫身鈴已啟動</h2>
+          <p>用聲音中斷對方話術，幫自己爭取掛斷與離開現場的理由。</p>
+        </div>
+        <div class="escape-script">
+          <strong>請照著說：</strong>
+          「我現在有事，等一下再說。」<br>
+          說完立刻掛斷，不要繼續聽對方指示。
+        </div>
+        <div class="escape-status" id="escapeStatus" aria-live="polite">警鈴會短暫播放，並搭配手機震動提醒。</div>
+        <div class="escape-actions">
+          <button class="btn btn-danger" type="button" id="stopEscapeBellBtn">我已掛斷，停止警鈴</button>
+          <button class="btn btn-soft" type="button" id="replayEscapeBellBtn">再響一次</button>
+          <a href="tel:165" class="btn btn-link">📞 直接撥打 165 查證</a>
+          <button class="btn btn-green" type="button" id="escapeLineHelpBtn">🟢 用 LINE 問家人</button>
+        </div>
+      </div>
+    </div>
+      <nav class="bottom-nav" aria-label="App 導覽列">
+        <button class="nav-btn active" type="button" data-screen="home"><span>🏠</span>首頁</button>
+        <button class="nav-btn" type="button" data-screen="scan"><span>✨</span>AI 查詐騙</button>
+        <button class="nav-btn" type="button" data-screen="emergency"><span>🚨</span>緊急求救</button>
+        <button class="nav-btn" type="button" data-screen="family"><span>👪</span>家人</button>
+      </nav>
+    </div>
+    <div class="quiz-modal" id="quizModal" hidden role="dialog" aria-modal="true" aria-labelledby="quizTitle">
+      <div class="quiz-card">
+        <div class="quiz-top">
+          <div>
+            <h2 id="quizTitle">防詐模擬考</h2>
+            <div class="quiz-progress" id="quizProgress">第 1 題 / 30 題</div>
+            <div class="quiz-score" id="quizScore">目前答對 0 題</div>
+          </div>
+          <button class="quiz-close" type="button" id="closeQuizBtn" aria-label="關閉防詐模擬考">✕</button>
+        </div>
+        <div class="quiz-question" id="quizQuestion">題目載入中...</div>
+        <div class="quiz-options">
+          <button class="btn btn-green" type="button" id="quizSafeBtn">⭕ 這是安全的</button>
+          <button class="btn btn-danger" type="button" id="quizScamBtn">❌ 這是詐騙</button>
+        </div>
+        <div class="quiz-feedback" id="quizFeedback" aria-live="polite"></div>
+        <button class="btn btn-primary" type="button" id="quizNextBtn" style="display:none;">下一題</button>
+      </div>
+    </div>
+  </main>
+  <script src="config.js?v=20260528-v10-ai-assistant-clean-ui"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="html5-qrcode.min.js?v=20260528-v10-ai-assistant-clean-ui" defer></script>
+  <script src="ai_shield_app_official.js?v=20260528-v10-ai-assistant-clean-ui" defer></script>
+</body>
+</html>

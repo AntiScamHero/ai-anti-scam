@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>包裹配送失敗｜運費補繳通知</title>
+  <style>
+    :root{
+      --postal:#0b6b4f;--postal2:#0f8b63;--danger:#b42318;--warn:#f97316;
+      --bg:#f4f6f8;--card:#fff;--text:#1f2937;--muted:#64748b;--line:#e5e7eb;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Arial,sans-serif;color:var(--text)}
+    .bar{height:8px;background:linear-gradient(90deg,var(--postal),#ef4444)}
+    header{background:#fff;border-bottom:1px solid var(--line)}
+    .head{max-width:1120px;margin:0 auto;padding:18px 24px;display:flex;align-items:center;gap:14px}
+    .mark{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--postal),var(--postal2));display:grid;place-items:center;color:#fff;font-size:25px;font-weight:900;box-shadow:0 8px 24px rgba(11,107,79,.2)}
+    .brand{line-height:1.2}
+    .brand b{font-size:21px}
+    .brand span{display:block;color:var(--muted);font-size:13px;margin-top:4px}
+    .lang{margin-left:auto;font-size:13px;color:var(--muted)}
+    .wrap{max-width:1120px;margin:28px auto;padding:0 24px 42px}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 12px 35px rgba(15,23,42,.08);overflow:hidden}
+    .hero{padding:28px}
+    .tag{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:#fef2f2;color:var(--danger);font-size:13px;font-weight:800;border:1px solid #fecaca}
+    h1{font-size:32px;margin:18px 0 10px;letter-spacing:-.02em}
+    .lead{font-size:16px;line-height:1.75;color:#334155;margin:0 0 18px}
+    .notice{background:#fff7ed;border:1px solid #fed7aa;border-radius:16px;padding:15px 16px;margin:18px 0;color:#9a3412;line-height:1.7}
+    .row{display:grid;grid-template-columns:130px 1fr;gap:10px;padding:13px 0;border-top:1px dashed var(--line);font-size:15px}
+    .row:first-of-type{border-top:0}
+    .row .k{color:var(--muted)}
+    .row .v{font-weight:700}
+    .amount{font-size:28px;color:var(--danger);font-weight:900}
+    .form{padding:24px}
+    .form h2{font-size:21px;margin:0 0 6px}
+    .form p{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.6}
+    label{display:block;margin:13px 0 6px;font-size:13px;font-weight:800;color:#334155}
+    input{width:100%;border:1px solid #cbd5e1;border-radius:12px;padding:13px 12px;font-size:15px;background:#fff}
+    input::placeholder{color:#94a3b8}
+    .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .pay{width:100%;margin-top:18px;border:0;border-radius:14px;background:linear-gradient(135deg,#dc2626,#ea580c);color:#fff;font-size:17px;font-weight:900;padding:15px 16px;box-shadow:0 12px 26px rgba(220,38,38,.25);cursor:pointer}
+    .fine{font-size:12px;color:#64748b;line-height:1.55;margin-top:14px}
+    .demo-ribbon{position:fixed;right:18px;bottom:18px;background:#111827;color:#fff;padding:10px 12px;border-radius:999px;font-size:12px;opacity:.72}
+    .modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);align-items:center;justify-content:center;padding:22px}
+    .modal.open{display:flex}
+    .box{max-width:430px;background:#fff;border-radius:20px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.28)}
+    .box h3{margin:0 0 8px}
+    .box p{line-height:1.7;color:#475569}
+    .box button{border:0;background:#0f766e;color:#fff;border-radius:12px;padding:12px 16px;font-weight:900;width:100%}
+    @media(max-width:800px){.grid{grid-template-columns:1fr}h1{font-size:26px}.lang{display:none}.head{padding:15px}.wrap{margin:16px auto}.demo-ribbon{display:none}}
+  </style>
+</head>
+<body>
+  <div class="bar"></div>
+  <header>
+    <div class="head">
+      <div class="mark">〒</div>
+      <div class="brand">
+        <b>郵務配送服務</b>
+        <span>Parcel Delivery Service｜包裹狀態查詢</span>
+      </div>
+      <div class="lang">繁中｜English</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="grid">
+      <section class="card hero">
+        <span class="tag">⚠ 配送異常通知</span>
+        <h1>您的包裹因地址不全配送失敗</h1>
+        <p class="lead">
+          系統顯示您的包裹因收件地址資訊不完整，今日配送未成功。
+          請於 <b>24 小時內</b> 完成地址確認，並補繳二次配送運費，以免包裹退回。
+        </p>
+
+        <div class="notice">
+          為避免包裹退回寄件人，請立即完成運費補繳。逾期未處理將自動取消配送。
+        </div>
+
+        <div class="row"><div class="k">物流單號</div><div class="v">CP9283-6510-TW</div></div>
+        <div class="row"><div class="k">配送狀態</div><div class="v">地址不完整，配送失敗</div></div>
+        <div class="row"><div class="k">處理期限</div><div class="v">24 小時內完成確認</div></div>
+        <div class="row"><div class="k">補繳金額</div><div class="amount">NT$32</div></div>
+        <div class="row"><div class="k">付款方式</div><div class="v">信用卡線上補繳</div></div>
+      </section>
+
+      <section class="card form">
+        <h2>運費補繳與身分確認</h2>
+        <p>請填寫下列資訊完成補繳。系統將發送手機驗證碼以確認付款。</p>
+
+        <form id="demoForm">
+          <label>收件人姓名</label>
+          <input autocomplete="off" placeholder="請輸入收件人姓名" />
+
+          <label>身分證字號</label>
+          <input autocomplete="off" placeholder="例如：A123456789" />
+
+          <label>信用卡卡號</label>
+          <input autocomplete="off" inputmode="numeric" placeholder="0000 0000 0000 0000" />
+
+          <div class="cols">
+            <div>
+              <label>有效期限</label>
+              <input autocomplete="off" placeholder="MM / YY" />
+            </div>
+            <div>
+              <label>安全碼 CVV</label>
+              <input autocomplete="off" placeholder="3 碼" />
+            </div>
+          </div>
+
+          <label>手機驗證碼</label>
+          <input autocomplete="off" placeholder="請輸入簡訊驗證碼" />
+
+          <button class="pay" type="submit">立即補繳運費 NT$32</button>
+          <div class="fine">
+            Demo 安全限制：本頁不會送出資料、不會付款、不會連接任何外部服務。
+            內容僅用於 AI 防詐盾牌攔截展示。
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <div class="demo-ribbon">防詐競賽 Demo｜不收集資料</div>
+
+  <div class="modal" id="modal">
+    <div class="box">
+      <h3>Demo 頁面不會送出資料</h3>
+      <p>這個按鈕只用於錄影展示。實際測試重點是讓 AI 防詐盾牌偵測「限時補繳、信用卡、身分證、驗證碼」等高風險特徵並觸發攔截。</p>
+      <button type="button" onclick="document.getElementById('modal').classList.remove('open')">我知道了</button>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById("demoForm").addEventListener("submit", function(e){
+      e.preventDefault();
+      document.getElementById("modal").classList.add("open");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 防詐盾牌｜證據快照中心</title>
+    <style>
+        :root {
+            --ink: #153047;
+            --muted: #607a91;
+            --blue: #2276e3;
+            --green: #18b56a;
+            --red: #ef4444;
+            --card: #ffffff;
+            --line: #d9e8f5;
+            --shadow: 0 18px 44px rgba(47, 89, 130, .12);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 12% 8%, rgba(255, 247, 222, .9), transparent 28%),
+                radial-gradient(circle at 92% 12%, rgba(98, 217, 173, .25), transparent 28%),
+                linear-gradient(180deg, #ffffff 0%, #f4fbff 48%, #fffaf0 100%);
+        }
+        .page {
+            width: min(1180px, calc(100vw - 32px));
+            margin: 0 auto;
+            padding: 28px 0 56px;
+        }
+        .hero, .card {
+            border-radius: 28px;
+            background: rgba(255,255,255,.94);
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+        }
+        .hero {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 20px;
+            align-items: center;
+            padding: 26px;
+        }
+        .eyebrow {
+            display: inline-flex;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: #f2fff9;
+            color: #148254;
+            border: 1px solid rgba(98,217,173,.35);
+            font-size: 14px;
+            font-weight: 900;
+        }
+        h1 {
+            margin: 14px 0 8px;
+            font-size: clamp(30px, 4vw, 44px);
+            line-height: 1.18;
+        }
+        .hero p, .desc {
+            margin: 0;
+            color: var(--muted);
+            font-size: 17px;
+            font-weight: 750;
+            line-height: 1.6;
+        }
+        .hero img {
+            width: 128px;
+            max-width: 25vw;
+            filter: drop-shadow(0 14px 20px rgba(34,118,227,.18));
+        }
+        .card {
+            margin-top: 20px;
+            padding: 22px;
+        }
+        .card-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .card-title h2 { margin: 0; font-size: 24px; }
+        .badge {
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: #fff7ed;
+            color: #b45309;
+            border: 1px solid #fed7aa;
+            font-size: 14px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 18px 0 16px;
+        }
+        button {
+            min-height: 44px;
+            padding: 11px 16px;
+            border: 0;
+            border-radius: 14px;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .btn-blue { color: #fff; background: linear-gradient(135deg, #2276e3, #38bdf8); }
+        .btn-green { color: #fff; background: linear-gradient(135deg, #37d783, #14a866); }
+        .btn-gray { color: #fff; background: linear-gradient(135deg, #6d8497, #43586b); }
+        .btn-red { color: #fff; background: linear-gradient(135deg, #ff6868, #e33434); }
+        .empty {
+            padding: 28px;
+            border-radius: 18px;
+            background: #fff7ed;
+            border: 1px dashed #fdba74;
+            color: #9a531d;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 850;
+        }
+        .snapshot-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .snapshot-card {
+            overflow: hidden;
+            border-radius: 20px;
+            border: 1px solid #d9e8f5;
+            background: #fff;
+            box-shadow: 0 10px 24px rgba(47, 89, 130, .08);
+        }
+        .snapshot-card img {
+            display: block;
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            object-position: top center;
+            background: #f8fafc;
+            border-bottom: 1px solid #e4edf5;
+        }
+        .snapshot-body { padding: 14px; }
+        .risk-line {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .risk-score { font-size: 22px; font-weight: 1000; color: #dc2626; }
+        .risk-level {
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: #fff1f2;
+            color: #be123c;
+            font-size: 13px;
+            font-weight: 900;
+        }
+        .meta {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+            font-weight: 750;
+            word-break: break-word;
+        }
+        .reason {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 14px;
+            background: #f8fbff;
+            color: #33546b;
+            font-size: 13.5px;
+            line-height: 1.55;
+            font-weight: 800;
+        }
+        .snapshot-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        @media (max-width: 720px) {
+            .hero { grid-template-columns: 1fr; }
+            .hero img { display: none; }
+            .card-title { align-items: flex-start; flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="hero">
+            <div>
+                <div class="eyebrow">證據快照中心</div>
+                <h1>AI 防詐盾牌｜快照留存</h1>
+                <p>這裡只看「已保存的證據快照」。完整家庭戰情室仍請從 Popup 的「家人防護網（戰情室）」進入。</p>
+            </div>
+            <img src="../assets/images/BOY.png" alt="AI 防詐守護公仔">
+        </section>
+
+        <section class="card">
+            <div class="card-title">
+                <h2>📸 已保存快照</h2>
+                <span class="badge" id="snapshot-count">0 筆</span>
+            </div>
+
+            <p class="desc">報案版會保留完整畫面；遮罩版會模糊畫面，適合先傳給家人確認，降低個資外流風險。</p>
+
+            <div class="toolbar">
+                <button class="btn-blue" id="btn-open-dashboard">返回家人防護網</button>
+                <button class="btn-green" id="btn-export-latest">匯出最新報案版</button>
+                <button class="btn-gray" id="btn-export-latest-masked">匯出最新遮罩版</button>
+                <button class="btn-red" id="btn-clear">清除本機快照</button>
+            </div>
+
+            <div id="snapshot-list" class="snapshot-list"></div>
+        </section>
+    </main>
+
+    <script src="../scripts/evidence_snapshots.js"></script>
+</body>
+</html>

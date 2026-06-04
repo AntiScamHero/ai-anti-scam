@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 防詐盾牌｜防護啟動中</title>
+    <style>
+        :root {
+            --bg-a:#eef8ff; --bg-b:#fff8df; --bg-c:#f2fff4;
+            --card:rgba(255,255,255,.96); --ink:#102a43; --sub:#38556e;
+            --blue:#1f74e8; --blue-dark:#1557b0; --green:#16a34a;
+            --green-dark:#0f7a35; --yellow:#fff3b0;
+            --line:rgba(31,116,232,.16); --shadow:rgba(40,92,150,.13);
+        }
+        *{box-sizing:border-box}
+        html,body{
+            margin:0; min-height:100vh;
+            font-family:"Microsoft JhengHei","Segoe UI",system-ui,sans-serif;
+            color:var(--ink);
+            background:
+                radial-gradient(circle at 16% 10%,rgba(31,116,232,.14),transparent 30%),
+                radial-gradient(circle at 88% 12%,rgba(22,163,74,.12),transparent 28%),
+                linear-gradient(135deg,var(--bg-a),var(--bg-b) 52%,var(--bg-c));
+            display:flex; align-items:center; justify-content:center;
+            padding:24px 18px;
+        }
+        .page-container{
+            width:min(1320px,96vw);
+            min-height:min(860px,calc(100vh - 48px));
+            background:var(--card);
+            border:2px solid var(--line);
+            border-radius:34px;
+            box-shadow:0 22px 68px var(--shadow);
+            padding:34px 42px;
+            display:grid;
+            grid-template-rows:auto 1fr auto;
+            gap:22px;
+        }
+        .hero-title{text-align:center}
+        .brand-title{
+            margin:0;
+            font-size:clamp(48px,5.6vw,84px);
+            line-height:1.05;
+            font-weight:1000;
+            color:#0b4ea2;
+            letter-spacing:1px;
+            text-shadow:0 8px 22px rgba(31,116,232,.12);
+        }
+        .brand-subtitle{
+            margin:10px 0 0;
+            font-size:clamp(23px,2.4vw,34px);
+            line-height:1.35;
+            font-weight:900;
+            color:var(--sub);
+        }
+        
+        /* 隱形透明舞台 */
+        .hero-stage{
+            width:100%;
+            min-height:520px;
+            padding:20px;
+            background:transparent;
+            border:none;
+            box-shadow:none;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            position:relative;
+        }
+        .hero-stage::after{ display:none; }
+        
+        .avatar-container {
+            position: relative;
+            width: 100%;
+            height: 560px;
+            max-width: 800px; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2;
+        }
+        .avatar-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: transparent;
+            border-radius: 28px;
+            transition: opacity 0.6s ease;
+        }
+        #avatar-video-boy { opacity: 1; z-index: 3; }
+        #avatar-video-girl { opacity: 0; z-index: 2; }
+
+        /* === 全新的優雅引導覆蓋層 === */
+        .start-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(3px);
+            border-radius: 28px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+        .start-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .start-hint {
+            background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+            color: white;
+            padding: 16px 36px;
+            border-radius: 999px;
+            font-size: 28px;
+            font-weight: 1000;
+            box-shadow: 0 12px 32px rgba(31,116,232,0.3);
+            animation: gentlePulse 2s infinite; 
+        }
+
+        .avatar-error{
+            display:none;
+            position:relative;
+            z-index:15;
+            text-align:center;
+            font-size:28px;
+            font-weight:900;
+            color:var(--sub);
+            line-height:1.6;
+            background:rgba(255,255,255,.9);
+            padding:28px;
+            border-radius:24px;
+            border:2px dashed rgba(31,116,232,.5);
+        }
+        .avatar-error.show{display:block}
+        
+        .bottom-layout{
+            display:grid;
+            grid-template-columns:1fr 1.05fr;
+            gap:22px;
+            align-items:stretch;
+        }
+        .panel{
+            background:#fff;
+            border:2px solid rgba(31,116,232,.12);
+            border-radius:26px;
+            padding:24px;
+            box-shadow:0 12px 34px rgba(40,92,150,.08);
+            display:flex;
+            flex-direction:column;
+            gap:18px;
+            justify-content:center;
+        }
+        .badge{
+            align-self:flex-start;
+            padding:13px 24px;
+            border-radius:999px;
+            background:rgba(22,163,74,.12);
+            color:var(--green-dark);
+            border:1px solid rgba(22,163,74,.22);
+            font-size:30px;
+            font-weight:1000;
+        }
+        .status-box{
+            background:var(--yellow);
+            border:2px solid rgba(255,183,3,.42);
+            border-radius:22px;
+            padding:24px 26px;
+            color:#5f3b00;
+            font-size:34px;
+            font-weight:1000;
+            text-align:center;
+            box-shadow:0 8px 20px rgba(255,183,3,.15);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            gap:12px;
+            flex-wrap:wrap;
+            line-height:1.25;
+            transition: all 0.3s ease;
+        }
+        .status-box.success {
+            background: rgba(22,163,74,.12);
+            border-color: rgba(22,163,74,.3);
+            color: var(--green-dark);
+        }
+        .actions{display:grid;grid-template-columns:1fr;gap:14px}
+        .btn{
+            width:100%;
+            min-height:72px;
+            padding:20px;
+            border:0;
+            border-radius:20px;
+            font-size:30px;
+            font-weight:1000;
+            cursor:pointer;
+            text-align:center;
+            text-decoration:none;
+            transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;
+        }
+        @keyframes gentlePulse{
+            0%,100%{transform:scale(1);box-shadow:0 12px 24px rgba(31,116,232,.22)}
+            50%{transform:scale(1.018);box-shadow:0 16px 34px rgba(31,116,232,.34)}
+        }
+        .btn-primary{
+            background:linear-gradient(135deg,var(--blue),var(--blue-dark));
+            color:#fff;
+            box-shadow:0 12px 24px rgba(31,116,232,.22);
+            animation:gentlePulse 2.8s ease-in-out infinite;
+        }
+        .family-status{
+            font-size:25px;
+            color:var(--sub);
+            font-weight:900;
+            background:rgba(16,42,67,.055);
+            padding:20px 24px;
+            border-radius:18px;
+            text-align:center;
+            transition:all .4s ease;
+        }
+        .family-status.success{background:rgba(22,163,74,.1);color:var(--green-dark)}
+        .safe-list{margin:0;padding:0;list-style:none;display:grid;gap:13px}
+        .safe-list li{
+            display:flex;
+            gap:16px;
+            align-items:flex-start;
+            padding:16px 20px;
+            border-radius:18px;
+            background:rgba(31,116,232,.04);
+            font-size:clamp(23px,2vw,28px);
+            font-weight:850;
+            line-height:1.5;
+        }
+        .check{
+            width:38px;height:38px;display:grid;place-items:center;border-radius:50%;
+            background:var(--green);color:#fff;flex-shrink:0;font-size:20px;
+            font-weight:1000;margin-top:3px;box-shadow:0 8px 18px rgba(22,163,74,.18);
+        }
+        @media(max-width:960px){
+            html,body{align-items:flex-start;padding:18px 12px}
+            .page-container{width:min(100%,760px);padding:26px 20px;gap:20px}
+            .hero-stage{min-height:390px}
+            .avatar-container{height:370px}
+            .bottom-layout{grid-template-columns:1fr}
+            .btn{font-size:clamp(26px,7vw,32px)}
+        }
+
+        /* === 單影片融合背景版：讓影片像角色舞台，不像播放器 === */
+        .hero-stage{
+            min-height:560px;
+            padding:0;
+            overflow:hidden;
+            background:
+                radial-gradient(circle at 50% 45%, rgba(255,255,255,.9), rgba(255,255,255,.25) 42%, transparent 68%);
+        }
+        .avatar-container {
+            width:100%;
+            height:560px;
+            max-width:980px;
+            overflow:hidden;
+            border-radius:34px;
+            background:transparent;
+        }
+        .avatar-video {
+            position:absolute;
+            inset:0;
+            width:100%;
+            height:100%;
+            object-fit:contain;
+            background:transparent !important;
+            border-radius:34px;
+            box-shadow:none;
+            filter: drop-shadow(0 24px 42px rgba(31,116,232,.10));
+        }
+        .start-overlay {
+            background:rgba(255,255,255,.22);
+            backdrop-filter:blur(2px);
+        }
+        .start-hint {
+            font-size:30px;
+            padding:18px 42px;
+        }
+
+
+        /* === 1秒封面 + 單影片融合背景 === */
+        .hero-stage{
+            min-height:560px;
+            padding:0;
+            overflow:hidden;
+            background:
+                radial-gradient(circle at 50% 44%, rgba(255,255,255,.92), rgba(255,255,255,.38) 42%, transparent 70%);
+        }
+        .avatar-container {
+            width:100%;
+            height:560px;
+            max-width:980px;
+            overflow:hidden;
+            border-radius:34px;
+            background:transparent;
+            position:relative;
+        }
+        .avatar-video {
+            position:absolute;
+            inset:0;
+            width:100%;
+            height:100%;
+            object-fit:contain;
+            background:transparent !important;
+            border-radius:34px;
+            box-shadow:none;
+            filter: drop-shadow(0 24px 42px rgba(31,116,232,.10));
+        }
+        .start-overlay {
+            display:none !important;
+        }
+        .splash-overlay {
+            position:absolute;
+            inset:0;
+            z-index:100;
+            background:#fff;
+            border-radius:34px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            opacity:0;
+            pointer-events:none;
+            transition:opacity .5s ease-in-out;
+        }
+        .splash-overlay.show {
+            opacity:1;
+            pointer-events:none;
+        }
+        .splash-img {
+            width:100%;
+            height:100%;
+            object-fit:cover;
+            border-radius:34px;
+        }
+
+    </style>
+</head>
+<body>
+    <main class="page-container">
+        <section class="hero-title" style="display:none;"></section>
+
+        <section class="hero-stage" aria-label="小守護與小安心歡迎區">
+            <div class="avatar-container">
+                
+
+                <video id="welcome-video" class="avatar-video" autoplay muted playsinline preload="auto" poster="../assets/images/welcome-banner.png">
+                    <source src="../assets/videos/welcome-video.mp4" type="video/mp4">
+                </video>
+
+                <div class="splash-overlay show" id="splash-overlay">
+                    <img src="../assets/images/welcome-banner.png" alt="AI防詐盾牌啟動畫面" class="splash-img">
+                </div>
+
+                <div class="start-overlay" id="start-overlay" style="display:none;"></div>
+                <div class="avatar-error" id="avatar-error">⚠️ 影片讀取失敗，請確認檔案位置</div>
+            </div>
+        </section>
+
+        <section class="bottom-layout">
+            <div class="panel">
+                <div class="status-box" id="status-text" style="display:none;"></div>
+                <nav class="actions">
+                    <button class="btn btn-primary" id="start-now-btn">現在就開始安全上網</button>
+                </nav>
+                <div class="family-status" id="family-status-text" aria-live="polite">
+                    🔄 正在為您準備家庭守護...
+                </div>
+            </div>
+
+            <div class="panel">
+                <ul class="safe-list">
+                    <li><span class="check">✓</span><span>您可以照常上網。</span></li>
+                    <li><span class="check">✓</span><span>我會在旁邊幫您看網頁。</span></li>
+                    <li><span class="check">✓</span><span>遇到可疑網站時，才會跳出提醒。</span></li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <script src="../core/config.js"></script>
+    <script src="../scripts/welcome.js"></script>
+</body>
+</html>

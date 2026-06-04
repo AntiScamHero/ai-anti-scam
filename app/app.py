@@ -73,6 +73,7 @@ def create_app():
             "status": "success",
             "message": "OK",
             "service": "AI 防詐盾牌 API",
+            "healthCheck": "render_keep_alive_ready",
         }), 200
 
     return app

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="ai-shield-skip-scan" content="true">
+  <title>AI 防詐盾牌｜防詐教室</title>
+  <script src="../core/config.js"></script>
+  <script src="../scripts/scenarios.js?v=adhun-teacher-img-v2"></script>
+  <style>
+    :root{
+      --bg:#eef7ff;--card:#ffffff;--ink:#06254a;--sub:#56708d;--blue:#2477f2;--blue2:#eaf4ff;
+      --green:#22c55e;--green2:#ecfdf5;--red:#ef4444;--red2:#fff1f2;--yellow:#f59e0b;--yellow2:#fff7db;
+      --line:#d9e8fb;--shadow:rgba(35,77,130,.16);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;padding:22px;background:radial-gradient(circle at 8% 5%,rgba(36,119,242,.18),transparent 32%),radial-gradient(circle at 95% 15%,rgba(34,197,94,.18),transparent 28%),var(--bg);font-family:"Microsoft JhengHei","Segoe UI",system-ui,sans-serif;color:var(--ink)}
+    .app{width:min(1060px,100%);margin:0 auto;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:30px;padding:24px;box-shadow:0 24px 60px var(--shadow)}
+    .top{display:grid;grid-template-columns:120px 1fr auto;gap:18px;align-items:center;margin-bottom:18px}
+    .bot{width:118px;height:118px;object-fit:contain;object-position:center bottom;border-radius:26px;background:linear-gradient(135deg,#fff,#eaf4ff);border:1px solid var(--line);filter:drop-shadow(0 12px 20px rgba(36,119,242,.18))}
+    h1{font-size:36px;line-height:1.12;margin:0 0 8px;font-weight:1000;color:var(--ink)}
+    .subtitle{margin:0;font-size:18px;font-weight:800;color:var(--sub);line-height:1.6}.badge{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:10px 14px;background:var(--green2);color:#13803d;border:1px solid rgba(34,197,94,.28);font-weight:1000;white-space:nowrap}
+    .stage{display:grid;grid-template-columns:1.45fr .8fr;gap:18px;align-items:stretch}.panel{background:#f8fbff;border:1px solid var(--line);border-radius:24px;padding:18px}.scenario-title{font-size:24px;font-weight:1000;margin:0 0 8px}.scenario-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.pill{border-radius:999px;padding:7px 10px;font-weight:900;font-size:13px;background:#fff;border:1px solid var(--line);color:var(--sub)}
+    .chat{height:430px;overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth}.message{max-width:82%;padding:13px 15px;border-radius:18px;line-height:1.68;font-size:17px;font-weight:750;white-space:pre-wrap;word-break:break-word}.scammer-msg{align-self:flex-start;background:var(--red2);border:1px solid #fecaca;color:#8a1717;border-top-left-radius:6px}.user-msg{align-self:flex-end;background:#e8f1ff;border:1px solid #bfdbfe;color:#0f4b99;border-top-right-radius:6px}.coach-msg{align-self:center;max-width:94%;background:var(--yellow2);border:1px solid #f7d26a;color:#7a4b00;text-align:left}.system-msg{align-self:center;max-width:94%;background:var(--green2);border:1px solid #bbf7d0;color:#14532d;text-align:center}.typing{opacity:.75}.input-row{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px}textarea{width:100%;min-height:70px;max-height:140px;resize:vertical;border:1px solid #cbdff6;border-radius:18px;padding:14px 16px;font-size:17px;line-height:1.6;font-family:inherit;outline:none}textarea:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(36,119,242,.12)}button{border:0;border-radius:999px;padding:13px 18px;font-size:16px;font-weight:1000;cursor:pointer;transition:transform .14s ease,filter .14s ease,opacity .14s ease}button:hover{transform:translateY(-1px);filter:brightness(1.04)}button:disabled{opacity:.55;cursor:not-allowed;transform:none}.primary{background:linear-gradient(135deg,var(--blue),#0f55c8);color:#fff}.secondary{background:#eef6ff;color:#1459c8;border:1px solid #c7dcff}.green{background:linear-gradient(135deg,var(--green),#15803d);color:#fff}.danger{background:#fff1f2;color:#be123c;border:1px solid #fecdd3}.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.quick button{font-size:14px;padding:11px 10px}.side{display:grid;gap:14px}.score-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:16px}.score-title{font-size:17px;font-weight:1000;margin-bottom:8px}.score-num{font-size:46px;font-weight:1000;color:var(--blue);line-height:1}.score-label{font-weight:900;color:var(--sub);margin-top:3px}.bar{height:12px;border-radius:999px;background:#e2e8f0;overflow:hidden;margin-top:10px}.bar-fill{height:100%;width:50%;background:var(--blue);transition:width .4s ease,background .4s ease}.reason-list{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:8px}.reason-list li{background:#f8fbff;border:1px solid var(--line);border-radius:14px;padding:10px 11px;line-height:1.55;font-weight:800;color:var(--sub)}.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.small{font-size:13px;color:var(--sub);line-height:1.65;margin:8px 0 0;font-weight:750}.hidden{display:none!important}
+    @media(max-width:850px){body{padding:12px}.app{padding:16px;border-radius:22px}.top{grid-template-columns:84px 1fr}.bot{width:82px;height:82px}.badge{grid-column:1/-1;justify-content:center}h1{font-size:28px}.subtitle{font-size:15px}.stage{grid-template-columns:1fr}.chat{height:390px}.quick{grid-template-columns:1fr}.input-row{grid-template-columns:1fr}.message{font-size:16px;max-width:92%}}
+  
+    /* === v2 Elder-Friendly AI Classroom：只優化閱讀、點擊、語音，不改核心架構 === */
+    .app{
+      border:1px solid rgba(36,119,242,.22);
+      background:
+        linear-gradient(#ffffff,#ffffff) padding-box,
+        linear-gradient(135deg,rgba(36,119,242,.36),rgba(34,197,94,.22),rgba(124,58,237,.18)) border-box;
+      box-shadow:0 26px 68px rgba(35,77,130,.16);
+    }
+    .top{
+      padding-bottom:16px;
+      border-bottom:1px solid rgba(36,119,242,.12);
+    }
+    .subtitle{
+      font-size:19px;
+      line-height:1.75;
+    }
+    .scenario-title{
+      font-size:27px;
+      line-height:1.35;
+    }
+    .chat{
+      height:min(470px,56vh);
+      border:2px solid rgba(36,119,242,.18);
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.9);
+    }
+    .message{
+      font-size:21px;
+      line-height:1.82;
+      padding:16px 18px;
+      border-radius:22px;
+      font-weight:850;
+    }
+    .quick-hint{
+      margin-top:14px;
+      color:#334155;
+      font-size:18px;
+      font-weight:1000;
+      line-height:1.55;
+    }
+    .quick{
+      gap:12px;
+      margin-top:8px;
+    }
+    .quick button,
+    button{
+      min-height:52px;
+      border-radius:18px;
+      font-size:18px;
+    }
+    .quick button{
+      padding:14px 13px;
+      font-size:17px;
+      border:2px solid #bfdbfe;
+      color:#0f3f86;
+      background:#f4f9ff;
+    }
+    .quick button:hover{
+      background:#eaf4ff;
+    }
+    .input-row{
+      grid-template-columns:1fr auto auto;
+      align-items:stretch;
+    }
+    textarea{
+      min-height:86px;
+      font-size:20px;
+      line-height:1.72;
+      border:2px solid #b9d4f5;
+      border-radius:22px;
+    }
+    .voice{
+      background:#f0fdf4;
+      color:#166534;
+      border:2px solid #86efac;
+      min-width:104px;
+    }
+    .voice.listening{
+      background:#dcfce7;
+      color:#14532d;
+      box-shadow:0 0 0 5px rgba(34,197,94,.18);
+    }
+    .voice.unsupported{
+      opacity:.55;
+      cursor:not-allowed;
+    }
+    .primary{
+      min-width:96px;
+    }
+    .secondary{
+      color:#0b3f91;
+      border:2px solid #b7d4ff;
+      background:#f4f9ff;
+    }
+    .score-card{
+      border:2px solid rgba(36,119,242,.16);
+      box-shadow:0 12px 26px rgba(35,77,130,.08);
+    }
+    .score-icon{
+      width:74px;
+      height:74px;
+      margin:4px 0 10px;
+      display:grid;
+      place-items:center;
+      border-radius:24px;
+      background:linear-gradient(135deg,#eff6ff,#f0fdf4);
+      font-size:28px;font-weight:1000;white-space:nowrap;line-height:1;
+      border:1px solid #d9e8fb;
+    }
+    .score-icon.safe{background:#ecfdf5}
+    .score-icon.caution{background:#fff7db}
+    .score-icon.risky{background:#fff1f2}
+    .score-num{
+      font-size:52px;
+    }
+    .coach-detail{
+      margin-top:12px;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+      overflow:hidden;
+    }
+    .coach-detail summary{
+      padding:13px 14px;
+      font-size:17px;
+      font-weight:1000;
+      color:#334155;
+      cursor:pointer;
+      list-style:none;
+    }
+    .coach-detail summary::-webkit-details-marker{display:none}
+    .coach-detail summary::after{
+      content:"＋";
+      float:right;
+      color:#2477f2;
+      font-weight:1000;
+    }
+    .coach-detail[open] summary::after{content:"－"}
+    .coach-detail .reason-list{
+      margin:0;
+      padding:0 12px 12px;
+    }
+    .reason-list li{
+      font-size:17px;
+      line-height:1.7;
+      color:#334155;
+    }
+    .actions button{
+      min-height:54px;
+    }
+    @media(max-width:850px){
+      body{padding:10px}
+      .app{padding:15px;border-radius:24px}
+      .top{grid-template-columns:76px 1fr}
+      .bot{width:74px;height:74px;border-radius:22px}
+      h1{font-size:30px}
+      .subtitle{font-size:18px;line-height:1.7}
+      .stage{grid-template-columns:1fr}
+      .panel{padding:16px}
+      .chat{
+        height:auto;
+        min-height:300px;
+        max-height:50vh;
+      }
+      .message{
+        max-width:94%;
+        font-size:20px;
+        line-height:1.82;
+      }
+      .quick{
+        grid-template-columns:1fr;
+      }
+      .input-row{
+        grid-template-columns:1fr;
+      }
+      .voice,.primary{
+        width:100%;
+      }
+      .side{
+        grid-template-columns:1fr;
+      }
+      .score-card{
+        padding:15px;
+      }
+      .score-icon{
+        width:66px;
+        height:66px;
+        font-size:26px;font-weight:1000;white-space:nowrap;line-height:1;
+      }
+      .coach-detail:not([open]){
+        background:#f8fbff;
+      }
+      .reason-list li{
+        font-size:16px;
+      }
+    }
+    @media(prefers-reduced-motion:reduce){
+      *{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+    }
+
+  
+
+/* === 阿盾老師正式版：使用圖片，不使用文字/emoji === */
+.bot{
+  width:118px;
+  height:138px;
+  padding:6px;
+  object-fit:contain;
+  object-position:center bottom;
+  background:linear-gradient(135deg,#ffffff,#eaf4ff);
+}
+.score-icon{
+  width:78px;
+  height:78px;
+  margin:4px 0 10px;
+  display:grid;
+  place-items:center;
+  border-radius:24px;
+  background:linear-gradient(135deg,#eff6ff,#f0fdf4);
+  border:1px solid #d9e8fb;
+  overflow:hidden;
+}
+.score-icon.safe{background:#ecfdf5;border-color:#bbf7d0}
+.score-icon.caution{background:#fff7db;border-color:#fde68a}
+.score-icon.risky{background:#fff1f2;border-color:#fecdd3}
+.score-adhun-img{
+  width:72px;
+  height:72px;
+  object-fit:contain;
+  object-position:center bottom;
+  display:block;
+}
+@media(max-width:850px){
+  .bot{
+    width:76px;
+    height:96px;
+    padding:4px;
+  }
+  .score-icon{
+    width:70px;
+    height:70px;
+  }
+  .score-adhun-img{
+    width:64px;
+    height:64px;
+  }
+}
+
+
+    /* === 影片教材區：5課影片＋對應互動題 === */
+    .lesson-video-card{
+      margin-bottom:16px;
+      padding:18px;
+      border-radius:24px;
+      border:2px solid rgba(36,119,242,.18);
+      background:linear-gradient(180deg,#ffffff,#f4f9ff);
+      box-shadow:0 12px 28px rgba(35,77,130,.08);
+    }
+    .lesson-video-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .lesson-video-title{font-size:26px;font-weight:1000;line-height:1.35;color:#06254a}
+    .lesson-video-desc{margin-top:6px;font-size:18px;font-weight:850;line-height:1.65;color:#56708d}
+    .lesson-video-tag{flex:0 0 auto;border-radius:999px;padding:9px 12px;font-size:15px;font-weight:1000;background:#ecfdf5;color:#15803d;border:1px solid #bbf7d0;white-space:nowrap}
+    .lesson-video-player{width:100%;max-height:420px;border-radius:22px;background:#020617;border:1px solid rgba(15,23,42,.18);display:block}
+    .lesson-video-actions{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-top:12px}
+    .lesson-video-note{font-size:16px;font-weight:850;color:#334155;line-height:1.6}
+    .lesson-start-btn{min-width:188px}
+    .lesson-lock{opacity:.48;filter:grayscale(.15)}
+    .lesson-progress{margin-top:10px;font-size:15px;font-weight:900;color:#0f4b99;line-height:1.5}
+
+    .mode-switch{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-bottom:16px;
+      padding:10px;
+      border-radius:22px;
+      background:#ffffff;
+      border:2px solid rgba(36,119,242,.16);
+      box-shadow:0 10px 22px rgba(35,77,130,.06);
+    }
+    .mode-btn{
+      border-radius:18px;
+      border:2px solid #c7dcff;
+      background:#f4f9ff;
+      color:#0b3f91;
+      min-height:54px;
+      font-size:18px;
+      font-weight:1000;
+    }
+    .mode-btn.active{
+      background:linear-gradient(135deg,#2477f2,#0f55c8);
+      color:#fff;
+      border-color:transparent;
+      box-shadow:0 10px 20px rgba(36,119,242,.18);
+    }
+    .challenge-summary{
+      align-self:center;
+      max-width:94%;
+      background:#ecfdf5;
+      border:1px solid #bbf7d0;
+      color:#14532d;
+      text-align:left;
+      font-weight:900;
+    }
+    @media(max-width:850px){
+      .lesson-video-card{padding:15px;border-radius:22px}
+      .lesson-video-top{display:block}
+      .lesson-video-tag{display:inline-flex;margin-top:10px}
+      .lesson-video-title{font-size:23px}
+      .lesson-video-desc{font-size:17px}
+      .lesson-video-actions{grid-template-columns:1fr}
+      .lesson-start-btn{width:100%;min-width:0}
+      .mode-switch{grid-template-columns:1fr;padding:8px}
+    }
+
+  
+/* === 方案C：長輩智慧均衡版（影片上方、下方左右均衡、按鈕置底） === */
+body{background:linear-gradient(180deg,#eef7ff 0%,#f8fbff 100%) !important;}
+.app{width:min(1180px,100%) !important;border:2px solid rgba(36,119,242,.16) !important;box-shadow:0 16px 38px rgba(35,77,130,.12) !important;}
+.top{grid-template-columns:116px 1fr auto !important;align-items:center !important;}
+.subtitle{font-size:20px !important;line-height:1.7 !important;}
+.stage{display:block !important;max-width:none !important;margin:0 !important;}
+.panel{background:transparent !important;border:0 !important;padding:0 !important;}
+.lesson-video-card{margin-bottom:20px !important;padding:20px !important;border-radius:28px !important;background:#fff !important;border:2px solid rgba(36,119,242,.16) !important;box-shadow:0 12px 28px rgba(35,77,130,.08) !important;}
+.lesson-video-title{font-size:30px !important;line-height:1.35 !important;}
+.lesson-video-desc{font-size:20px !important;line-height:1.75 !important;}
+.lesson-video-player{max-height:520px !important;border-radius:24px !important;}
+.lesson-video-note{font-size:19px !important;line-height:1.7 !important;}
+.lesson-start-btn{min-height:68px !important;border-radius:22px !important;font-size:22px !important;}
+.practice-layout{display:grid !important;grid-template-columns:minmax(0,1.55fr) minmax(330px,.85fr) !important;grid-template-areas:"story coach" "choice choice" "actions actions";gap:20px !important;align-items:start !important;}
+.practice-story-card{grid-area:story;background:#fff;border:2px solid rgba(36,119,242,.16);border-radius:28px;padding:20px;box-shadow:0 12px 28px rgba(35,77,130,.07);min-height:1100px !important;}
+.practice-coach-card{grid-area:coach;display:block !important;margin:0 !important;}
+.practice-choice-card{grid-area:choice;background:#fff;border:2px solid rgba(36,119,242,.16);border-radius:28px;padding:20px;box-shadow:0 12px 28px rgba(35,77,130,.07);}
+.practice-actions-card{grid-area:actions;}
+.score-card{background:#fff !important;border:2px solid rgba(36,119,242,.16) !important;border-radius:28px !important;padding:20px !important;box-shadow:0 12px 28px rgba(35,77,130,.07) !important;}
+.score-card + .score-card{margin-top:16px !important;}
+.score-num,.bar{display:none !important;}
+.score-title{font-size:28px !important;line-height:1.35 !important;}
+.score-label{font-size:22px !important;line-height:1.7 !important;color:#334155 !important;margin:12px 0 16px !important;}
+.score-icon{width:92px !important;height:92px !important;border-radius:28px !important;}
+.score-adhun-img{width:84px !important;height:84px !important;}
+.scenario-title{font-size:30px !important;line-height:1.35 !important;}
+.pill{font-size:17px !important;padding:9px 14px !important;}
+.chat{height:920px !important;min-height:920px !important;border-radius:24px !important;background:#fff !important;border:2px solid rgba(36,119,242,.18) !important;}
+.message{font-size:22px !important;line-height:1.85 !important;padding:17px 20px !important;max-width:94% !important;}
+.quick-hint{font-size:28px !important;color:#06254a !important;margin:0 0 14px !important;font-weight:1000 !important;}
+.elder-choice{display:grid !important;grid-template-columns:1fr 1fr !important;gap:16px !important;}
+.elder-choice button{min-height:96px !important;padding:18px 16px !important;border-radius:24px !important;font-size:24px !important;line-height:1.35 !important;text-align:center !important;border:3px solid #bfdbfe !important;box-shadow:0 8px 18px rgba(35,77,130,.08) !important;}
+.elder-choice .danger{background:#fff1f2 !important;color:#be123c !important;border-color:#fecdd3 !important;}
+.input-row{display:none !important;}
+.coach-detail summary{pointer-events:none;font-size:23px !important;color:#0f4b99 !important;border-bottom:2px dashed #b7d4ff;margin-bottom:10px;padding:16px !important;}
+.coach-detail summary::after{display:none !important;}
+.reason-list{padding:0 14px 14px !important;}
+.reason-list li{font-size:21px !important;line-height:1.85 !important;color:#334155 !important;border-radius:18px !important;padding:13px 15px !important;}
+.small{font-size:19px !important;line-height:1.75 !important;color:#334155 !important;font-weight:850 !important;}
+.actions{display:grid !important;grid-template-columns:1fr 1fr !important;gap:16px !important;}
+.actions button{min-height:76px !important;border-radius:24px !important;font-size:23px !important;}
+@media(max-width:920px){.top{grid-template-columns:86px 1fr !important}.badge{grid-column:1/-1;justify-content:center}.practice-layout{grid-template-columns:1fr !important;grid-template-areas:"story" "coach" "choice" "actions"}.chat{height:auto !important;min-height:300px !important;max-height:52vh !important}.elder-choice{grid-template-columns:1fr !important}.elder-choice button{min-height:80px !important}.actions{grid-template-columns:1fr !important}}
+
+</style>
+</head>
+<body data-ai-shield-skip-scan="true">
+  <main class="app" aria-label="AI 防詐教室">
+    <header class="top">
+      <img src="../assets/images/adhun-teacher.png" alt="阿盾老師防詐教室角色" class="bot">
+      <div>
+        <h1>防詐教室</h1>
+        <p class="subtitle">隨機出現真實生活情境。先看影片，再選擇你的做法，阿盾老師會帶你一步一步學防詐。</p>
+      </div>
+      <div class="badge">🛡️ 本機也能演練</div>
+    </header>
+
+    <section class="stage">
+      <section class="panel" aria-label="防詐教室">
+
+        <div class="mode-switch" aria-label="學習模式切換">
+          <button type="button" id="mode-course-btn" class="mode-btn active">📚 防詐教室</button>
+          <button type="button" id="mode-challenge-btn" class="mode-btn">🎲 防詐挑戰</button>
+        </div>
+
+        <div id="lesson-video-card" class="lesson-video-card" aria-label="防詐影片教材"><div class="lesson-video-top"><div><div id="lesson-video-title" class="lesson-video-title">影片教材載入中...</div><div id="lesson-video-desc" class="lesson-video-desc">請先觀看阿盾老師的防詐影片，再進入互動練習。</div><div id="lesson-progress" class="lesson-progress">第 1 課 / 共 5 課</div></div><div id="lesson-video-tag" class="lesson-video-tag">影片教材</div></div><video id="lesson-video-player" class="lesson-video-player" controls preload="metadata" playsinline><source id="lesson-video-source" src="../assets/videos/lesson1-fake-claim.mp4" type="video/mp4">您的瀏覽器不支援影片播放。</video><div class="lesson-video-actions"><div id="lesson-video-note" class="lesson-video-note">看完影片後，按「開始互動練習」回答阿盾老師的問題。</div><button type="button" id="start-practice-btn" class="primary lesson-start-btn">開始互動練習</button></div></div>
+
+        <div id="practice-area" class="lesson-lock practice-layout">
+          <div class="practice-story-card">
+            <div id="scenario-title" class="scenario-title">載入中...</div>
+            <div id="scenario-meta" class="scenario-meta"></div>
+            <div id="chat-box" class="chat" aria-live="polite" aria-relevant="additions text"></div>
+          </div>
+
+          <aside class="side practice-coach-card" aria-label="阿盾老師提醒">
+            <div class="score-card">
+              <div class="score-title">🛡️ 阿盾老師提醒</div>
+              <div id="score-icon" class="score-icon" aria-hidden="true"><img src="../assets/images/adhun-teacher.png" alt="" class="score-adhun-img"></div>
+              <div id="score-num" class="score-num"></div>
+              <div id="score-label" class="score-label">先看題目，再選擇你的做法</div>
+              <div class="bar"><div id="score-bar" class="bar-fill"></div></div>
+              <details id="coach-detail" class="coach-detail" open>
+                <summary>阿盾判斷</summary>
+                <ul id="reason-list" class="reason-list"><li>選擇做法後，阿盾老師會提醒你哪裡安全、哪裡危險。</li></ul>
+              </details>
+            </div>
+
+            <div class="score-card">
+              <div class="score-title">這題要記住</div>
+              <details id="lesson-detail" class="coach-detail" open>
+                <summary>學習重點</summary>
+                <ul id="lesson-list" class="reason-list"></ul>
+              </details>
+              <p class="small">重點不是考分數，而是記住：先停、再查、再問可信任的人。</p>
+            </div>
+          </aside>
+
+          <div class="practice-choice-card">
+            <div class="quick-hint">請選擇你的做法：</div>
+            <div class="quick elder-choice" aria-label="長輩安全選項">
+              <button type="button" class="secondary" id="quick-verify">✅ 我先查證<br>官方來源</button>
+              <button type="button" class="secondary" id="quick-family">👨‍👩‍👧 我先問<br>家人確認</button>
+              <button type="button" class="secondary" id="quick-refuse">🔒 我不提供<br>資料</button>
+              <button type="button" class="danger" id="quick-risky">⚠️ 我直接<br>照做</button>
+            </div>
+            <div class="input-row">
+              <textarea id="user-input" placeholder="系統保留欄位，長輩版不用打字"></textarea>
+              <button type="button" id="voice-btn" class="voice" aria-pressed="false">🎙️ 語音</button>
+              <button type="button" id="send-btn" class="primary">送出</button>
+            </div>
+          </div>
+
+          <div class="actions practice-actions-card">
+            <button type="button" id="next-btn" class="green">下一題</button>
+            <button type="button" id="restart-btn" class="secondary">重看這題</button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="../scripts/simulator.js?v=course-challenge-v1"></script>
+</body>
+</html>

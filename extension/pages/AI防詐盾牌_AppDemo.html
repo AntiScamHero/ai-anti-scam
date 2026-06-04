@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta name="ai-shield-skip-scan" content="true" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AI Shield｜行動端 App Demo</title>
+  <style>
+    :root {
+      --blue: #1769e8;
+      --blue-2: #0f4fb7;
+      --cyan: #15b8d6;
+      --green: #16a34a;
+      --yellow: #f59e0b;
+      --red: #dc2626;
+      --pink: #ec6aa5;
+      --ink: #0f172a;
+      --sub: #475569;
+      --soft: #f3f7ff;
+      --line: #dbe7ff;
+      --card: #ffffff;
+      --shadow: 0 18px 44px rgba(31, 105, 232, 0.14);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: "Microsoft JhengHei", "PingFang TC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 8%, rgba(23,105,232,.18), transparent 28%),
+        radial-gradient(circle at 84% 20%, rgba(236,106,165,.16), transparent 28%),
+        linear-gradient(160deg, #eef7ff 0%, #ffffff 50%, #fff6e8 100%);
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      padding: 24px 14px 28px;
+    }
+
+    button, input, textarea { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+
+    .phone {
+      width: min(430px, 100%);
+      min-height: min(900px, 100vh - 52px);
+      background: #f8fbff;
+      border: 10px solid #0b1f45;
+      border-radius: 44px;
+      box-shadow: 0 24px 80px rgba(12, 28, 60, .22);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .status-bar {
+      height: 34px;
+      padding: 9px 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 900;
+      background: rgba(248,251,255,.92);
+    }
+
+    .status-icons { letter-spacing: 1px; }
+
+    .app-shell {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .screen-area {
+      flex: 1;
+      overflow: auto;
+      padding: 14px 18px 92px;
+      scroll-behavior: smooth;
+    }
+
+    .screen { display: none; animation: fadeIn .22s ease; }
+    .screen.active { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .top-card {
+      background:
+        radial-gradient(circle at 85% 12%, rgba(21,184,214,.14), transparent 30%),
+        linear-gradient(135deg, #ffffff, #eef6ff);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #e9f3ff;
+      color: #1457bd;
+      border: 1px solid #cfe3ff;
+      font-size: 12px;
+      font-weight: 1000;
+      margin-bottom: 12px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 30px; line-height: 1.16; letter-spacing: .2px; }
+    h2 { font-size: 22px; line-height: 1.25; }
+    h3 { font-size: 17px; line-height: 1.35; }
+
+    .lead {
+      margin-top: 10px;
+      color: var(--sub);
+      font-size: 15px;
+      line-height: 1.65;
+      font-weight: 750;
+    }
+
+    .hero-row {
+      display: grid;
+      grid-template-columns: 1fr 128px;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .mascot {
+      width: 132px;
+      max-width: 100%;
+      align-self: end;
+      filter: drop-shadow(0 18px 24px rgba(23, 105, 232, .22));
+      transform: translateY(8px);
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .quick-card, .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 10px 28px rgba(23, 105, 232, .08);
+    }
+
+    .quick-card {
+      padding: 14px;
+      min-height: 112px;
+      text-align: left;
+      color: var(--ink);
+      cursor: pointer;
+      transition: .18s ease;
+    }
+
+    .quick-card:hover { transform: translateY(-2px); }
+    .quick-icon { font-size: 27px; margin-bottom: 8px; }
+    .quick-card strong { display: block; font-size: 15px; line-height: 1.3; }
+    .quick-card span { display: block; margin-top: 5px; color: var(--sub); font-size: 12px; line-height: 1.45; font-weight: 700; }
+
+    .card { padding: 18px; margin-bottom: 13px; }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 2px 0 12px;
+    }
+
+    .section-title small {
+      color: var(--sub);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .notice {
+      padding: 13px 14px;
+      border-radius: var(--radius-md);
+      background: #fff8e6;
+      border: 1px solid #ffe0a3;
+      color: #7a4b00;
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 850;
+      margin-bottom: 13px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 1000;
+      margin: 0 0 8px;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 2px solid #cbdaf4;
+      border-radius: 17px;
+      padding: 13px 14px;
+      outline: none;
+      background: #fbfdff;
+      color: var(--ink);
+      font-size: 15px;
+      line-height: 1.55;
+      font-weight: 750;
+    }
+
+    textarea { min-height: 132px; resize: vertical; }
+    input:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(23,105,232,.12); }
+
+    .field-group { display: grid; gap: 14px; }
+
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .pill {
+      border: 1px solid #cfe0ff;
+      background: #eef5ff;
+      color: #1557b0;
+      border-radius: 999px;
+      padding: 9px 11px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 1000;
+      width: auto;
+      margin: 0;
+    }
+
+    .btn {
+      width: 100%;
+      border: 0;
+      border-radius: 18px;
+      padding: 15px 16px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 1000;
+      margin-top: 12px;
+      transition: .18s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: linear-gradient(135deg, var(--blue), var(--blue-2)); color: #fff; box-shadow: 0 12px 24px rgba(23,105,232,.24); }
+    .btn-soft { background: #eef5ff; color: #1457bd; border: 1px solid #cfdefa; }
+    .btn-danger { background: #ffe8e8; color: #b91c1c; border: 1px solid #ffcaca; }
+    .btn-green { background: #e6f8ee; color: #0f7a35; border: 1px solid #c3efd3; }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .scan-loading {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      margin-top: 12px;
+      border-radius: 18px;
+      background: #eef6ff;
+      color: #1457bd;
+      font-weight: 1000;
+    }
+    .scan-loading.active { display: flex; }
+    .spinner {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 4px solid #c9dcff;
+      border-top-color: var(--blue);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .result-hero {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+      margin-bottom: 13px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .result-hero.high { border-color: #fecaca; background: linear-gradient(180deg, #fff, #fff3f3); }
+    .result-hero.mid { border-color: #fde68a; background: linear-gradient(180deg, #fff, #fff9ea); }
+    .result-hero.low { border-color: #bbf7d0; background: linear-gradient(180deg, #fff, #f0fff5); }
+
+    .warn-img {
+      width: 74px;
+      height: 74px;
+      object-fit: contain;
+      margin-bottom: 4px;
+      filter: drop-shadow(0 10px 14px rgba(220,38,38,.20));
+    }
+
+    .score {
+      font-size: 68px;
+      font-weight: 1000;
+      letter-spacing: -2px;
+      line-height: 1;
+      margin: 8px 0;
+    }
+    .score.high { color: var(--red); }
+    .score.mid { color: var(--yellow); }
+    .score.low { color: var(--green); }
+    .score span { font-size: 19px; letter-spacing: 0; color: var(--sub); }
+
+    .risk-level {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      padding: 9px 15px;
+      border-radius: 999px;
+      font-size: 16px;
+      font-weight: 1000;
+      margin-bottom: 8px;
+    }
+    .risk-level.high { background: #fee2e2; color: #b91c1c; }
+    .risk-level.mid { background: #fef3c7; color: #92400e; }
+    .risk-level.low { background: #dcfce7; color: #166534; }
+
+
+    .mode-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 12px 13px;
+      border-radius: 17px;
+      border: 1px solid #cfe0ff;
+      background: linear-gradient(135deg, #eef5ff, #f7fbff);
+      color: #1457bd;
+      font-size: 13px;
+      line-height: 1.55;
+      font-weight: 900;
+    }
+    .mode-banner strong {
+      display: block;
+      font-size: 14px;
+      color: #0f4fb7;
+      margin-bottom: 2px;
+    }
+    .mode-banner.fallback {
+      background: linear-gradient(135deg, #fff7df, #fffaf0);
+      border-color: #ffe0a3;
+      color: #8a5200;
+    }
+    .mode-banner.fallback strong { color: #92400e; }
+    .mode-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 99px;
+      background: #16a34a;
+      margin-top: 5px;
+      flex: 0 0 auto;
+      box-shadow: 0 0 0 4px rgba(22,163,74,.12);
+    }
+    .mode-banner.fallback .mode-dot {
+      background: #f59e0b;
+      box-shadow: 0 0 0 4px rgba(245,158,11,.14);
+    }
+
+    .source-pill {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0 auto 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #eef5ff;
+      color: #1457bd;
+      border: 1px solid #cfdefa;
+      font-size: 12px;
+      font-weight: 1000;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .data-row {
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 10px;
+      padding: 12px 0;
+      border-bottom: 1px solid #edf3ff;
+      align-items: start;
+    }
+    .data-row:last-child { border-bottom: 0; padding-bottom: 0; }
+    .data-label { color: var(--sub); font-size: 13px; font-weight: 1000; }
+    .data-value { color: var(--ink); font-size: 14px; font-weight: 850; line-height: 1.65; word-break: break-word; }
+
+    .tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag {
+      display: inline-flex;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: #eef5ff;
+      border: 1px solid #d7e6ff;
+      color: #1557b0;
+      font-size: 12px;
+      font-weight: 1000;
+    }
+    .tag.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+
+    .family-card {
+      background: linear-gradient(135deg, #ffffff, #f2fbff);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      margin-bottom: 13px;
+    }
+    .family-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .family-avatar { width: 54px; height: 54px; border-radius: 18px; background: #eaf5ff; display: grid; place-items: center; overflow: hidden; flex: 0 0 auto; }
+    .family-avatar img { width: 58px; object-fit: contain; }
+
+    .line-bubble {
+      background: #e6f8ee;
+      border: 1px solid #c2ebd0;
+      color: #135d2d;
+      border-radius: 20px 20px 20px 7px;
+      padding: 14px;
+      font-size: 14px;
+      line-height: 1.6;
+      font-weight: 850;
+    }
+
+    .history-item {
+      display: grid;
+      grid-template-columns: 50px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid #edf3ff;
+    }
+    .history-item:last-child { border-bottom: 0; }
+    .history-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      font-weight: 1000;
+    }
+    .history-icon.high { background: #fee2e2; color: #b91c1c; }
+    .history-icon.mid { background: #fef3c7; color: #92400e; }
+    .history-icon.low { background: #dcfce7; color: #166534; }
+    .history-title { font-size: 14px; font-weight: 1000; line-height: 1.3; }
+    .history-sub { margin-top: 3px; color: var(--sub); font-size: 12px; font-weight: 800; }
+    .history-score { font-size: 18px; font-weight: 1000; }
+
+    .bottom-nav {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      padding: 10px 12px 14px;
+      background: rgba(255,255,255,.94);
+      border-top: 1px solid #dce8fb;
+      backdrop-filter: blur(12px);
+    }
+    .nav-btn {
+      border: 0;
+      background: transparent;
+      color: #64748b;
+      border-radius: 17px;
+      padding: 9px 5px;
+      cursor: pointer;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      font-weight: 1000;
+    }
+    .nav-btn span { font-size: 21px; line-height: 1; }
+    .nav-btn.active { color: #1457bd; background: #e9f3ff; }
+
+    .demo-label {
+      position: absolute;
+      top: 42px;
+      right: 18px;
+      z-index: 5;
+      background: rgba(15,23,42,.82);
+      color: #fff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 1000;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--sub);
+      padding: 26px 12px;
+      font-size: 14px;
+      line-height: 1.7;
+      font-weight: 800;
+    }
+
+    @media (max-width: 390px) {
+      body { padding: 0; }
+      .phone { width: 100%; min-height: 100vh; border: 0; border-radius: 0; }
+      .screen-area { padding: 13px 14px 92px; }
+      .hero-row { grid-template-columns: 1fr 108px; }
+      .mascot { width: 112px; }
+      .quick-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body data-ai-shield-skip-scan="true">
+  <main class="phone" aria-label="AI 防詐盾牌 App Demo">
+    <audio id="bilingualWarningAudio" src="ai_shield_bilingual_warning.mp3" preload="auto"></audio>
+    <div class="demo-label">展示型 App Demo</div>
+    <div class="status-bar">
+      <span id="clock">09:41</span>
+      <span class="status-icons">5G ▰▰▰ 🔋</span>
+    </div>
+
+    <div class="app-shell">
+      <div class="screen-area">
+        <section class="screen active" id="screen-home">
+          <div class="top-card">
+            <div class="hero-row">
+              <div>
+                <div class="badge">🛡️ 行動端輔助防護工具</div>
+                <h1>AI 防詐盾牌</h1>
+                <p class="lead">貼上可疑簡訊、LINE 訊息或網址，先停三秒，再讓 AI 協助判斷風險。</p>
+              </div>
+              <img class="mascot" src="mascot-boy-new.png" alt="AI 防詐盾牌男版守護公仔" />
+            </div>
+            <div class="quick-grid">
+              <button class="quick-card" type="button" data-action="go-scan-message">
+                <div class="quick-icon">💬</div>
+                <strong>掃描可疑訊息</strong>
+                <span>簡訊、LINE、社群私訊都可以貼上</span>
+              </button>
+              <button class="quick-card" type="button" data-action="go-scan-url">
+                <div class="quick-icon">🔗</div>
+                <strong>掃描可疑網址</strong>
+                <span>付款頁、登入頁、短網址先查再點</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-title">
+              <h2>今日防護狀態</h2>
+              <small>Demo 資料</small>
+            </div>
+            <div class="split">
+              <div class="notice" style="margin:0;text-align:center;">
+                <strong style="font-size:26px;color:#1769e8;display:block;" id="homeScanCount">12</strong>
+                已掃描
+              </div>
+              <div class="notice" style="margin:0;text-align:center;background:#ffecec;border-color:#ffcaca;color:#991b1b;">
+                <strong style="font-size:26px;display:block;" id="homeHighCount">2</strong>
+                高風險
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>長輩友善提醒</h2></div>
+            <p class="lead" style="margin-top:0;">遇到「補繳、驗證碼、限時、帳戶凍結、保證獲利」時，不要急著操作，先截圖問家人或撥 165 查證。</p>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-scan">
+          <div class="top-card">
+            <div class="badge">🔍 手動快篩</div>
+            <h1>掃描可疑內容</h1>
+            <p class="lead">掃描時會優先連線 Flask API /api/scan；若現場網路不穩，會自動啟用本機輔助判斷，避免展示中斷。</p>
+            <div class="mode-banner" id="appModeBanner">
+              <span class="mode-dot"></span>
+              <div>
+                <strong id="appModeTitle">目前模式：雲端 AI 優先</strong>
+                <span id="appModeDesc">正常模式會先呼叫 /api/scan，若雲端失敗才切換本機備援。</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="notice">此 App 定位為「行動端輔助防護工具」，不取代 Chrome Extension 的網頁自動攔截功能。</div>
+            <div class="field-group">
+              <div>
+                <label for="targetUrl">可疑網址（可不填）</label>
+                <input id="targetUrl" placeholder="例如：https://example.com/pay" value="" />
+              </div>
+              <div>
+                <label for="message">可疑內容</label>
+                <textarea id="message" placeholder="貼上簡訊、LINE 訊息或網頁文字..."></textarea>
+              </div>
+            </div>
+
+            <div class="pill-row">
+              <button class="pill" type="button" data-sample="high">高風險範例</button>
+              <button class="pill" type="button" data-sample="mid">中風險範例</button>
+              <button class="pill" type="button" data-sample="low">低風險範例</button>
+            </div>
+
+            <button class="btn btn-primary" type="button" id="scanBtn">立即掃描</button>
+            <div class="scan-loading" id="scanLoading"><span class="spinner"></span><span>AI 防詐大腦分析中...</span></div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-result">
+          <div class="result-hero high" id="resultHero" aria-live="polite">
+            <img class="warn-img" src="warning-new.png" alt="警示圖示" id="resultIcon" />
+            <div class="risk-level high" id="riskLevel">高風險</div>
+            <div class="source-pill" id="analysisSource">本機輔助判斷</div>
+            <div class="score high" id="riskScore">92<span> / 100</span></div>
+            <p class="lead" id="resultSummary">偵測到補繳費用、立即操作與索取信用卡資料等高風險特徵。</p>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>AI 判斷摘要</h2></div>
+            <div class="data-row"><div class="data-label">模式</div><div class="data-value" id="modeText">雲端 AI 優先 / 失敗自動備援</div></div>
+            <div class="data-row"><div class="data-label">原因</div><div class="data-value" id="reasonText">對方要求立即補繳運費，並引導輸入信用卡資料，符合常見釣魚詐騙流程。</div></div>
+            <div class="data-row"><div class="data-label">建議</div><div class="data-value" id="adviceText">不要點擊連結、不要輸入信用卡或驗證碼，先透過官方 App 或 165 查證。</div></div>
+            <div class="data-row"><div class="data-label">命中特徵</div><div class="data-value"><div class="tag-list" id="tagList"></div></div></div>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>相似案例比對</h2><small>Demo</small></div>
+            <div class="data-row"><div class="data-label">案例</div><div class="data-value" id="caseText">假冒物流公司補繳運費，誘導輸入信用卡卡號與簡訊驗證碼。</div></div>
+            <div class="data-row"><div class="data-label">相似度</div><div class="data-value" id="caseSimilarity">91%</div></div>
+          </div>
+
+          <div class="split">
+            <button class="btn btn-soft" type="button" id="voiceZhBtn">國語提醒</button>
+            <button class="btn btn-soft" type="button" id="voiceTwBtn">雙語提醒</button>
+          </div>
+          <button class="btn btn-danger" type="button" id="notifyFamilyBtn">同步至家庭戰情室</button>
+        </section>
+
+        <section class="screen" id="screen-family">
+          <div class="top-card">
+            <div class="hero-row">
+              <div>
+                <div class="badge">👨‍👩‍👧 家庭守護</div>
+                <h1>家庭聯防已同步</h1>
+                <p class="lead">當 App 偵測到高風險內容，會把摘要同步到家庭戰情室；正式模式可推播 LINE 通知家人。</p>
+              </div>
+              <img class="mascot" src="mascot-girl-new.png" alt="AI 防詐盾牌女版守護公仔" />
+            </div>
+          </div>
+
+          <div class="family-card">
+            <div class="family-top">
+              <div class="family-avatar"><img src="warning-new.png" alt="警示" /></div>
+              <div>
+                <h3>家庭戰情室同步</h3>
+                <p class="lead" style="margin-top:2px;font-size:13px;">剛剛完成一筆高風險掃描紀錄</p>
+              </div>
+            </div>
+            <div class="line-bubble" id="familyMessage">Cassie 的裝置偵測到疑似物流補繳詐騙，風險分數 92/100。請提醒使用者不要點擊連結或輸入信用卡資料。</div>
+          </div>
+
+          <div class="card">
+            <div class="section-title"><h2>Demo 家庭代碼</h2></div>
+            <p class="lead" style="margin-top:0;">AISHIELD: <strong id="familyCodeText" style="color:#1769e8;font-size:22px;letter-spacing:2px;">尚未綁定</strong></p>
+            <button class="btn btn-green" type="button" id="openDashboardBtn">模擬開啟家庭戰情室</button>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-history">
+          <div class="top-card">
+            <div class="badge">📋 掃描紀錄</div>
+            <h1>近期防護紀錄</h1>
+            <p class="lead">展示使用者與家人可以回看每次掃描的風險分數、類型與處理狀態。</p>
+            <button class="btn btn-soft" type="button" id="clearHistoryBtn" style="padding: 8px 12px; font-size: 13px; margin-top: 8px; width: auto;">🧹 清除本機紀錄</button>
+          </div>
+
+          <div class="card" id="historyList"></div>
+        </section>
+      </div>
+
+      <nav class="bottom-nav" aria-label="App Demo 導覽列">
+        <button class="nav-btn active" type="button" data-screen="home"><span>🏠</span>首頁</button>
+        <button class="nav-btn" type="button" data-screen="scan"><span>🔍</span>掃描</button>
+        <button class="nav-btn" type="button" data-screen="family"><span>👪</span>家人</button>
+        <button class="nav-btn" type="button" data-screen="history"><span>📋</span>紀錄</button>
+      </nav>
+    </div>
+  </main>
+  <script src="config.js"></script>
+  <script src="AI防詐盾牌_AppDemo.js"></script>
+</body>
+</html>

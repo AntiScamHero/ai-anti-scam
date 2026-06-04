@@ -17,6 +17,7 @@
 import base64
 import hashlib
 import re
+import unicodedata
 from urllib.parse import unquote, urlparse
 
 RULE_VERSION = "2026-05-15-batch-fast-v1"
@@ -956,6 +957,105 @@ def has_high_risk_url_term(url):
     return any(term.lower().replace("-", "").replace("_", "").replace(".", "") in compact for term in HIGH_RISK_URL_TERMS)
 
 
+# ==========================================
+# IDN / Punycode / Homograph 偽裝偵測
+# ==========================================
+CONFUSABLE_CHAR_MAP = str.maketrans({
+    "а": "a", "А": "A", "е": "e", "Е": "E", "о": "o", "О": "O",
+    "р": "p", "Р": "P", "с": "c", "С": "C", "х": "x", "Х": "X",
+    "у": "y", "У": "Y", "к": "k", "К": "K", "м": "m", "М": "M",
+    "н": "h", "Н": "H", "і": "i", "І": "I", "ј": "j", "Ј": "J",
+    "ѕ": "s", "Ѕ": "S", "ѵ": "v", "Ѵ": "V", "ӏ": "l",
+    "α": "a", "Α": "A", "β": "b", "Β": "B", "ο": "o", "Ο": "O",
+    "ρ": "p", "Ρ": "P", "ν": "v", "Ν": "N", "τ": "t", "Τ": "T",
+})
+
+
+def extract_raw_hostname(url_or_domain):
+    raw = normalize_url_input(url_or_domain)
+    if not raw:
+        return ""
+
+    if not re.match(r"^[a-z][a-z0-9+.-]*://", raw, re.IGNORECASE):
+        raw = "https://" + raw.lstrip("/")
+
+    try:
+        parsed = urlparse(raw)
+        return (parsed.hostname or "").strip(".").lower()
+    except Exception:
+        return ""
+
+
+def to_idna_ascii(host):
+    if not host:
+        return ""
+    try:
+        return host.encode("idna").decode("ascii").lower()
+    except Exception:
+        return ""
+
+
+def confusable_skeleton(value):
+    value = unicodedata.normalize("NFKC", str(value or ""))
+    value = value.translate(CONFUSABLE_CHAR_MAP)
+    value = re.sub(r"[^a-zA-Z0-9.-]", "", value)
+    return value.lower()
+
+
+def idn_homograph_detail(url_or_domain):
+    """
+    偵測 IDN / Punycode / 同形異義字偽裝。
+    回傳 None 代表未命中；命中時回傳 score/reasons/domain 等資料。
+    """
+    raw_host = extract_raw_hostname(url_or_domain)
+    normalized_host = normalize_domain(url_or_domain)
+
+    if not raw_host and not normalized_host:
+        return None
+
+    ascii_host = to_idna_ascii(raw_host) or normalized_host
+    reasons = []
+    score = 0
+
+    has_punycode = "xn--" in ascii_host or "xn--" in normalized_host
+    has_non_ascii = any(ord(ch) > 127 for ch in raw_host)
+    has_confusable_script = bool(re.search(r"[\u0370-\u03FF\u0400-\u052F]", raw_host))
+
+    if has_punycode:
+        score += 70
+        reasons.append("網址含 Punycode / IDN 編碼，可能利用相似字元偽裝官方網站")
+
+    if has_confusable_script:
+        score += 75
+        reasons.append("網址含希臘或西里爾同形異義字，容易偽裝成英文字母")
+    elif has_non_ascii:
+        score += 35
+        reasons.append("網址主機名稱含非 ASCII 字元，需確認是否為可信官方 IDN 網域")
+
+    skeleton = confusable_skeleton(raw_host or ascii_host)
+    compact_skeleton = skeleton.replace("-", "").replace(".", "")
+
+    for brand in BRAND_IMPERSONATION_KEYWORDS:
+        brand_key = brand.replace(".", "").replace("-", "").lower()
+        if brand_key and brand_key in compact_skeleton and not is_genuine_white_listed(normalized_host):
+            score += 35
+            reasons.append(f"相似字元骨架疑似仿冒品牌或機構：{brand}")
+            break
+
+    if not reasons:
+        return None
+
+    return {
+        "score": min(score, 100),
+        "reasons": list(dict.fromkeys(reasons)),
+        "domain": normalized_host,
+        "rawHost": raw_host,
+        "idnaHost": ascii_host,
+        "skeleton": skeleton,
+        "isTrusted": is_genuine_white_listed(normalized_host),
+    }
+
+
 def url_risk_reasons(url):
     """
     回傳 URL 風險分數與理由清單。
@@ -973,12 +1073,19 @@ def url_risk_reasons(url):
     if not host:
         return 35, ["網址無法解析"]
 
+    homograph = idn_homograph_detail(raw)
+
     # 真正官方可信網域優先降權；若是 google.com@evil.com，host 會是 evil.com，不會被放行。
-    if is_genuine_white_listed(host):
+    # 但若網址含 Punycode / 同形異義字，不能直接用白名單放行。
+    if is_genuine_white_listed(host) and not homograph:
         return 0, [f"官方可信網域：{host}"]
 
     score = 0
     reasons = []
+
+    if homograph:
+        score += homograph.get("score", 0)
+        reasons.extend(homograph.get("reasons", []))
     surface = _normalized_url_surface(raw)
     compact_host = host.replace("-", "").replace("_", "").replace(".", "")
 
@@ -1130,12 +1237,18 @@ def domain_risk_detail(url):
     回傳更完整的 URL reputation 資訊，routes.py 可用來產生可解釋原因。
     """
     score, reasons = url_risk_reasons(url)
-    return {
+    detail = {
         "score": min(score, 100),
         "reasons": reasons,
         "domain": normalize_domain(url),
         "isTrusted": is_genuine_white_listed(url),
     }
+
+    homograph = idn_homograph_detail(url)
+    if homograph:
+        detail["idnHomograph"] = homograph
+
+    return detail
 
 
 

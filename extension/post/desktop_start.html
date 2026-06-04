@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>包裹通知信件 Demo｜AI 防詐盾牌</title>
+  <style>
+    :root{
+      --bg:#eef2f7;--panel:#fff;--text:#172033;--muted:#64748b;--line:#dbe3ee;
+      --blue:#2563eb;--blue2:#1d4ed8;--green:#0f766e;--red:#dc2626;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#eaf0f8 0%,#f8fafc 100%);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Arial,sans-serif;
+      color:var(--text);
+    }
+    .browser{
+      max-width:1180px;
+      margin:28px auto;
+      border-radius:18px;
+      overflow:hidden;
+      background:#fff;
+      border:1px solid #cbd5e1;
+      box-shadow:0 24px 80px rgba(15,23,42,.18);
+    }
+    .chrome{
+      height:54px;
+      background:#f1f5f9;
+      border-bottom:1px solid #cbd5e1;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:0 16px;
+    }
+    .dots{display:flex;gap:7px}
+    .dot{width:12px;height:12px;border-radius:50%}
+    .r{background:#ef4444}.y{background:#f59e0b}.g{background:#22c55e}
+    .addr{
+      flex:1;
+      background:#fff;
+      border:1px solid #cbd5e1;
+      height:34px;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      padding:0 16px;
+      color:#475569;
+      font-size:14px;
+    }
+    .layout{display:grid;grid-template-columns:250px 1fr;min-height:680px}
+    aside{
+      background:#f8fafc;
+      border-right:1px solid var(--line);
+      padding:22px 18px;
+    }
+    .compose{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:150px;
+      height:44px;
+      background:#dbeafe;
+      color:#1d4ed8;
+      border-radius:14px;
+      font-weight:900;
+      margin-bottom:20px;
+    }
+    .nav div{
+      padding:12px 14px;
+      border-radius:12px;
+      color:#475569;
+      font-size:15px;
+      margin:3px 0;
+    }
+    .nav .active{background:#e0f2fe;color:#075985;font-weight:900}
+    main{background:#fff}
+    .mail-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:20px 28px;
+      border-bottom:1px solid var(--line);
+    }
+    .mail-head h1{font-size:22px;margin:0}
+    .badge{
+      background:#fef2f2;
+      color:#b91c1c;
+      border:1px solid #fecaca;
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:13px;
+      font-weight:900;
+    }
+    .mail{
+      max-width:840px;
+      margin:0 auto;
+      padding:30px 32px 44px;
+    }
+    .from{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      padding-bottom:22px;
+      border-bottom:1px solid var(--line);
+    }
+    .avatar{
+      width:52px;height:52px;border-radius:14px;
+      background:linear-gradient(135deg,#0f766e,#14b8a6);
+      color:#fff;display:grid;place-items:center;
+      font-size:28px;font-weight:900;
+    }
+    .from b{font-size:18px}
+    .from span{display:block;color:var(--muted);font-size:13px;margin-top:4px}
+    .content{padding-top:26px}
+    .alert-title{
+      font-size:32px;
+      line-height:1.25;
+      margin:0 0 14px;
+      letter-spacing:-.02em;
+    }
+    .lead{
+      font-size:17px;
+      line-height:1.85;
+      color:#334155;
+      margin:0 0 20px;
+    }
+    .info{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:14px;
+      margin:24px 0;
+    }
+    .item{
+      background:#f8fafc;
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:16px;
+    }
+    .item span{display:block;color:var(--muted);font-size:13px;margin-bottom:7px}
+    .item b{font-size:18px}
+    .warn{
+      background:#fff7ed;
+      border:1px solid #fed7aa;
+      color:#9a3412;
+      border-radius:16px;
+      padding:16px 18px;
+      line-height:1.75;
+      margin:22px 0;
+      font-weight:700;
+    }
+    .cta-row{display:flex;gap:14px;align-items:center;margin-top:26px;flex-wrap:wrap}
+    .cta{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:220px;
+      height:52px;
+      border-radius:14px;
+      background:linear-gradient(135deg,#dc2626,#f97316);
+      color:#fff;
+      font-size:18px;
+      font-weight:900;
+      text-decoration:none;
+      box-shadow:0 14px 30px rgba(220,38,38,.25);
+    }
+    .fakeurl{
+      color:#075985;
+      font-weight:800;
+      word-break:break-all;
+      text-decoration:none;
+      font-size:15px;
+    }
+    .demo-note{
+      margin-top:30px;
+      padding:14px 16px;
+      border-radius:14px;
+      background:#ecfeff;
+      border:1px solid #a5f3fc;
+      color:#155e75;
+      line-height:1.65;
+      font-size:14px;
+    }
+    @media(max-width:900px){
+      .layout{grid-template-columns:1fr}
+      aside{display:none}
+      .info{grid-template-columns:1fr}
+      .browser{margin:0;border-radius:0}
+    }
+  </style>
+</head>
+<body>
+  <section class="browser">
+    <div class="chrome">
+      <div class="dots"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+      <div class="addr">localhost:5500/desktop_start.html</div>
+    </div>
+
+    <div class="layout">
+      <aside>
+        <div class="compose">＋ 撰寫</div>
+        <nav class="nav">
+          <div class="active">收件匣</div>
+          <div>重要郵件</div>
+          <div>已加星號</div>
+          <div>草稿</div>
+          <div>垃圾郵件</div>
+        </nav>
+      </aside>
+
+      <main>
+        <div class="mail-head">
+          <h1>包裹配送異常通知</h1>
+          <div class="badge">疑似物流通知</div>
+        </div>
+
+        <article class="mail">
+          <div class="from">
+            <div class="avatar">〒</div>
+            <div>
+              <b>郵務配送中心</b>
+              <span>service-notice@post-service.tw　寄給 我</span>
+            </div>
+          </div>
+
+          <div class="content">
+            <h2 class="alert-title">您的包裹因地址不全配送失敗</h2>
+            <p class="lead">
+              系統顯示您的包裹今日配送未成功，原因為收件地址資訊不完整。
+              請於 <b>24 小時內</b> 完成地址確認，並補繳二次配送運費 <b>NT$32</b>，
+              逾期將退回寄件人。
+            </p>
+
+            <div class="info">
+              <div class="item"><span>物流單號</span><b>CP9283-6510-TW</b></div>
+              <div class="item"><span>補繳金額</span><b>NT$32</b></div>
+              <div class="item"><span>處理期限</span><b>24 小時內</b></div>
+            </div>
+
+            <div class="warn">
+              若未於期限內完成補繳，包裹將停止配送並退回寄件人。請點擊下方連結完成付款驗證。
+            </div>
+
+            <div class="cta-row">
+              <a class="cta" href="./twpost/parcel/fee-verify/index.html?notice=CP92836510TW&amount=32&expire=24h">
+                立即補繳運費
+              </a>
+              <a class="fakeurl" href="./twpost/parcel/fee-verify/index.html?notice=CP92836510TW&amount=32&expire=24h">
+                https://post-service.tw/parcel/fee-verify?notice=CP92836510TW
+              </a>
+            </div>
+
+            <div class="demo-note">
+              錄影定位：這是桌機瀏覽器收信情境，不是手機畫面。點擊「立即補繳運費」後，AI 防詐盾牌應偵測高風險頁面並導向 blocked.html 攔截頁。
+            </div>
+          </div>
+        </article>
+      </main>
+    </div>
+  </section>
+</body>
+</html>

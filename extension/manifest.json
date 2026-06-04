@@ -1,91 +1,71 @@
 {
   "manifest_version": 3,
-  "name": "AI AntiFraud Shield",
-  "version": "3.5.3",
-  "version_name": "3.5.3-line-guard-diagnostic-v12",
-  "description": "AI AntiFraud Shield detects suspicious web pages, warns users, and supports reporting and whitelist workflows.",
+  "name": "AI 防詐盾牌",
+  "short_name": "防詐盾牌",
+  "description": "針對長輩日常詐騙情境設計的 AI 防詐助理，支援 AI 查詐騙、家庭守護、證據快照與高風險提醒。",
+  "version": "6.3.2",
+  "version_name": "6.3.2 接收端修正版",
+  "action": {
+    "default_title": "AI 防詐盾牌",
+    "default_popup": "pages/popup.html",
+    "default_icon": {
+      "16": "assets/images/warning-new.png",
+      "32": "assets/images/warning-new.png",
+      "48": "assets/images/warning-new.png",
+      "128": "assets/images/warning-new.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "pages/welcome.html",
   "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+    "16": "assets/images/warning-new.png",
+    "32": "assets/images/warning-new.png",
+    "48": "assets/images/warning-new.png",
+    "128": "assets/images/warning-new.png"
   },
   "permissions": [
     "activeTab",
-    "tabs",
     "notifications",
-    "storage",
     "scripting",
-    "contextMenus",
-    "tts",
-    "alarms"
+    "storage",
+    "tabs",
+    "offscreen"
   ],
   "optional_permissions": [
     "clipboardRead"
   ],
   "host_permissions": [
-    "http://127.0.0.1/*",
-    "http://localhost/*",
-    "https://ai-anti-scam.onrender.com/*",
     "<all_urls>"
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "*.mp3",
-        "*.wav",
-        "AI防詐盾牌_AppDemo.html",
-        "AI防詐盾牌_AppDemo.js",
-        "background.js",
-        "blocked.html",
-        "blocked.js",
-        "config.js",
-        "content.js",
-        "dashboard.html",
-        "dashboard.js",
-        "demo_console.html",
-        "demo_console.js",
-        "hero.png",
-        "icon.png",
-        "icon128.png",
-        "icon16.png",
-        "icon48.png",
-        "ling.png",
-        "mobile_demo.html",
-        "popup.html",
-        "popup.js",
-        "rag_cases.json",
-        "scenarios.js",
-        "simulator.html",
-        "socket.io.min.js",
-        "voice.js",
-        "welcome.html"
+        "pages/welcome.html",
+        "pages/dashboard.html",
+        "pages/simulator.html",
+        "pages/line_share.html",
+        "pages/blocked.html",
+        "assets/images/*",
+        "assets/audio/*",
+        "assets/videos/*"
       ],
       "matches": [
         "<all_urls>"
       ]
     }
   ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "AI AntiFraud Shield"
-  },
   "content_scripts": [
     {
       "matches": [
         "<all_urls>"
       ],
       "js": [
-        "config.js",
-        "content.js"
+        "core/config.js",
+        "core/content.js"
       ],
       "run_at": "document_idle"
     }
-  ],
-  "minimum_chrome_version": "116",
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self';"
-  }
+  ]
 }

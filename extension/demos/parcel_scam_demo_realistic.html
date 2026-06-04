@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>速達物流｜配送狀態確認</title>
+  <style>
+    :root {
+      --brand: #1769e8;
+      --brand-dark: #0f4fb7;
+      --ink: #102033;
+      --muted: #5b6b7f;
+      --line: #d9e4f2;
+      --soft: #f3f7fc;
+      --danger: #dc2626;
+      --warning-bg: #fff7ed;
+      --warning-line: #fed7aa;
+      --green: #16a34a;
+      --card: #ffffff;
+      --shadow: 0 18px 54px rgba(15, 23, 42, .12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(23,105,232,.12), transparent 28%),
+        radial-gradient(circle at 88% 18%, rgba(22,163,74,.10), transparent 28%),
+        linear-gradient(180deg, #f4f8fd 0%, #eef4fb 100%);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    .topbar {
+      height: 72px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 clamp(20px, 6vw, 72px);
+      box-shadow: 0 2px 18px rgba(15, 23, 42, .04);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 1000;
+      color: var(--brand-dark);
+      font-size: 24px;
+      letter-spacing: .3px;
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      font-weight: 1000;
+      box-shadow: 0 8px 18px rgba(23,105,232,.22);
+    }
+
+    .nav {
+      display: flex;
+      gap: 22px;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .page {
+      width: min(1120px, calc(100% - 32px));
+      margin: 34px auto 70px;
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 28px 32px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(135deg, rgba(23,105,232,.07), rgba(255,255,255,0));
+    }
+
+    .crumb {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--ink);
+      font-size: clamp(30px, 4vw, 44px);
+      line-height: 1.16;
+      letter-spacing: -.5px;
+    }
+
+    .sub {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.65;
+      font-weight: 760;
+    }
+
+    .alert {
+      margin-top: 18px;
+      border: 2px solid var(--warning-line);
+      background: var(--warning-bg);
+      color: #8a3f0a;
+      border-radius: 18px;
+      padding: 18px 20px;
+      font-size: 19px;
+      line-height: 1.65;
+      font-weight: 950;
+    }
+
+    .countdown {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: #991b1b;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      font-size: 14px;
+      font-weight: 1000;
+    }
+
+    .content {
+      padding: 26px 32px 32px;
+    }
+
+    .tracking-card {
+      border: 1px solid var(--line);
+      background: #fbfdff;
+      border-radius: 20px;
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding-bottom: 12px;
+      border-bottom: 1px dashed #d8e4f2;
+    }
+
+    .row:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 1000;
+    }
+
+    .value {
+      color: var(--ink);
+      font-size: 17px;
+      font-weight: 900;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+
+    .timeline {
+      margin-top: 22px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .dot {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #e0edff;
+      color: var(--brand);
+      font-weight: 1000;
+      border: 1px solid #bfdbfe;
+    }
+
+    .step.active .dot {
+      background: #fee2e2;
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+
+    .step-title {
+      font-size: 17px;
+      font-weight: 1000;
+      color: var(--ink);
+      line-height: 1.45;
+    }
+
+    .step-note {
+      margin-top: 4px;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 750;
+      line-height: 1.55;
+    }
+
+    .pay-panel {
+      padding: 30px;
+    }
+
+    .pay-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .pay-title h2 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.25;
+    }
+
+    .amount {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .amount small {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 900;
+      margin-bottom: 3px;
+    }
+
+    .amount strong {
+      color: var(--danger);
+      font-size: 32px;
+      font-weight: 1000;
+    }
+
+    .secure {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #ecfdf5;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+      font-size: 14px;
+      font-weight: 900;
+      margin-bottom: 20px;
+    }
+
+    .fake-form {
+      display: grid;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    .field label {
+      color: #243246;
+      font-size: 14px;
+      font-weight: 1000;
+    }
+
+    .input {
+      width: 100%;
+      min-height: 52px;
+      border: 2px solid #cbd5e1;
+      border-radius: 14px;
+      padding: 13px 14px;
+      background: #f8fafc;
+      color: #334155;
+      font-size: 16px;
+      font-weight: 850;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .input span {
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .btn {
+      width: 100%;
+      margin-top: 6px;
+      border: 0;
+      border-radius: 16px;
+      padding: 17px 18px;
+      background: linear-gradient(135deg, #e11d48, #b91c1c);
+      color: white;
+      font-size: 20px;
+      font-weight: 1000;
+      cursor: pointer;
+      box-shadow: 0 14px 28px rgba(220, 38, 38, .24);
+    }
+
+    .btn:active { transform: translateY(1px); }
+
+    .help {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      font-weight: 750;
+    }
+
+    .demo-note {
+      margin-top: 18px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 14px;
+      padding: 13px 14px;
+      color: #64748b;
+      background: #f8fafc;
+      font-size: 12px;
+      line-height: 1.55;
+      font-weight: 760;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      opacity: 0;
+      max-width: min(620px, 90vw);
+      padding: 14px 18px;
+      border-radius: 999px;
+      background: rgba(15,23,42,.94);
+      color: white;
+      font-weight: 900;
+      box-shadow: 0 16px 42px rgba(0,0,0,.24);
+      transition: .22s ease;
+      text-align: center;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 900px) {
+      .nav { display: none; }
+      .page { grid-template-columns: 1fr; margin-top: 18px; }
+      .row { grid-template-columns: 1fr; gap: 4px; }
+      .two-col { grid-template-columns: 1fr; }
+      .pay-title { align-items: flex-start; flex-direction: column; }
+      .amount { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">速</div>
+      <div>速達物流 ExpressCare</div>
+    </div>
+    <nav class="nav" aria-label="物流服務導覽">
+      <span>查詢包裹</span>
+      <span>配送進度</span>
+      <span>客服中心</span>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="panel">
+      <div class="panel-head">
+        <div class="crumb">首頁 / 配送通知 / 付款狀態確認</div>
+        <h1>包裹配送異常，請完成運費補繳驗證</h1>
+        <p class="sub">
+          系統顯示您的包裹因運費狀態異常，暫停配送中。請於指定時間內完成補繳流程，
+          以避免包裹退回寄件端。
+        </p>
+        <div class="alert">
+          配送中心通知：請立即補繳運費新台幣 48 元，並輸入信用卡卡號、CVV 安全碼與簡訊驗證碼完成付款驗證。
+          <div class="countdown">⚠️ 剩餘處理時間：09:58</div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="tracking-card">
+          <div class="row">
+            <div class="label">包裹編號</div>
+            <div class="value">EC-7294-5810-TW</div>
+          </div>
+          <div class="row">
+            <div class="label">收件人</div>
+            <div class="value">王○○｜手機 09XX-XXX-582</div>
+          </div>
+          <div class="row">
+            <div class="label">目前狀態</div>
+            <div class="value">配送失敗｜待補繳運費與信用卡驗證</div>
+          </div>
+          <div class="row">
+            <div class="label">補繳網址</div>
+            <div class="value">https://parcel-pay.example.com/verify</div>
+          </div>
+        </div>
+
+        <div class="timeline" aria-label="包裹配送流程">
+          <div class="step">
+            <div class="dot">✓</div>
+            <div>
+              <div class="step-title">包裹已抵達分揀中心</div>
+              <div class="step-note">系統時間：今日 08:42</div>
+            </div>
+          </div>
+
+          <div class="step active">
+            <div class="dot">!</div>
+            <div>
+              <div class="step-title">運費狀態異常，配送暫停</div>
+              <div class="step-note">請立即完成補繳與付款驗證，否則包裹將自動退回。</div>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="dot">3</div>
+            <div>
+              <div class="step-title">付款完成後重新安排配送</div>
+              <div class="step-note">完成驗證後約 15 分鐘內恢復派送。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel pay-panel" aria-label="運費補繳表單">
+      <div class="pay-title">
+        <h2>運費補繳與信用卡驗證</h2>
+        <div class="amount">
+          <small>應補繳金額</small>
+          <strong>NT$48</strong>
+        </div>
+      </div>
+
+      <div class="secure">
+        🔒 安全付款驗證中｜請依照銀行簡訊輸入 OTP 驗證碼
+      </div>
+
+      <div class="fake-form">
+        <div class="field">
+          <label>信用卡卡號</label>
+          <div class="input">請輸入 16 碼信用卡卡號 <span>必填</span></div>
+        </div>
+
+        <div class="two-col">
+          <div class="field">
+            <label>有效期限</label>
+            <div class="input">MM / YY <span>必填</span></div>
+          </div>
+          <div class="field">
+            <label>CVV 安全碼</label>
+            <div class="input">卡片背面 3 碼 <span>必填</span></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>簡訊驗證碼 OTP</label>
+          <div class="input">請輸入銀行簡訊驗證碼 <span>必填</span></div>
+        </div>
+
+        <button class="btn" type="button" id="demo-pay-btn">
+          立即補繳並驗證信用卡
+        </button>
+      </div>
+
+      <div class="help">
+        若未於期限內完成補繳，系統將自動取消配送並退回寄件端。客服將不再另行通知。
+      </div>
+
+      <div class="demo-note">
+        本頁為本機競賽模擬展示，不會收集、傳送或保存任何輸入資料；所有按鈕皆無實際付款功能。
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast">本頁為競賽模擬頁，不會執行付款。</div>
+
+  <script>
+    (function () {
+      var seconds = 598;
+      var countdown = document.querySelector(".countdown");
+      var toast = document.getElementById("toast");
+      var btn = document.getElementById("demo-pay-btn");
+
+      function pad(n) {
+        return String(n).padStart(2, "0");
+      }
+
+      function updateCountdown() {
+        seconds = Math.max(0, seconds - 1);
+        var m = Math.floor(seconds / 60);
+        var s = seconds % 60;
+        if (countdown) countdown.textContent = "⚠️ 剩餘處理時間：" + pad(m) + ":" + pad(s);
+      }
+
+      setInterval(updateCountdown, 1000);
+
+      if (btn) {
+        btn.addEventListener("click", function () {
+          if (!toast) return;
+          toast.classList.add("show");
+          setTimeout(function () {
+            toast.classList.remove("show");
+          }, 2600);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -19,9 +19,13 @@ import json
 import html
 import base64
 import urllib.parse
+import time
 from typing import Any, Dict, Iterable, List, Optional
 
-from openai import AzureOpenAI
+try:
+    from openai import AzureOpenAI
+except Exception:  # Render / 本機缺少 openai 套件時，仍啟用本地備援，避免整個 API 匯入失敗。
+    AzureOpenAI = None
 
 
 # ==========================================
@@ -448,9 +452,12 @@ def detect_jailbreak_attempt(text: str) -> bool:
 # ==========================================
 # AI Client
 # ==========================================
-def get_azure_client() -> Optional[AzureOpenAI]:
+def get_azure_client() -> Optional[Any]:
     api_key = os.getenv("AZURE_API_KEY")
     endpoint = os.getenv("AZURE_ENDPOINT")
+
+    if not AzureOpenAI:
+        return None
 
     if not api_key or not endpoint:
         return None
@@ -670,7 +677,7 @@ def build_user_content(decoded_url: str, decoded_text: str, image_url: str, deco
     return user_content
 
 
-def call_openai(client: AzureOpenAI, system_prompt: str, user_content: List[Dict[str, Any]]):
+def call_openai(client: Any, system_prompt: str, user_content: List[Dict[str, Any]]):
     return client.chat.completions.create(
         model=os.getenv("AZURE_MODEL_NAME", AZURE_MODEL_NAME),
         messages=[
@@ -997,7 +1004,14 @@ def stream_scam_simulation(chat_history, scenario_type, user_message):
     """
     防詐演練串流。
     僅供教育用途，不提供真實犯罪操作細節。
+
+    Demo 防呆重點：
+    - Azure OpenAI 未設定、逾時、Rate Limit、串流中斷時，一律回傳本地教育回覆。
+    - 若串流連上但沒有吐出任何文字，也回傳本地備援，避免前端聊天室空白。
+    - 不讓外部 history 注入 system prompt，避免演練被帶偏。
     """
+    scenario_type = normalize_simulation_scenario_type(scenario_type)
+    user_message = safe_truncate(user_message or "", 800)
     client = get_azure_client()
 
     if not client:
@@ -1013,8 +1027,11 @@ def stream_scam_simulation(chat_history, scenario_type, user_message):
 
     messages.append({
         "role": "user",
-        "content": safe_truncate(user_message or "", 800)
+        "content": user_message
     })
+
+    yielded_any = False
+    started_at = time.monotonic()
 
     try:
         response = client.chat.completions.create(
@@ -1027,19 +1044,45 @@ def stream_scam_simulation(chat_history, scenario_type, user_message):
         )
 
         for chunk in response:
+            if time.monotonic() - started_at > OPENAI_STREAM_TIMEOUT_SEC + 4:
+                raise TimeoutError("防詐演練串流超過展示安全等待時間")
+
             if not getattr(chunk, "choices", None):
                 continue
 
             delta = chunk.choices[0].delta
+            content = getattr(delta, "content", None)
 
-            if getattr(delta, "content", None):
-                yield delta.content
+            if content:
+                yielded_any = True
+                yield content
+
+        if not yielded_any:
+            print("⚠️ 防詐演練 AI 串流未回傳內容，啟用本地備援。", flush=True)
+            for chunk in fallback_simulation_reply(scenario_type, user_message):
+                yield chunk
 
     except Exception as e:
         print(f"⚠️ 防詐演練 AI 串流失敗：{str(e)[:120]}", flush=True)
 
         for chunk in fallback_simulation_reply(scenario_type, user_message):
             yield chunk
+
+
+
+def normalize_simulation_scenario_type(scenario_type: str) -> str:
+    value = str(scenario_type or "investment").strip().lower()
+    aliases = {
+        "invest": "investment",
+        "stock": "investment",
+        "shopping": "ecommerce",
+        "parcel": "ecommerce",
+        "logistics": "ecommerce",
+        "love": "romance",
+        "dating": "romance"
+    }
+    value = aliases.get(value, value)
+    return value if value in {"investment", "ecommerce", "romance"} else "investment"
 
 
 def build_simulation_system_prompt(scenario_type: str) -> str:

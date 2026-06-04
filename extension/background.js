@@ -113,7 +113,7 @@ async function aiShieldSubmitEvidenceToBackend(payload = {}) {
         suppressLine: !allowLinePushTest,
         suppressLineAlert: !allowLinePushTest,
         demoMode: !allowLinePushTest,
-        allow_screenshot_save: Boolean(aiShieldGetConfigValue("SAVE_FULL_SCREENSHOT_BY_DEFAULT", false))
+        allow_screenshot_save: true
     };
 
     try {
