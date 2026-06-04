@@ -191,7 +191,7 @@ LINE_GUARD_VERSION = "v12-line-diagnostic-hard-block"
 # 競賽展示保險：設為 true 時，所有 LINE push 只寫 log，不真的送出。
 # 若決賽現場要展示真實 LINE 推播，再於 Render 環境變數設 LINE_PUSH_DRY_RUN=false。
 LINE_PUSH_DRY_RUN = env_bool("LINE_PUSH_DRY_RUN", True)
-# 展示測試開關：可用 Render 環境變數或家庭設定控制 Demo / file:// 測試頁是否真的推播 LINE。
+# 測試用開關：Render 設 ALLOW_DEMO_LINE_PUSH=true 時，file:// / demo / localhost 也允許真實 LINE 推播。
 ALLOW_DEMO_LINE_PUSH = env_bool("ALLOW_DEMO_LINE_PUSH", False)
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
@@ -334,7 +334,7 @@ def make_report_response(report_dict, masked_text="", status_code=200):
             normalized,
         )
         payload["lineGuard"] = line_guard
-        payload["linePushSuppressed"] = bool(line_guard.get("hardBlock") or line_guard.get("suppress") or line_guard.get("linePushDryRun"))
+        payload["linePushSuppressed"] = bool(line_guard.get("suppress") or line_guard.get("linePushDryRun"))
     except Exception:
         payload["linePushSuppressed"] = False
 
@@ -1015,41 +1015,6 @@ def get_current_json_body_for_line_guard():
     return {}
 
 
-def normalize_line_demo_family_id(value=""):
-    family_id = str(value or "").strip().upper()
-    family_id = re.sub(r"[^A-Z0-9]", "", family_id)[:16]
-    return family_id if re.fullmatch(r"[A-Z0-9]{4,16}", family_id or "") else ""
-
-
-def family_allows_demo_line_push(family_id=""):
-    """讀取家庭展示測試開關。開啟後，Demo / file:// 測試頁也可以真的推 LINE。"""
-    if ALLOW_DEMO_LINE_PUSH:
-        return True
-
-    fid = normalize_line_demo_family_id(family_id)
-    if not fid or not firebase_initialized:
-        return False
-
-    try:
-        value = db.reference(f"families/{fid}/settings/allowDemoLinePush").get()
-        return get_bool(value, False)
-    except Exception as exc:
-        print(f"⚠️ 讀取家庭 LINE 測試開關失敗：{exc}", flush=True)
-        return False
-
-
-def request_allows_demo_line_push(data=None, family_id=""):
-    data = data if isinstance(data, dict) else get_current_json_body_for_line_guard()
-    explicit = get_bool(data.get("allowLinePush"), False) or get_bool(data.get("realLinePush"), False)
-    requested_family_id = normalize_line_demo_family_id(
-        family_id
-        or data.get("familyID")
-        or data.get("familyId")
-        or data.get("family_id")
-    )
-    return explicit or family_allows_demo_line_push(requested_family_id)
-
-
 def is_demo_or_test_url_for_line(url=""):
     """
     LINE 推播硬性保險：
@@ -1142,15 +1107,10 @@ def get_line_guard_decision(url="", report_dict=None):
         ))
     )
 
-    requested_family_id = normalize_line_demo_family_id(
-        data.get("familyID")
-        or data.get("familyId")
-        or data.get("family_id")
-    )
     allow_real_push = (
         truthy(data.get("allowLinePush"))
         or truthy(data.get("realLinePush"))
-        or family_allows_demo_line_push(requested_family_id)
+        or ALLOW_DEMO_LINE_PUSH
     )
 
     suppress_by_source = (
@@ -1217,7 +1177,7 @@ def should_suppress_line_alert_for_current_request(url="", report_dict=None):
         return get_bool(value, False)
 
     # 明確允許真實推播時才放行，例如正式測「一鍵通知家人」。
-    if request_allows_demo_line_push(data, family_id=data.get("familyID") or data.get("familyId") or data.get("family_id")):
+    if truthy(data.get("allowLinePush")) or truthy(data.get("realLinePush")) or ALLOW_DEMO_LINE_PUSH:
         return False
 
     # 前端 Demo 明確要求不要推播。
@@ -1283,7 +1243,7 @@ def should_suppress_line_alert_for_current_request(url="", report_dict=None):
 
 def maybe_send_line_alert(family_id, url, report_dict):
     line_guard = get_line_guard_decision(url, report_dict)
-    if line_guard.get("hardBlock") or line_guard.get("suppress"):
+    if line_guard.get("suppress"):
         print(f"🔕 [LINE Guard] 已阻擋 LINE 推播：{json_dumps(line_guard)}", flush=True)
         return
     if LINE_PUSH_DRY_RUN:
@@ -1378,7 +1338,7 @@ def get_dynamic_advice(scam_dna_list):
 
 def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=None):
     # send_dynamic_line_alert hard block: 即使其他地方直接呼叫，也不能讓 Demo / 測試網址推 LINE。
-    if is_demo_or_test_url_for_line(url) and not family_allows_demo_line_push(family_id):
+    if is_demo_or_test_url_for_line(url) and not ALLOW_DEMO_LINE_PUSH:
         print(f"🔕 [LINE Guard] send_dynamic_line_alert 已硬性阻擋測試網址：{url}", flush=True)
         return
     if LINE_PUSH_DRY_RUN:
@@ -1897,47 +1857,6 @@ def is_low_information_safe_scan(target_url, raw_text, image_url, is_urgent=Fals
 
     # 純測試字串、短數字、短一般文字，不值得消耗 AI 請求。
     return True
-
-
-# ==========================================
-# 家庭展示設定
-# ==========================================
-@api_bp.route("/api/family/line_push_test_mode", methods=["POST"])
-@limiter.limit("60 per minute")
-def set_family_line_push_test_mode():
-    if not firebase_initialized:
-        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
-
-    data = get_json_body()
-    identity = get_request_identity(data)
-    family_id = normalize_family_id(data.get("familyID") or identity["familyID"] or "none")
-
-    if not family_id or family_id == "NONE":
-        return jsonify({"status": "fail", "message": "缺少 familyID"}), 400
-
-    authorized, auth_response = authorize_family_access(family_id, identity)
-    if not authorized:
-        return auth_response
-
-    enabled = get_bool(data.get("enabled"), False)
-
-    try:
-        db.reference(f"families/{family_id}/settings").update({
-            "allowDemoLinePush": enabled,
-            "allowDemoLinePushUpdatedAt": get_tw_time(),
-            "allowDemoLinePushUpdatedBy": identity.get("userID") or "dashboard",
-        })
-
-        return jsonify({
-            "status": "success",
-            "familyID": family_id,
-            "enabled": enabled,
-            "message": "展示時 LINE 推播已開啟" if enabled else "展示時 LINE 推播已關閉",
-        }), 200
-
-    except Exception as exc:
-        print(f"❌ LINE 測試開關儲存失敗：{exc}", flush=True)
-        return public_error("LINE 測試開關儲存失敗，請稍後再試。", 500)
 
 
 # ==========================================
