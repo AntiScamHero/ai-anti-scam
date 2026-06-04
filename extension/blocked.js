@@ -1,3 +1,43 @@
+// ==========================================
+// AI 防詐盾牌：Blocked 頁 Socket.IO 安全降級
+// 注意：Chrome Extension 的 CSP 不允許 inline script。
+// 因此 Socket.IO fallback 必須放在外部 JS，也就是本檔案 blocked.js 裡。
+// ==========================================
+(function setupAiShieldBlockedSocketFallback() {
+    const hasRealSocketIO =
+        typeof window.io === "function" &&
+        (
+            typeof window.io.Manager === "function" ||
+            typeof window.io.Socket === "function" ||
+            window.io.protocol !== undefined
+        );
+
+    if (hasRealSocketIO) return;
+
+    window.io = function aiShieldBlockedSocketNoop() {
+        const socket = {
+            connected: false,
+            disconnected: true,
+            id: null,
+            on() { return socket; },
+            once() { return socket; },
+            off() { return socket; },
+            emit() { return socket; },
+            connect() { return socket; },
+            disconnect() {
+                socket.connected = false;
+                socket.disconnected = true;
+                return socket;
+            },
+            close() { return socket.disconnect(); }
+        };
+
+        return socket;
+    };
+
+    window.io.__AI_SHIELD_BLOCKED_NOOP__ = true;
+})();
+
 // ===== blocked.js =====
 // AI 防詐盾牌 - 攔截頁邏輯（保留原功能優化版）
 // 功能：
@@ -191,10 +231,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const pinError = document.getElementById('pin-error');
     const cancelPinBtn = document.getElementById('cancel-pin-btn');
 
-    const callBtn = document.getElementById('call-btn');
-    const desktopModal = document.getElementById('desktop-modal');
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    const modalPhoneNumber = document.getElementById('modal-phone-number');
+    const incidentReportBtn = document.getElementById('incident-report-btn');
 
     const familyBroadcast = document.getElementById('family-broadcast');
     const broadcastMessage = document.getElementById('broadcast-message');
@@ -391,6 +428,73 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderOfficialCitations();
     renderInterceptDetail();
 
+
+    const BLOCKED_FAMILY_ID_KEYS = [
+        "aiShieldPrimaryFamilyID",
+        "AI_SHIELD_FAMILY_ID",
+        "savedFamilyID",
+        "boundFamilyID",
+        "currentFamilyID",
+        "familyCode",
+        "familyID",
+        "family_id",
+        "aiShieldFamilyID",
+        "dashboardFamilyID",
+        "familyInviteCode",
+        "guardianFamilyID",
+        "guardianCode",
+        "aiShieldGuardianCode",
+        "aiShieldBoundFamilyCode",
+        "popupFamilyID",
+        "popupSavedFamilyID",
+        "aiShieldFamilyCode",
+        "aiShieldFamilyGuardCode",
+        "aiShieldHomeGuardCode",
+        "aiShieldGuardianFamilyCode",
+        "familyGuardCode",
+        "homeGuardCode",
+        "guardianInviteCode",
+        "inviteCode",
+        "joinCode",
+        "familyRoomCode",
+        "familyGuardianCode"
+    ];
+
+    function normalizeBlockedFamilyID(value = "") {
+        return String(value || "")
+            .trim()
+            .toUpperCase()
+            .replace(/^AISHIELD:/, "")
+            .replace(/^FAM-/, "")
+            .replace(/[^A-Z0-9]/g, "")
+            .slice(0, 6);
+    }
+
+    function extractBlockedFamilyID(value = "") {
+        const direct = normalizeBlockedFamilyID(value);
+        if (/^[A-Z0-9]{6}$/.test(direct)) return direct;
+
+        const text = String(value || "").toUpperCase();
+        const match = text.match(/(?:AISHIELD|家庭(?:守護)?(?:邀請)?(?:代碼|碼)|FAMILY)[:：\\s-]*([A-Z0-9]{6})/i);
+        return match ? normalizeBlockedFamilyID(match[1]) : "";
+    }
+
+    function pickBlockedFamilyID(source = {}) {
+        for (const key of BLOCKED_FAMILY_ID_KEYS) {
+            const code = extractBlockedFamilyID(source?.[key]);
+            if (/^[A-Z0-9]{6}$/.test(code)) return code;
+        }
+
+        try {
+            for (const value of Object.values(source || {})) {
+                const code = extractBlockedFamilyID(value);
+                if (/^[A-Z0-9]{6}$/.test(code)) return code;
+            }
+        } catch (e) {}
+
+        return "";
+    }
+
     // ==========================================
     // 共用工具
     // ==========================================
@@ -510,15 +614,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const storage = await chrome.storage.local.get([
                 'userID',
-                'familyID',
                 tokenKey,
                 installKey,
-                'aiShieldTokenExpiresAt'
+                'aiShieldTokenExpiresAt',
+                ...BLOCKED_FAMILY_ID_KEYS
             ]);
+
+            const familyID = pickBlockedFamilyID(storage) || 'none';
 
             return {
                 userID: storage.userID || 'anonymous',
-                familyID: storage.familyID || 'none',
+                familyID,
                 installID: storage[installKey] || '',
                 accessToken: storage[tokenKey] || '',
                 expiresAt: Number(storage.aiShieldTokenExpiresAt || 0)
@@ -540,10 +646,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 try {
                     const auth = await sendRuntimeMessage({ action: 'ensureAccessToken' });
                     if (auth.status === 'success' && auth.accessToken) {
+                        const existingStorage = await chrome.storage.local.get(BLOCKED_FAMILY_ID_KEYS);
+                        const existingFamilyID = pickBlockedFamilyID(existingStorage);
+                        const returnedFamilyID = extractBlockedFamilyID(auth.familyID || auth.familyId || "");
+                        const finalFamilyID = returnedFamilyID || existingFamilyID || "none";
+
                         await chrome.storage.local.set({
                             [tokenKey]: auth.accessToken,
                             userID: auth.userID || 'anonymous',
-                            familyID: auth.familyID || 'none',
+                            familyID: finalFamilyID,
+                            currentFamilyID: finalFamilyID,
+                            boundFamilyID: finalFamilyID,
+                            aiShieldPrimaryFamilyID: finalFamilyID,
                             [installKey]: auth.installID || ''
                         });
                         return auth.accessToken;
@@ -553,7 +667,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
 
-            const storage = await chrome.storage.local.get(['userID', 'familyID', tokenKey, installKey, expiresKey]);
+            const storage = await chrome.storage.local.get(['userID', tokenKey, installKey, expiresKey, ...BLOCKED_FAMILY_ID_KEYS]);
 
             let installID = storage[installKey];
             if (!installID) {
@@ -675,6 +789,136 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 3000);
     }
 
+
+
+    // ==========================================
+    // 165 報案懶人包：Incident Response
+    // ==========================================
+    function normalizeIncidentFeatureList() {
+        const features = Array.isArray(scamDNA) ? scamDNA : [];
+        const cleaned = features
+            .map(item => String(item || '').replace(/\(\+?\d+\)/g, '').trim())
+            .filter(Boolean);
+        return Array.from(new Set(cleaned)).slice(0, 8);
+    }
+
+    function buildIncidentReportDraft() {
+        const occurredAt = normalizeTimestamp(parsedPayload.timestamp || Date.now());
+        const domain = normalizeHost(decodedTargetUrl) || '無法解析';
+        const features = normalizeIncidentFeatureList();
+        const explain = normalizeExplainItems(parsedPayload).slice(0, 4);
+        const familyText = parsedPayload.familyID || parsedPayload.familyId
+            ? `家庭代碼：${String(parsedPayload.familyID || parsedPayload.familyId).toUpperCase()}`
+            : '家庭代碼：未綁定或未提供';
+
+        return [
+            '【AI 防詐盾牌｜165 報案資訊草稿】',
+            '',
+            `一、發生時間：${occurredAt}`,
+            `二、可疑網址：${decodedTargetUrl || '未取得網址'}`,
+            `三、可疑網域：${domain}`,
+            `四、風險分數：${riskScore} / 100`,
+            `五、風險等級：${riskLevel || '高風險'}`,
+            `六、命中特徵：${features.length ? features.join('、') : '未提供明確標籤'}`,
+            `七、AI 攔截原因：${sanitizeDisplayText(internalReason, 500)}`,
+            `八、系統建議：${sanitizeDisplayText(adviceText, 500)}`,
+            `九、可解釋依據：${explain.length ? explain.join('；') : '系統判定此頁具有高風險詐騙特徵'}`,
+            `十、${familyText}`,
+            '',
+            '補充給 165 / 警方：',
+            '1. 我尚未／已經提供的資料：＿＿＿＿＿＿',
+            '2. 是否有匯款或付款：＿＿＿＿＿＿',
+            '3. 對方聯絡方式或 LINE ID：＿＿＿＿＿＿',
+            '4. 其他截圖或對話紀錄：＿＿＿＿＿＿',
+            '',
+            '備註：本草稿由 AI 防詐盾牌自動整理，請依實際情況補充。'
+        ].join('\n');
+    }
+
+    async function copyTextToClipboard(text) {
+        const value = String(text || '');
+        if (!value) return false;
+
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value);
+                return true;
+            }
+        } catch (e) {}
+
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = value;
+            textarea.setAttribute('readonly', 'readonly');
+            textarea.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+            document.body.appendChild(textarea);
+            textarea.select();
+            const ok = document.execCommand('copy');
+            textarea.remove();
+            return ok;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function showIncidentReportModal(draft) {
+        const old = document.getElementById('incident-report-modal');
+        if (old) old.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'incident-report-modal';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.58);z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:18px;';
+
+        const panel = document.createElement('div');
+        panel.style.cssText = 'width:min(760px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:26px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.28);border:2px solid rgba(35,136,255,.24);font-family:"Microsoft JhengHei",system-ui,sans-serif;color:#0d2b4f;';
+
+        const title = document.createElement('h2');
+        title.textContent = '📝 165 報案資訊已整理完成';
+        title.style.cssText = 'margin:0 0 10px;font-size:26px;font-weight:1000;color:#0d2b4f;';
+
+        const note = document.createElement('div');
+        note.textContent = '可直接貼給 165、家人或警方；送出前請補充實際是否匯款、對方聯絡方式與截圖。';
+        note.style.cssText = 'font-size:16px;line-height:1.65;color:#526b83;font-weight:900;margin-bottom:14px;';
+
+        const textarea = document.createElement('textarea');
+        textarea.value = draft;
+        textarea.style.cssText = 'width:100%;min-height:330px;border:2px solid rgba(35,136,255,.22);border-radius:18px;padding:16px;font-size:15px;line-height:1.65;color:#0f172a;background:#fbfdff;resize:vertical;box-sizing:border-box;';
+
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.textContent = '複製報案草稿';
+        copyBtn.style.cssText = 'flex:1;min-width:180px;border:0;border-radius:999px;padding:13px 18px;background:#1976d2;color:white;font-size:17px;font-weight:1000;cursor:pointer;';
+        copyBtn.addEventListener('click', async () => {
+            const ok = await copyTextToClipboard(textarea.value);
+            showToast(ok ? '已複製 165 報案資訊草稿。' : '無法自動複製，請手動選取文字。', ok ? 'success' : 'error');
+        });
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.textContent = '關閉';
+        closeBtn.style.cssText = 'flex:0 0 auto;border:0;border-radius:999px;padding:13px 18px;background:#e2e8f0;color:#334155;font-size:17px;font-weight:1000;cursor:pointer;';
+        closeBtn.addEventListener('click', () => modal.remove());
+
+        row.appendChild(copyBtn);
+        row.appendChild(closeBtn);
+        panel.appendChild(title);
+        panel.appendChild(note);
+        panel.appendChild(textarea);
+        panel.appendChild(row);
+        modal.appendChild(panel);
+        modal.addEventListener('click', event => { if (event.target === modal) modal.remove(); });
+        document.body.appendChild(modal);
+    }
+
+    async function handleIncidentReportPack() {
+        const draft = buildIncidentReportDraft();
+        const copied = await copyTextToClipboard(draft);
+        showIncidentReportModal(draft);
+        showToast(copied ? '已複製 165 報案資訊草稿。' : '已產生 165 報案資訊，請手動複製。', copied ? 'success' : 'info');
+    }
 
 
     // ==========================================
@@ -1399,29 +1643,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ==========================================
-    // 165 撥號：桌機顯示 modal，手機直接 tel:
-    // ==========================================
-    function isLikelyMobile() {
-        return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || '');
-    }
-
-    function handleCall165(e) {
-        if (isLikelyMobile()) return;
-
-        e.preventDefault();
-
-        if (modalPhoneNumber) {
-            modalPhoneNumber.textContent = '165';
-        }
-
-        showElement(desktopModal, 'flex');
-    }
-
-    // ==========================================
     // 家人即時通知 Socket.IO
     // ==========================================
     async function setupFamilySocket() {
         if (typeof io === 'undefined') return;
+
+        // 若目前是 blocked.js 內建的 no-op fallback，代表沒有真正 Socket.IO client。
+        // 這時攔截頁應安靜降級，不嘗試建立即時通道，避免 Chrome 擴充功能錯誤頁出現假連線警告。
+        if (io.__AI_SHIELD_BLOCKED_NOOP__) return;
 
         const identity = await getCurrentIdentity();
         const familyID = String(identity.familyID || 'none').toUpperCase();
@@ -1518,7 +1747,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             avatar.classList.add('avatar-scammer');
 
             const img = document.createElement('img');
-            img.src = 'ling.png';
+            img.src = chrome.runtime?.getURL ? chrome.runtime.getURL('assets/images/ling.png') : '../assets/images/ling.png';
             img.alt = '情報女警小玲';
             img.className = 'msg-avatar img-avatar';
 
@@ -1697,13 +1926,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (manualLeaveBtn) {
         let countdown = 12;
-        manualLeaveBtn.textContent = `聽從建議，安全離開此網頁 (${countdown} 秒後自動撤離)`;
+        manualLeaveBtn.innerHTML = '<span class="btn-main">🛡️ 安全離開</span>';
 
         const autoEvacuateTimer = setInterval(() => {
             countdown -= 1;
             
             if (countdown > 0) {
-                manualLeaveBtn.textContent = `聽從建議，安全離開此網頁 (${countdown} 秒後自動撤離)`;
+                manualLeaveBtn.innerHTML = '<span class="btn-main">🛡️ 安全離開</span>';
             } else {
                 clearInterval(autoEvacuateTimer);
                 navigateToSafePage();
@@ -1760,27 +1989,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         cancelPinBtn.addEventListener('click', closePinArea);
     }
 
-    if (callBtn) {
-        callBtn.addEventListener('click', handleCall165);
-    }
-
-    if (closeModalBtn) {
-        closeModalBtn.addEventListener('click', () => {
-            hideElement(desktopModal);
-        });
-    }
-
-    if (desktopModal) {
-        desktopModal.addEventListener('click', e => {
-            if (e.target === desktopModal) {
-                hideElement(desktopModal);
-            }
-        });
+    if (incidentReportBtn) {
+        incidentReportBtn.addEventListener('click', handleIncidentReportPack);
     }
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-            hideElement(desktopModal);
             closePinArea();
         }
     });
