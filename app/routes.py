@@ -87,6 +87,12 @@ except Exception:
 
 from scamdna_engine import analyze_with_scamdna, is_scamdna_safe_context, should_trust_official_without_block
 
+try:
+    from rag_engine import find_similar_cases, RAG_ENGINE_VERSION
+except Exception:
+    find_similar_cases = None
+    RAG_ENGINE_VERSION = "unavailable"
+
 load_dotenv()
 
 api_bp = Blueprint("api", __name__)
@@ -185,6 +191,8 @@ LINE_GUARD_VERSION = "v12-line-diagnostic-hard-block"
 # 競賽展示保險：設為 true 時，所有 LINE push 只寫 log，不真的送出。
 # 若決賽現場要展示真實 LINE 推播，再於 Render 環境變數設 LINE_PUSH_DRY_RUN=false。
 LINE_PUSH_DRY_RUN = env_bool("LINE_PUSH_DRY_RUN", True)
+# 展示測試開關：可用 Render 環境變數或家庭設定控制 Demo / file:// 測試頁是否真的推播 LINE。
+ALLOW_DEMO_LINE_PUSH = env_bool("ALLOW_DEMO_LINE_PUSH", False)
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET or "demo_channel_secret")
@@ -250,8 +258,69 @@ def safe_truncate(value, limit=300):
     return text[:limit] + "..."
 
 
+def enrich_report_with_rag_cases(report_dict, detection_text=""):
+    """
+    將本地 RAG 案例比對結果附加到 /scan 回應。
+    不取代 ScamDNA / AI 主判斷，只提供可解釋案例與保守分數補強。
+    """
+    if not isinstance(report_dict, dict):
+        report_dict = {}
+
+    if not find_similar_cases or report_dict.get("similarCases"):
+        return report_dict
+
+    text = str(detection_text or "").strip()
+    if len(text) < 6:
+        return report_dict
+
+    try:
+        similar_cases = find_similar_cases(text, top_k=3, min_score=0.08)
+    except Exception as exc:
+        print(f"⚠️ RAG 案例比對失敗：{exc}", flush=True)
+        return report_dict
+
+    if not similar_cases:
+        return report_dict
+
+    enriched = dict(report_dict)
+    top_similarity = float(similar_cases[0].get("similarity", 0) or 0)
+    matched_signal_count = len(similar_cases[0].get("matched_signals") or [])
+    current_score = clamp_score(enriched.get("riskScore") or enriched.get("risk_score") or 0)
+    scam_dna = enriched.get("scamDNA") or []
+    dna_text = "、".join(scam_dna) if isinstance(scam_dna, list) else str(scam_dna)
+    safe_context = any(keyword in dna_text for keyword in ["安全語境", "官方可信網站", "白名單放行", "低資訊量"])
+
+    enriched["similarCases"] = similar_cases
+    enriched["ragEngine"] = RAG_ENGINE_VERSION
+    enriched.setdefault("componentScores", {})
+    if isinstance(enriched["componentScores"], dict):
+        enriched["componentScores"]["ragSimilarity"] = round(top_similarity * 100, 1)
+
+    # 保守補強：只有相似度夠高且不是安全語境時才調升，不讓 RAG 單獨把正常內容打成極高風險。
+    if not safe_context:
+        if top_similarity >= 0.32 and matched_signal_count >= 2 and current_score < 70:
+            enriched["riskScore"] = 70
+            enriched["riskLevel"] = score_to_level(70)
+            enriched["reason"] = (
+                "本地 RAG 案例比對命中高度相似詐騙樣態："
+                f"{similar_cases[0].get('title') or similar_cases[0].get('type')}；"
+                + safe_truncate(enriched.get("reason", ""), 160)
+            ).strip("；")
+            enriched["scamDNA"] = list(dict.fromkeys((scam_dna if isinstance(scam_dna, list) else [str(scam_dna)]) + ["RAG案例相似"]))[:5]
+        elif top_similarity >= 0.22 and current_score < 40:
+            enriched["riskScore"] = 40
+            enriched["riskLevel"] = score_to_level(40)
+            enriched["scamDNA"] = list(dict.fromkeys((scam_dna if isinstance(scam_dna, list) else [str(scam_dna)]) + ["RAG案例相似"]))[:5]
+
+    return enriched
+
+
 def make_report_response(report_dict, masked_text="", status_code=200):
     normalized = normalize_report_dict(report_dict)
+
+    if request.path in {"/scan", "/api/scan"}:
+        normalized = enrich_report_with_rag_cases(normalized, masked_text)
+        normalized = normalize_report_dict(normalized)
 
     payload = {
         **normalized,
@@ -946,6 +1015,41 @@ def get_current_json_body_for_line_guard():
     return {}
 
 
+def normalize_line_demo_family_id(value=""):
+    family_id = str(value or "").strip().upper()
+    family_id = re.sub(r"[^A-Z0-9]", "", family_id)[:16]
+    return family_id if re.fullmatch(r"[A-Z0-9]{4,16}", family_id or "") else ""
+
+
+def family_allows_demo_line_push(family_id=""):
+    """讀取家庭展示測試開關。開啟後，Demo / file:// 測試頁也可以真的推 LINE。"""
+    if ALLOW_DEMO_LINE_PUSH:
+        return True
+
+    fid = normalize_line_demo_family_id(family_id)
+    if not fid or not firebase_initialized:
+        return False
+
+    try:
+        value = db.reference(f"families/{fid}/settings/allowDemoLinePush").get()
+        return get_bool(value, False)
+    except Exception as exc:
+        print(f"⚠️ 讀取家庭 LINE 測試開關失敗：{exc}", flush=True)
+        return False
+
+
+def request_allows_demo_line_push(data=None, family_id=""):
+    data = data if isinstance(data, dict) else get_current_json_body_for_line_guard()
+    explicit = get_bool(data.get("allowLinePush"), False) or get_bool(data.get("realLinePush"), False)
+    requested_family_id = normalize_line_demo_family_id(
+        family_id
+        or data.get("familyID")
+        or data.get("familyId")
+        or data.get("family_id")
+    )
+    return explicit or family_allows_demo_line_push(requested_family_id)
+
+
 def is_demo_or_test_url_for_line(url=""):
     """
     LINE 推播硬性保險：
@@ -1038,7 +1142,16 @@ def get_line_guard_decision(url="", report_dict=None):
         ))
     )
 
-    allow_real_push = truthy(data.get("allowLinePush")) or truthy(data.get("realLinePush"))
+    requested_family_id = normalize_line_demo_family_id(
+        data.get("familyID")
+        or data.get("familyId")
+        or data.get("family_id")
+    )
+    allow_real_push = (
+        truthy(data.get("allowLinePush"))
+        or truthy(data.get("realLinePush"))
+        or family_allows_demo_line_push(requested_family_id)
+    )
 
     suppress_by_source = (
         source in demo_sources
@@ -1052,7 +1165,7 @@ def get_line_guard_decision(url="", report_dict=None):
     suppress = False
     reasons = []
 
-    if hard_block:
+    if hard_block and not allow_real_push:
         suppress = True
         reasons.append("hard_block_demo_or_test_url")
 
@@ -1104,7 +1217,7 @@ def should_suppress_line_alert_for_current_request(url="", report_dict=None):
         return get_bool(value, False)
 
     # 明確允許真實推播時才放行，例如正式測「一鍵通知家人」。
-    if truthy(data.get("allowLinePush")) or truthy(data.get("realLinePush")):
+    if request_allows_demo_line_push(data, family_id=data.get("familyID") or data.get("familyId") or data.get("family_id")):
         return False
 
     # 前端 Demo 明確要求不要推播。
@@ -1265,7 +1378,7 @@ def get_dynamic_advice(scam_dna_list):
 
 def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=None):
     # send_dynamic_line_alert hard block: 即使其他地方直接呼叫，也不能讓 Demo / 測試網址推 LINE。
-    if is_demo_or_test_url_for_line(url):
+    if is_demo_or_test_url_for_line(url) and not family_allows_demo_line_push(family_id):
         print(f"🔕 [LINE Guard] send_dynamic_line_alert 已硬性阻擋測試網址：{url}", flush=True)
         return
     if LINE_PUSH_DRY_RUN:
@@ -1787,6 +1900,47 @@ def is_low_information_safe_scan(target_url, raw_text, image_url, is_urgent=Fals
 
 
 # ==========================================
+# 家庭展示設定
+# ==========================================
+@api_bp.route("/api/family/line_push_test_mode", methods=["POST"])
+@limiter.limit("60 per minute")
+def set_family_line_push_test_mode():
+    if not firebase_initialized:
+        return jsonify({"status": "fail", "message": "Firebase 未連線"}), 500
+
+    data = get_json_body()
+    identity = get_request_identity(data)
+    family_id = normalize_family_id(data.get("familyID") or identity["familyID"] or "none")
+
+    if not family_id or family_id == "NONE":
+        return jsonify({"status": "fail", "message": "缺少 familyID"}), 400
+
+    authorized, auth_response = authorize_family_access(family_id, identity)
+    if not authorized:
+        return auth_response
+
+    enabled = get_bool(data.get("enabled"), False)
+
+    try:
+        db.reference(f"families/{family_id}/settings").update({
+            "allowDemoLinePush": enabled,
+            "allowDemoLinePushUpdatedAt": get_tw_time(),
+            "allowDemoLinePushUpdatedBy": identity.get("userID") or "dashboard",
+        })
+
+        return jsonify({
+            "status": "success",
+            "familyID": family_id,
+            "enabled": enabled,
+            "message": "展示時 LINE 推播已開啟" if enabled else "展示時 LINE 推播已關閉",
+        }), 200
+
+    except Exception as exc:
+        print(f"❌ LINE 測試開關儲存失敗：{exc}", flush=True)
+        return public_error("LINE 測試開關儲存失敗，請稍後再試。", 500)
+
+
+# ==========================================
 # 基本路由
 # ==========================================
 @api_bp.route("/", methods=["GET"])
@@ -1928,9 +2082,10 @@ def submit_evidence():
     identity = get_request_identity(data)
 
     url = str(data.get("url") or "未知網址")
-    screenshot_base64 = data.get("screenshot_base64")
+    screenshot_base64 = str(data.get("screenshot_base64") or "")
+    summary_only = get_bool(data.get("summary_only"), False)
 
-    if not screenshot_base64:
+    if not screenshot_base64 and not summary_only:
         return jsonify({"status": "fail", "message": "未提供圖片數據"}), 400
 
     try:
@@ -1956,15 +2111,21 @@ def submit_evidence():
 
         allow_full_screenshot = get_bool(data.get("allow_screenshot_save"), False)
 
-        ref = db.reference("scam_evidence").push(
-            minimal_evidence_payload(
-                url=url,
-                family_id=family_id,
-                reason=reason,
-                screenshot_base64=screenshot_base64,
-                allow_full_screenshot=allow_full_screenshot,
-            )
+        evidence_payload = minimal_evidence_payload(
+            url=url,
+            family_id=family_id,
+            reason=reason,
+            screenshot_base64=screenshot_base64,
+            allow_full_screenshot=allow_full_screenshot,
         )
+        evidence_payload.update({
+            "summary_only": bool(summary_only or not screenshot_base64),
+            "screenshot_size_bytes": safe_int(data.get("screenshot_size_bytes"), 0),
+            "screenshot_format": safe_truncate(data.get("screenshot_format") or "", 24),
+            "screenshot_skipped_reason": safe_truncate(data.get("screenshot_skipped_reason") or "", 120),
+        })
+
+        ref = db.reference("scam_evidence").push(evidence_payload)
 
         report_dict = {
             "riskScore": 99,
@@ -1996,9 +2157,12 @@ def submit_evidence():
 
         return jsonify({
             "status": "success",
-            "message": "✅ 證據摘要已成功存檔",
+            "message": "✅ 證據快照已成功存檔" if allow_full_screenshot else "✅ 證據摘要已成功存檔",
             "evidenceID": ref.key,
             "image_url": "",
+            "screenshot_saved": bool(screenshot_base64 and allow_full_screenshot),
+            "summary_only": bool(summary_only or not screenshot_base64),
+            "screenshot_size_bytes": safe_int(data.get("screenshot_size_bytes"), 0),
         })
 
     except Exception as e:
