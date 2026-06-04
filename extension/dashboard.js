@@ -761,7 +761,11 @@ function saveLinePushTestModeLocal(familyID = getCurrentFamilyID(), enabled = fa
         if (typeof chrome !== "undefined" && chrome.storage?.local) {
             chrome.storage.local.set({
                 allowDemoLinePush: Boolean(enabled),
+                allowLinePush: Boolean(enabled),
+                aiShieldDemoLinePushEnabled: Boolean(enabled),
+                aiShieldLinePushTestEnabled: Boolean(enabled),
                 aiShieldAllowDemoLinePush: Boolean(enabled),
+                aiShieldDashboardLinePushTestEnabled: Boolean(enabled),
                 [DASHBOARD_LINE_PUSH_TEST_MODE_KEY]: map
             });
         }
@@ -798,32 +802,12 @@ async function syncLinePushTestMode(enabled) {
         return;
     }
 
+    // 這個開關只需要存在本機 chrome.storage，讓 background.js 掃描時帶 allowLinePush 給後端。
+    // 不呼叫後端 /api/family/line_push_test_mode，避免該 API 不存在時 404 並把開關回滾。
     saveLinePushTestModeLocal(familyID, enabled);
     refreshLinePushTestToggle();
 
-    try {
-        const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/family/line_push_test_mode`, {
-            method: "POST",
-            headers: await getApiHeaders({ familyID }),
-            body: JSON.stringify({
-                familyID,
-                enabled: Boolean(enabled)
-            })
-        });
-
-        let data = {};
-        try { data = await response.json(); } catch (e) {}
-
-        if (!response.ok || data.status !== "success") {
-            throw new Error(data.message || `LINE 推播測試設定失敗 (${response.status})`);
-        }
-
-        showToast(Boolean(enabled) ? "展示時 LINE 推播已開啟。" : "展示時 LINE 推播已關閉。", "success");
-    } catch (error) {
-        saveLinePushTestModeLocal(familyID, !enabled);
-        refreshLinePushTestToggle();
-        showToast(`LINE 推播測試設定失敗：${error.message}`, "error");
-    }
+    showToast(Boolean(enabled) ? "展示時 LINE 推播已開啟。" : "展示時 LINE 推播已關閉。", "success");
 }
 
 function filterRecordsAfterLocalClear(records = [], familyID = getCurrentFamilyID()) {
