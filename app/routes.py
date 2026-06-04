@@ -187,7 +187,7 @@ LINE_PUSH_ENABLED = env_bool("LINE_PUSH_ENABLED", False)
 # 競賽展示預設：Demo 掃描只寫入戰情紀錄，不推播 LINE。
 # 若真的要測真實 LINE 推播，可把 DEMO_SUPPRESS_LINE_PUSH=false，或請求帶 allowLinePush=true。
 DEMO_SUPPRESS_LINE_PUSH = env_bool("DEMO_SUPPRESS_LINE_PUSH", True)
-LINE_GUARD_VERSION = "v13-line-toggle-final"
+LINE_GUARD_VERSION = "v12-line-diagnostic-hard-block"
 # 競賽展示保險：設為 true 時，所有 LINE push 只寫 log，不真的送出。
 # 若決賽現場要展示真實 LINE 推播，再於 Render 環境變數設 LINE_PUSH_DRY_RUN=false。
 LINE_PUSH_DRY_RUN = env_bool("LINE_PUSH_DRY_RUN", True)
@@ -1094,7 +1094,7 @@ def get_line_guard_decision(url="", report_dict=None):
 
     raw_url = str(url or data.get("url") or "").strip()
     domain = normalize_domain(raw_url)
-    raw_hard_block = is_demo_or_test_url_for_line(raw_url)
+    hard_block = is_demo_or_test_url_for_line(raw_url)
 
     suppress_by_flag = (
         truthy(data.get("suppressLine"))
@@ -1113,9 +1113,6 @@ def get_line_guard_decision(url="", report_dict=None):
         or ALLOW_DEMO_LINE_PUSH
     )
 
-    # allowRealPush=true 時，Demo / file:// 只保留診斷資訊，不再視為硬性阻擋。
-    hard_block = raw_hard_block and not allow_real_push
-
     suppress_by_source = (
         source in demo_sources
         or source.startswith("demo_")
@@ -1128,7 +1125,7 @@ def get_line_guard_decision(url="", report_dict=None):
     suppress = False
     reasons = []
 
-    if hard_block:
+    if hard_block and not allow_real_push:
         suppress = True
         reasons.append("hard_block_demo_or_test_url")
 
@@ -1151,7 +1148,6 @@ def get_line_guard_decision(url="", report_dict=None):
         "source": source,
         "reportSource": report_source,
         "hardBlock": hard_block,
-        "rawHardBlock": raw_hard_block,
         "suppress": suppress,
         "reasons": reasons,
     }
@@ -1341,8 +1337,15 @@ def get_dynamic_advice(scam_dna_list):
 
 
 def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=None):
-    # send_dynamic_line_alert hard block: 即使其他地方直接呼叫，也不能讓 Demo / 測試網址推 LINE。
-    if is_demo_or_test_url_for_line(url) and not ALLOW_DEMO_LINE_PUSH:
+    # send_dynamic_line_alert 第二道保險：
+    # 若戰情室「展示時通知 LINE」已開啟，前端會帶 allowLinePush=true，
+    # 此時 Demo / file:// 測試網址也允許真的推播；平常未開啟時仍會阻擋。
+    line_guard = get_line_guard_decision(url, {
+        "riskScore": risk_score,
+        "reason": reason,
+        "scamDNA": scam_dna or ["未知套路"],
+    })
+    if is_demo_or_test_url_for_line(url) and not line_guard.get("allowRealPush"):
         print(f"🔕 [LINE Guard] send_dynamic_line_alert 已硬性阻擋測試網址：{url}", flush=True)
         return
     if LINE_PUSH_DRY_RUN:
