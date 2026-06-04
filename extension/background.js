@@ -74,18 +74,45 @@ async function aiShieldGetApiHeaders() {
     return headers;
 }
 
+async function aiShieldShouldAllowLinePushTest() {
+    try {
+        const keys = [
+            "aiShieldDemoLinePushEnabled",
+            "aiShieldLinePushTestEnabled",
+            "aiShieldAllowDemoLinePush",
+            "aiShieldDashboardLinePushTestEnabled",
+            "allowDemoLinePush",
+            "allowLinePush"
+        ];
+
+        const storage = await chrome.storage.local.get(keys);
+
+        return keys.some(key => storage[key] === true || storage[key] === "true" || storage[key] === 1 || storage[key] === "1");
+    } catch (e) {
+        return false;
+    }
+}
+
 async function aiShieldSubmitEvidenceToBackend(payload = {}) {
+    const allowLinePushTest = Boolean(payload.allowLinePush || payload.realLinePush || await aiShieldShouldAllowLinePushTest());
+
     const body = {
         url: payload.url || "",
         timestamp: payload.timestamp || new Date().toISOString(),
         familyID: payload.familyID || "none",
         screenshot_base64: payload.screenshot_base64 || "",
+        summary_only: !payload.screenshot_base64,
         reported_reason: payload.reported_reason || payload.reason || "主動掃描偵測到高風險頁面。",
         reason: payload.reason || payload.reported_reason || "主動掃描偵測到高風險頁面。",
         riskScore: aiShieldNormalizeScore(payload.riskScore || payload.score || 95),
         riskLevel: payload.riskLevel || "高風險",
         recordID: payload.recordID || "",
         source: payload.source || "background-auto-submit-evidence",
+        allowLinePush: allowLinePushTest,
+        realLinePush: allowLinePushTest,
+        suppressLine: !allowLinePushTest,
+        suppressLineAlert: !allowLinePushTest,
+        demoMode: !allowLinePushTest,
         allow_screenshot_save: Boolean(aiShieldGetConfigValue("SAVE_FULL_SCREENSHOT_BY_DEFAULT", false))
     };
 
@@ -317,6 +344,8 @@ async function aiShieldHandleCaptureWithEvidence(message = {}, sender = {}) {
         });
     }
 
+    const allowLinePushTest = await aiShieldShouldAllowLinePushTest();
+
     const backendSyncResult = await aiShieldSubmitEvidenceToBackend({
         url: targetUrl,
         timestamp: message.timestamp || message.detectedAt || new Date().toISOString(),
@@ -327,7 +356,9 @@ async function aiShieldHandleCaptureWithEvidence(message = {}, sender = {}) {
         riskScore: score,
         riskLevel: report.riskLevel || message.riskLevel || (score >= 70 ? "高風險" : "中風險"),
         recordID: dashboardRecord.id,
-        source: message.action || message.type || "captureScamTabWithEvidence"
+        source: message.action || message.type || "captureScamTabWithEvidence",
+        allowLinePush: allowLinePushTest,
+        realLinePush: allowLinePushTest
     });
 
     try {
