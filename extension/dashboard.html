@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta name="ai-shield-skip-scan" content="true" />
     <meta charset="UTF-8">
-    <title>AI 防詐盾牌｜家庭戰情室</title>
-    <script src="config.js"></script>
-    <script src="chart.js"></script>
-    <script src="socket.io.min.js"></script>
+    <title>AI 防詐盾牌｜家庭防詐戰情室</title>
+    <script src="../core/config.js"></script>
+    <script src="../vendor/chart.js"></script>
+    <script src="../vendor/socket.io.min.js"></script>
 
     <style>
 
@@ -212,6 +211,8 @@
             cursor: pointer;
             transition: 0.25s ease;
             letter-spacing: 0.5px;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         button:hover {
@@ -603,89 +604,1918 @@
             }
         }
 
+
+        /* v41：決賽展示資料固定化 */
+        .btn-demo {
+            background: #7c3aed;
+            color: #ffffff;
+            box-shadow: 0 8px 20px rgba(124,58,237,0.28);
+        }
+
+        .btn-care {
+            background: #db2777;
+            color: #ffffff;
+            box-shadow: 0 8px 20px rgba(219,39,119,0.26);
+        }
+
+        .demo-data-banner {
+            display: none;
+            margin-bottom: 24px;
+            padding: 18px 22px;
+            border-radius: 24px;
+            background: linear-gradient(135deg, #eef2ff, #f0fdfa);
+            border: 2px solid #c7d2fe;
+            color: #1e3a8a;
+            font-size: 20px;
+            font-weight: 900;
+            line-height: 1.65;
+            box-shadow: 0 10px 24px rgba(99,102,241,0.12);
+        }
+
+        .demo-data-banner strong {
+            color: #6d28d9;
+        }
+
+        .chart-fallback {
+            display: grid;
+            gap: 12px;
+            padding: 14px;
+            border-radius: 18px;
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            color: #334155;
+            font-weight: 900;
+        }
+
+        .chart-fallback-row {
+            display: grid;
+            grid-template-columns: 110px 1fr 56px;
+            align-items: center;
+            gap: 12px;
+            font-size: 16px;
+        }
+
+        .chart-fallback-track {
+            height: 18px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .chart-fallback-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: #1976d2;
+        }
+
         /* 正式產品版：不顯示任何設計稿或版本標籤 */
         .header h1::after {
             content: none !important;
             display: none !important;
         }
 
+    
+        /* === v43：證據快照整合到詳細掃描紀錄內，不另外獨立一區 === */
+        .record-evidence-btn {
+            margin-top: 8px;
+            padding: 7px 12px;
+            font-size: 13px;
+            border-radius: 999px;
+            background: #fff7ed;
+            color: #b45309;
+            border: 1px solid #fed7aa;
+            cursor: pointer;
+            font-weight: 900;
+        }
+
+        .record-evidence-btn:hover {
+            background: #ffedd5;
+        }
+
+        .record-evidence-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 6px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #fff7ed;
+            color: #b45309;
+            border: 1px solid #fed7aa;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .record-evidence-btn-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            align-items: flex-start;
+        }
+
+    
+        /* === v44：銀髮族 UX 小幅優化，不改原戰情室架構 === */
+        .status-board {
+            margin: 0 0 24px;
+            padding: 24px 28px;
+            border-radius: 28px;
+            background: var(--warm-cream);
+            border: 2px solid rgba(217, 154, 43, 0.45);
+            box-shadow: 0 10px 24px rgba(217,154,43,0.12);
+            text-align: center;
+        }
+
+        .status-board h2 {
+            margin: 0 0 10px;
+            color: var(--text-main);
+            font-size: 30px;
+            line-height: 1.35;
+            font-weight: 900;
+        }
+
+        .status-board p {
+            margin: 0;
+            color: var(--text-sub);
+            font-size: 20px;
+            line-height: 1.65;
+            font-weight: 800;
+        }
+
+        #summary-state-text {
+            color: var(--brand-green);
+            font-weight: 900;
+        }
+
+        #summary-blocked-count {
+            color: var(--danger-red);
+            font-size: 26px;
+            font-weight: 900;
+            padding: 0 4px;
+        }
+
+        #btn-clear-logs {
+            min-height: 52px;
+            padding: 13px 24px !important;
+            border-radius: 999px !important;
+            background: #f8fafc !important;
+            border: 2px solid #cbd5e1 !important;
+            color: #334155 !important;
+            font-size: 17px !important;
+            font-weight: 900 !important;
+            box-shadow: 0 8px 18px rgba(51,65,85,0.08) !important;
+        }
+
+        #btn-clear-logs:hover {
+            background: #e2e8f0 !important;
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 768px) {
+            .status-board {
+                padding: 20px 18px;
+                border-radius: 22px;
+            }
+
+            .status-board h2 {
+                font-size: 24px;
+            }
+
+            .status-board p {
+                font-size: 18px;
+            }
+
+            .table-wrapper {
+                overflow: visible;
+            }
+
+            .table-wrapper table,
+            .table-wrapper thead,
+            .table-wrapper tbody,
+            .table-wrapper th,
+            .table-wrapper td,
+            .table-wrapper tr {
+                display: block;
+                width: 100%;
+            }
+
+            .table-wrapper thead {
+                display: none;
+            }
+
+            .table-wrapper tr {
+                margin-bottom: 18px;
+                border: 2px solid var(--line-tech);
+                border-radius: 18px;
+                padding: 12px;
+                background: var(--card-bg-strong);
+                box-shadow: 0 8px 18px rgba(25,118,210,0.08);
+            }
+
+            .table-wrapper td {
+                position: relative;
+                min-height: 54px;
+                padding: 14px 12px 14px 42%;
+                border-bottom: 1px dashed #e2e8f0;
+                text-align: right;
+                font-size: 17px;
+                line-height: 1.55;
+            }
+
+            .table-wrapper td:last-child {
+                border-bottom: none;
+            }
+
+            .table-wrapper td::before {
+                content: attr(data-label);
+                position: absolute;
+                top: 14px;
+                left: 12px;
+                width: 36%;
+                color: var(--text-soft);
+                font-weight: 900;
+                text-align: left;
+                white-space: normal;
+            }
+
+            .table-wrapper td.empty-row {
+                padding: 22px 14px;
+                text-align: center;
+            }
+
+            .table-wrapper td.empty-row::before {
+                content: "";
+            }
+        }
+
+    
+        /* === v45：長輩友善控制列，不增加功能，只降低選擇壓力 === */
+        .btn-classroom {
+            background: #7c3aed;
+            color: #ffffff;
+            box-shadow: 0 8px 20px rgba(124,58,237,0.28);
+        }
+
+        .demo-tools {
+            flex-basis: 100%;
+            margin-top: 8px;
+            border: 2px solid #e2e8f0;
+            border-radius: 22px;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+
+        .demo-tools summary {
+            list-style: none;
+            padding: 16px 20px;
+            color: #334155;
+            font-size: 20px;
+            font-weight: 900;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .demo-tools summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .demo-tools summary::after {
+            content: "＋";
+            float: right;
+            color: #2563eb;
+            font-weight: 900;
+        }
+
+        .demo-tools[open] summary::after {
+            content: "－";
+        }
+
+        .demo-tools-body {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 14px;
+            padding: 0 16px 16px;
+        }
+
+        .control-panel > button {
+            min-width: 170px;
+        }
+
+        .control-panel .btn-demo,
+        .control-panel .btn-care {
+            width: 100%;
+            min-height: 52px;
+            font-size: 20px;
+        }
+
+        .control-panel .btn-demo {
+            background: #f1f5f9;
+            color: #334155;
+            border: 2px solid #cbd5e1;
+            box-shadow: none;
+        }
+
+        .control-panel .btn-care {
+            background: #fdf2f8;
+            color: #be185d;
+            border: 2px solid #fbcfe8;
+            box-shadow: none;
+        }
+
+        @media (max-width: 900px) {
+            .control-panel {
+                align-items: stretch;
+            }
+
+            .control-panel label,
+            .control-panel input,
+            .control-panel > button,
+            .status-badge {
+                width: 100%;
+            }
+
+            .control-panel > button {
+                min-width: 0;
+            }
+
+            .demo-tools-body {
+                grid-template-columns: 1fr;
+            }
+        }
+
+    
+        /* === v46：防詐教室按鈕連線修正 === */
+        .btn-classroom {
+            background: #7c3aed;
+            color: #ffffff;
+            box-shadow: 0 8px 20px rgba(124,58,237,0.28);
+        }
+
+    
+        /* === v47：AI 智慧守護艙視覺整合，不改核心資料流 === */
+        :root {
+            --ai-navy: #071b3a;
+            --ai-blue: #2563eb;
+            --ai-cyan: #06b6d4;
+            --ai-mint: #10b981;
+            --ai-violet: #7c3aed;
+            --ai-panel: #ffffff;
+            --ai-soft: #f4f9ff;
+            --ai-line: rgba(37, 99, 235, .22);
+            --ai-glow: 0 20px 48px rgba(37, 99, 235, .13);
+        }
+
+        body {
+            background:
+                radial-gradient(circle at 8% 6%, rgba(37,99,235,.16), transparent 30%),
+                radial-gradient(circle at 88% 8%, rgba(6,182,212,.13), transparent 28%),
+                linear-gradient(135deg, #f6fbff 0%, #ffffff 48%, #f8fbff 100%) !important;
+        }
+
+        .header {
+            border-radius: 34px !important;
+            border: 2px solid rgba(37,99,235,.20) !important;
+            background:
+                linear-gradient(135deg, rgba(255,255,255,.98), rgba(246,251,255,.98)) !important;
+            box-shadow: var(--ai-glow) !important;
+        }
+
+        .dashboard-warning-icon {
+            background: radial-gradient(circle at 30% 22%, #ffffff, #e8f6ff) !important;
+            border: 2px solid rgba(6,182,212,.24) !important;
+            box-shadow: 0 14px 28px rgba(37,99,235,.12), inset 0 0 0 1px rgba(255,255,255,.9) !important;
+        }
+
+        .ai-command-center {
+            position: relative;
+            margin-bottom: 24px;
+            padding: 26px;
+            border-radius: 34px;
+            background:
+                linear-gradient(#ffffff, #ffffff) padding-box,
+                linear-gradient(135deg, rgba(37,99,235,.38), rgba(6,182,212,.28), rgba(16,185,129,.22)) border-box;
+            border: 2px solid transparent;
+            box-shadow: var(--ai-glow);
+            overflow: hidden;
+        }
+
+        .ai-command-center::before {
+            content: "";
+            position: absolute;
+            right: -120px;
+            top: -120px;
+            width: 310px;
+            height: 310px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(6,182,212,.18), transparent 62%);
+            pointer-events: none;
+        }
+
+        .ai-command-center::after {
+            content: "";
+            position: absolute;
+            left: 26px;
+            right: 26px;
+            top: 96px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(37,99,235,.24), transparent);
+            pointer-events: none;
+        }
+
+        .ai-command-head {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 22px;
+        }
+
+        .ai-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 13px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            font-size: 14px;
+            font-weight: 1000;
+            letter-spacing: .4px;
+        }
+
+        .ai-command-head h2 {
+            margin: 10px 0 4px;
+            color: var(--ai-navy);
+            font-size: clamp(28px, 3.4vw, 40px);
+            line-height: 1.15;
+            font-weight: 1000;
+            letter-spacing: .4px;
+        }
+
+        .ai-command-head p {
+            margin: 0;
+            color: #475569;
+            font-size: 18px;
+            font-weight: 800;
+            line-height: 1.6;
+        }
+
+        .ai-orb {
+            width: 74px;
+            height: 74px;
+            border-radius: 26px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #eaf4ff, #effdf7);
+            border: 1px solid rgba(37,99,235,.22);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,.9), 0 16px 30px rgba(37,99,235,.12);
+            flex: 0 0 auto;
+        }
+
+        .ai-orb span {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            background:
+                radial-gradient(circle at 35% 30%, #ffffff 0 14%, transparent 15%),
+                linear-gradient(135deg, var(--ai-blue), var(--ai-cyan));
+            box-shadow: 0 0 0 8px rgba(37,99,235,.10), 0 0 26px rgba(6,182,212,.38);
+        }
+
+        .ai-command-center .status-board {
+            position: relative;
+            z-index: 1;
+            margin: 0 0 20px !important;
+            padding: 22px 24px !important;
+            border-radius: 28px !important;
+            border: 2px solid rgba(16,185,129,.18) !important;
+            background:
+                linear-gradient(135deg, #f0fdf4, #ffffff 58%, #eff6ff) !important;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,.92), 0 10px 24px rgba(16,185,129,.09) !important;
+            text-align: left !important;
+        }
+
+        .status-board h2 {
+            font-size: clamp(24px, 3vw, 34px) !important;
+            margin-bottom: 8px !important;
+        }
+
+        .status-board p {
+            font-size: 19px !important;
+            color: #334155 !important;
+        }
+
+        .ai-command-center .control-panel {
+            position: relative;
+            z-index: 1;
+            margin: 0 0 18px !important;
+            padding: 18px !important;
+            border-radius: 28px !important;
+            border: 2px solid rgba(37,99,235,.14) !important;
+            background: #f8fbff !important;
+            box-shadow: none !important;
+            display: grid !important;
+            grid-template-columns: auto 220px repeat(4, minmax(136px, auto)) 1fr;
+            gap: 12px !important;
+            align-items: center !important;
+        }
+
+        .control-panel label {
+            font-size: 18px !important;
+            color: #334155 !important;
+            white-space: nowrap;
+        }
+
+        .control-panel input {
+            height: 58px !important;
+            border-radius: 20px !important;
+            border: 2px solid #94a3b8 !important;
+            font-size: 26px !important;
+            background: #ffffff !important;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,.95);
+        }
+
+        .control-panel > button {
+            min-height: 58px !important;
+            padding: 13px 18px !important;
+            border-radius: 20px !important;
+            font-size: 17px !important;
+            font-weight: 1000 !important;
+            white-space: nowrap !important;
+            letter-spacing: .2px !important;
+            box-shadow: 0 12px 24px rgba(37,99,235,.13) !important;
+        }
+
+        .btn-start { background: linear-gradient(135deg, #16a34a, #22c55e) !important; }
+        .btn-manual { background: linear-gradient(135deg, #2563eb, #38bdf8) !important; }
+        .btn-classroom {
+            background: linear-gradient(135deg, #7c3aed, #2563eb) !important;
+            color: #ffffff !important;
+        }
+
+        .control-spacer {
+            display: none !important;
+        }
+
+        .status-badge {
+            grid-column: 1 / -1;
+            justify-content: flex-start !important;
+            min-height: 54px;
+            padding: 13px 18px !important;
+            border-radius: 20px !important;
+            background: #ffffff !important;
+            border: 2px solid #dbeafe !important;
+            color: #1e3a8a !important;
+            font-size: 18px !important;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,.9);
+        }
+
+        .demo-tools {
+            grid-column: 1 / -1;
+            margin-top: 0 !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 22px !important;
+            background: #ffffff !important;
+            overflow: hidden;
+        }
+
+        .demo-tools summary {
+            padding: 15px 18px !important;
+            font-size: 17px !important;
+            color: #475569 !important;
+            font-weight: 1000 !important;
+        }
+
+        .demo-tools-body {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(200px, 1fr)) !important;
+            gap: 12px !important;
+            padding: 0 16px 16px !important;
+        }
+
+        .demo-tools button {
+            width: 100% !important;
+            min-height: 52px !important;
+            font-size: 16px !important;
+            box-shadow: none !important;
+        }
+
+        .demo-data-banner {
+            position: relative;
+            z-index: 1;
+            margin: 0 0 18px !important;
+        }
+
+        .ai-command-center .stats-boxes {
+            position: relative;
+            z-index: 1;
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 16px !important;
+            margin: 0 !important;
+        }
+
+        .ai-command-center .stat-box {
+            padding: 24px 20px !important;
+            border-radius: 28px !important;
+            border: 2px solid rgba(37,99,235,.12) !important;
+            background:
+                linear-gradient(180deg, #ffffff, #f8fbff) !important;
+            box-shadow: none !important;
+        }
+
+        .stat-title {
+            font-size: 18px !important;
+            color: #475569 !important;
+        }
+
+        .stat-value {
+            font-size: clamp(48px, 6vw, 74px) !important;
+        }
+
+        .dashboard-grid {
+            gap: 22px !important;
+        }
+
+        .chart-container,
+        .log-header,
+        .table-wrapper {
+            border-color: rgba(37,99,235,.20) !important;
+            box-shadow: 0 16px 36px rgba(37,99,235,.08) !important;
+        }
+
+        .chart-title {
+            font-size: 26px !important;
+        }
+
+        .chart-title::before {
+            background: linear-gradient(135deg, var(--ai-blue), var(--ai-cyan)) !important;
+            box-shadow: 0 0 0 5px rgba(37,99,235,.12) !important;
+        }
+
+        #btn-clear-logs {
+            background: #fff7ed !important;
+            color: #9a3412 !important;
+            border: 2px solid #fed7aa !important;
+        }
+
+        @media (max-width: 1180px) {
+            .ai-command-center .control-panel {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .control-panel label,
+            .control-panel input,
+            .control-panel > button,
+            .status-badge,
+            .demo-tools {
+                grid-column: auto;
+                width: 100% !important;
+            }
+
+            .status-badge,
+            .demo-tools {
+                grid-column: 1 / -1;
+            }
+        }
+
+        @media (max-width: 760px) {
+            body {
+                padding: 14px !important;
+            }
+
+            .ai-command-center {
+                padding: 18px;
+                border-radius: 28px;
+            }
+
+            .ai-command-head {
+                align-items: flex-start;
+            }
+
+            .ai-orb {
+                display: none;
+            }
+
+            .ai-command-center .control-panel,
+            .ai-command-center .stats-boxes,
+            .demo-tools-body {
+                grid-template-columns: 1fr !important;
+            }
+
+            .control-panel label,
+            .control-panel input,
+            .control-panel > button,
+            .status-badge,
+            .demo-tools {
+                grid-column: 1 / -1 !important;
+            }
+
+            .status-board {
+                text-align: left !important;
+            }
+
+            .chart-container {
+                padding: 22px !important;
+            }
+        }
+
+    
+        /* === v48：家庭防詐戰情室｜全家人可讀的安心面板 === */
+        :root {
+            --family-blue: #2563eb;
+            --family-blue-dark: #1e3a8a;
+            --family-green: #16a34a;
+            --family-red: #dc2626;
+            --family-yellow: #b7791f;
+            --family-border: #cbd5e1;
+            --family-soft: #f8fafc;
+            --family-card: #ffffff;
+            --family-text: #0f172a;
+            --family-sub: #475569;
+        }
+
+        body {
+            background: #f4f8fb !important;
+            color: var(--family-text) !important;
+        }
+
+        .header {
+            max-width: 1180px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            border: 2px solid #dbeafe !important;
+            border-radius: 28px !important;
+            background: #ffffff !important;
+            box-shadow: 0 14px 30px rgba(30, 58, 138, .08) !important;
+        }
+
+        .header h1 {
+            color: var(--family-text) !important;
+            letter-spacing: .2px !important;
+        }
+
+        .family-dashboard,
+        .family-records,
+        .detail-data-heading,
+        .detail-data-grid {
+            max-width: 1180px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .family-dashboard {
+            margin-bottom: 28px;
+            padding: 28px;
+            border-radius: 34px;
+            background: var(--family-card);
+            border: 2px solid #dbeafe;
+            box-shadow: 0 18px 42px rgba(30, 58, 138, .10);
+        }
+
+        .family-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 24px;
+            margin-bottom: 22px;
+        }
+
+        .family-chip {
+            display: inline-flex;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: var(--family-blue-dark);
+            border: 1px solid #bfdbfe;
+            font-size: 15px;
+            font-weight: 1000;
+        }
+
+        .family-head h2 {
+            margin: 12px 0 6px;
+            color: var(--family-text);
+            font-size: clamp(34px, 4vw, 52px);
+            line-height: 1.1;
+            font-weight: 1000;
+            letter-spacing: .3px;
+        }
+
+        .family-head p {
+            margin: 0;
+            color: var(--family-sub);
+            font-size: 21px;
+            line-height: 1.6;
+            font-weight: 800;
+        }
+
+        .family-shield {
+            width: 96px;
+            height: 96px;
+            flex: 0 0 auto;
+            display: grid;
+            place-items: center;
+            border-radius: 30px;
+            background: #eff6ff;
+            border: 2px solid #bfdbfe;
+            font-size: 52px;
+        }
+
+        .family-status-main {
+            margin: 0 0 22px !important;
+            padding: 30px 34px !important;
+            border-radius: 30px !important;
+            border: 3px solid #bbf7d0 !important;
+            background: #f0fdf4 !important;
+            text-align: left !important;
+            box-shadow: none !important;
+        }
+
+        .family-status-main h2 {
+            margin: 0 0 12px !important;
+            color: var(--family-text) !important;
+            font-size: clamp(34px, 4.2vw, 58px) !important;
+            line-height: 1.18 !important;
+            font-weight: 1000 !important;
+        }
+
+        .family-status-main p {
+            margin: 0 !important;
+            color: #14532d !important;
+            font-size: clamp(22px, 2.4vw, 30px) !important;
+            line-height: 1.55 !important;
+            font-weight: 900 !important;
+        }
+
+        #summary-state-text {
+            font-weight: 1000 !important;
+        }
+
+        .family-main-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(190px, 1fr));
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+
+        .family-main-actions button {
+            min-height: 66px !important;
+            border-radius: 22px !important;
+            font-size: 22px !important;
+            font-weight: 1000 !important;
+            cursor: pointer !important;
+            border: 0 !important;
+            transition: transform .14s ease, box-shadow .14s ease, filter .14s ease !important;
+        }
+
+        .family-main-actions button:hover,
+        .record-card-row:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.02);
+        }
+
+        .family-main-actions .btn-manual {
+            background: var(--family-blue) !important;
+            color: #ffffff !important;
+            box-shadow: 0 10px 24px rgba(37, 99, 235, .20) !important;
+        }
+
+        .family-main-actions .btn-classroom {
+            background: #7c3aed !important;
+            color: #ffffff !important;
+            box-shadow: 0 10px 24px rgba(124, 58, 237, .18) !important;
+        }
+
+        .family-main-actions .btn-care-main {
+            background: var(--family-green) !important;
+            color: #ffffff !important;
+            box-shadow: 0 10px 24px rgba(22, 163, 74, .18) !important;
+        }
+
+        .family-summary {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 18px !important;
+            margin: 22px 0 0 !important;
+        }
+
+        .family-summary .stat-box {
+            padding: 26px !important;
+            border-radius: 28px !important;
+            background: #ffffff !important;
+            border: 2px solid #dbeafe !important;
+            box-shadow: none !important;
+            text-align: left !important;
+        }
+
+        .family-summary .stat-title {
+            color: var(--family-sub) !important;
+            font-size: 21px !important;
+            font-weight: 1000 !important;
+        }
+
+        .family-summary .stat-value {
+            margin-top: 8px !important;
+            color: var(--family-text) !important;
+            font-size: clamp(52px, 6vw, 82px) !important;
+            line-height: 1 !important;
+            font-weight: 1000 !important;
+        }
+
+        .family-summary .stat-value.danger {
+            color: var(--family-red) !important;
+        }
+
+        .stat-caption {
+            margin-top: 12px;
+            color: var(--family-sub);
+            font-size: 17px;
+            line-height: 1.55;
+            font-weight: 850;
+        }
+
+        .family-settings {
+            margin-top: 22px;
+            border-radius: 24px;
+            border: 2px solid #e2e8f0;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+
+        .family-settings summary {
+            padding: 18px 22px;
+            color: #334155;
+            font-size: 20px;
+            font-weight: 1000;
+            cursor: pointer;
+            list-style: none;
+        }
+
+        .family-settings summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .family-settings summary::after {
+            content: "＋";
+            float: right;
+            color: var(--family-blue);
+        }
+
+        .family-settings[open] summary::after {
+            content: "－";
+        }
+
+        .family-settings .control-panel {
+            display: grid !important;
+            grid-template-columns: auto 220px repeat(3, minmax(140px, auto));
+            gap: 14px !important;
+            align-items: center !important;
+            margin: 0 !important;
+            padding: 18px !important;
+            border: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        .family-settings label {
+            color: #334155 !important;
+            font-size: 18px !important;
+            font-weight: 1000 !important;
+        }
+
+        .family-settings input {
+            min-height: 56px !important;
+            border: 2px solid #94a3b8 !important;
+            border-radius: 18px !important;
+            background: #ffffff !important;
+            font-size: 24px !important;
+            font-weight: 1000 !important;
+        }
+
+        .family-settings button {
+            min-height: 56px !important;
+            border-radius: 18px !important;
+            font-size: 17px !important;
+            font-weight: 1000 !important;
+        }
+
+        .family-settings .status-badge {
+            grid-column: 1 / -1;
+            justify-content: flex-start !important;
+            min-height: 54px !important;
+            padding: 14px 18px !important;
+            border-radius: 18px !important;
+            background: #ffffff !important;
+            border: 2px solid #dbeafe !important;
+            color: #1e3a8a !important;
+            font-size: 18px !important;
+        }
+
+        .line-push-test-card {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 18px;
+            border-radius: 20px;
+            background: #ffffff;
+            border: 2px solid #e2e8f0;
+        }
+
+        .line-push-test-card strong {
+            display: block;
+            color: #334155;
+            font-size: 18px;
+            font-weight: 1000;
+            margin-bottom: 4px;
+        }
+
+        .line-push-test-card span {
+            display: block;
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.55;
+            font-weight: 800;
+        }
+
+        .line-push-switch {
+            position: relative;
+            display: inline-flex;
+            width: 74px;
+            height: 40px;
+            flex: 0 0 auto;
+        }
+
+        .line-push-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .line-push-slider {
+            position: absolute;
+            inset: 0;
+            border-radius: 999px;
+            background: #cbd5e1;
+            cursor: pointer;
+            transition: .22s ease;
+            box-shadow: inset 0 0 0 2px rgba(15,23,42,.08);
+        }
+
+        .line-push-slider::before {
+            content: "";
+            position: absolute;
+            left: 5px;
+            top: 5px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #ffffff;
+            transition: .22s ease;
+            box-shadow: 0 4px 12px rgba(15,23,42,.22);
+        }
+
+        .line-push-switch input:checked + .line-push-slider {
+            background: #16a34a;
+        }
+
+        .line-push-switch input:checked + .line-push-slider::before {
+            transform: translateX(34px);
+        }
+
+        .line-push-switch input:disabled + .line-push-slider {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+
+        .family-settings .demo-data-banner {
+            margin: 0 18px 18px !important;
+        }
+
+        .family-records {
+            margin-bottom: 28px;
+        }
+
+        .family-records .log-header,
+        .detail-data-heading .log-header {
+            border-radius: 26px 26px 0 0 !important;
+            border: 2px solid #dbeafe !important;
+            border-bottom: 0 !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        .family-records .chart-title span,
+        .detail-data-heading .chart-title span {
+            font-size: 28px !important;
+        }
+
+        .table-wrapper {
+            border: 2px solid #dbeafe !important;
+            border-radius: 0 0 26px 26px !important;
+            background: #ffffff !important;
+            box-shadow: 0 14px 34px rgba(30, 58, 138, .08) !important;
+            overflow: visible !important;
+            padding: 18px !important;
+        }
+
+        .table-wrapper table,
+        .table-wrapper thead,
+        .table-wrapper tbody,
+        .table-wrapper th,
+        .table-wrapper td,
+        .table-wrapper tr {
+            display: block;
+            width: 100%;
+        }
+
+        .table-wrapper thead {
+            display: none;
+        }
+
+        .table-wrapper tbody {
+            display: grid;
+            gap: 16px;
+        }
+
+        .record-card-row,
+        .table-wrapper tbody tr {
+            border: 2px solid #e2e8f0;
+            border-radius: 24px;
+            padding: 18px;
+            background: #ffffff;
+            box-shadow: 0 8px 20px rgba(30, 58, 138, .06);
+            cursor: pointer;
+            transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+        }
+
+        .record-card-row:hover,
+        .table-wrapper tbody tr:hover {
+            border-color: #93c5fd;
+            box-shadow: 0 16px 30px rgba(30, 58, 138, .12);
+        }
+
+        .table-wrapper td {
+            position: relative;
+            min-height: 46px;
+            padding: 12px 12px 12px 180px !important;
+            border-bottom: 1px dashed #e2e8f0;
+            color: var(--family-text);
+            font-size: 18px;
+            line-height: 1.65;
+            text-align: left !important;
+        }
+
+        .table-wrapper td:last-child {
+            border-bottom: none;
+        }
+
+        .table-wrapper td::before {
+            content: attr(data-label);
+            position: absolute;
+            left: 12px;
+            top: 12px;
+            width: 150px;
+            color: var(--family-sub);
+            font-weight: 1000;
+        }
+
+        .table-wrapper td.empty-row {
+            padding: 32px !important;
+            text-align: center !important;
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--family-sub);
+        }
+
+        .table-wrapper td.empty-row::before {
+            content: "";
+        }
+
+        .risk-high,
+        .risk-warn,
+        .risk-safe {
+            display: inline-flex;
+            align-items: center;
+            min-height: 38px;
+            padding: 8px 13px;
+            border-radius: 999px;
+            font-size: 17px;
+            font-weight: 1000;
+        }
+
+        .record-evidence-btn,
+        .record-detail-btn {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 48px !important;
+            padding: 11px 18px !important;
+            margin-top: 10px !important;
+            border-radius: 999px !important;
+            font-size: 17px !important;
+            font-weight: 1000 !important;
+            cursor: pointer !important;
+        }
+
+        .record-detail-btn {
+            background: #eff6ff !important;
+            color: #1d4ed8 !important;
+            border: 2px solid #bfdbfe !important;
+        }
+
+        .record-evidence-btn {
+            background: #fff7ed !important;
+            color: #9a3412 !important;
+            border: 2px solid #fed7aa !important;
+        }
+
+        .record-evidence-tag {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 8px;
+            margin-top: 10px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: #fff7ed;
+            color: #9a3412;
+            border: 1px solid #fed7aa;
+            font-size: 15px;
+            font-weight: 1000;
+        }
+
+        #btn-clear-logs {
+            min-height: 54px !important;
+            padding: 12px 22px !important;
+            border-radius: 999px !important;
+            background: #f8fafc !important;
+            border: 2px solid #cbd5e1 !important;
+            color: #334155 !important;
+            font-size: 17px !important;
+            font-weight: 1000 !important;
+        }
+
+        .detail-data-heading {
+            margin-bottom: 0;
+        }
+
+        .detail-data-heading p {
+            margin: 0;
+            padding: 0 22px 18px;
+            border-left: 2px solid #dbeafe;
+            border-right: 2px solid #dbeafe;
+            background: #ffffff;
+            color: var(--family-sub);
+            font-size: 18px;
+            font-weight: 800;
+            line-height: 1.6;
+        }
+
+        .detail-data-grid {
+            margin-top: 0 !important;
+            padding: 0;
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 18px !important;
+        }
+
+        .detail-data-grid .chart-container {
+            border: 2px solid #dbeafe !important;
+            border-radius: 26px !important;
+            background: #ffffff !important;
+            box-shadow: 0 14px 34px rgba(30, 58, 138, .08) !important;
+        }
+
+        .chart-title {
+            color: var(--family-text) !important;
+        }
+
+        #ai-evidence-modal button {
+            cursor: pointer;
+        }
+
+        @media (max-width: 900px) {
+            .family-dashboard,
+            .family-records,
+            .detail-data-heading,
+            .detail-data-grid,
+            .header {
+                max-width: none;
+            }
+
+            .family-head {
+                align-items: flex-start;
+            }
+
+            .family-shield {
+                display: none;
+            }
+
+            .family-main-actions,
+            .family-summary,
+            .detail-data-grid,
+            .family-settings .control-panel {
+                grid-template-columns: 1fr !important;
+            }
+
+            .family-status-main {
+                padding: 24px !important;
+            }
+
+            .table-wrapper td {
+                padding: 14px 12px 14px 42% !important;
+            }
+
+            .table-wrapper td::before {
+                width: 36%;
+            }
+        }
+
+    
+        /* === 家人回報可疑網站區塊 === */
+        .family-user-reports {
+            max-width: 1180px;
+            margin: 0 auto 28px;
+        }
+
+        .user-report-header {
+            border-radius: 28px 28px 0 0;
+            margin-bottom: 0;
+        }
+
+        #btn-clear-user-reports {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 2px solid #fed7aa;
+            font-size: 20px;
+            padding: 12px 18px;
+            box-shadow: none;
+        }
+
+        #btn-clear-user-reports:hover {
+            background: #ffedd5;
+            color: #7c2d12;
+        }
+
+        .user-report-list {
+            display: grid;
+            gap: 14px;
+            padding: 18px;
+            border: 2px solid var(--line-soft);
+            border-top: 0;
+            border-radius: 0 0 28px 28px;
+            background: #ffffff;
+            box-shadow: var(--shadow-card);
+        }
+
+        .user-report-card {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 16px;
+            align-items: center;
+            padding: 18px 20px;
+            border: 2px solid #fed7aa;
+            border-radius: 24px;
+            background: #fffaf2;
+        }
+
+        .user-report-title {
+            margin: 0 0 8px;
+            color: #7c2d12;
+            font-size: 22px;
+            font-weight: 1000;
+            line-height: 1.35;
+        }
+
+        .user-report-meta {
+            color: #475569;
+            font-size: 17px;
+            font-weight: 850;
+            line-height: 1.65;
+            word-break: break-word;
+        }
+
+        .user-report-reason {
+            margin-top: 8px;
+            color: #334155;
+            font-size: 17px;
+            font-weight: 850;
+            line-height: 1.6;
+        }
+
+        .user-report-actions {
+            display: grid;
+            gap: 10px;
+            min-width: 160px;
+        }
+
+        .user-report-actions button {
+            min-height: 48px;
+            padding: 11px 16px;
+            border-radius: 999px;
+            font-size: 17px;
+            font-weight: 1000;
+            cursor: pointer;
+        }
+
+        .btn-open-reported-page {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 2px solid #bfdbfe;
+        }
+
+        .btn-copy-reported-url {
+            background: #f8fafc;
+            color: #334155;
+            border: 2px solid #cbd5e1;
+        }
+
+        .user-report-empty {
+            padding: 26px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 22px;
+            color: #475569;
+            background: #f8fafc;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 900;
+        }
+
+        @media (max-width: 900px) {
+            .user-report-card {
+                grid-template-columns: 1fr;
+            }
+
+            .user-report-actions {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+    
+        /* === 誤報修正 / 安全名單回歸機制 === */
+        .false-positive-reviews {
+            max-width: 1180px;
+            margin: 0 auto 28px;
+        }
+
+        .false-positive-header {
+            border-radius: 28px 28px 0 0;
+            margin-bottom: 0;
+        }
+
+        #btn-clear-false-positive-reviews {
+            background: #ecfdf5;
+            color: #166534;
+            border: 2px solid #bbf7d0;
+            font-size: 20px;
+            padding: 12px 18px;
+            box-shadow: none;
+        }
+
+        #btn-clear-false-positive-reviews:hover {
+            background: #dcfce7;
+            color: #14532d;
+        }
+
+        .false-positive-list {
+            display: grid;
+            gap: 14px;
+            padding: 18px;
+            border: 2px solid var(--line-soft);
+            border-top: 0;
+            border-radius: 0 0 28px 28px;
+            background: #ffffff;
+            box-shadow: var(--shadow-card);
+        }
+
+        .false-positive-card {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 16px;
+            align-items: center;
+            padding: 18px 20px;
+            border: 2px solid #bbf7d0;
+            border-radius: 24px;
+            background: #f0fdf4;
+        }
+
+        .false-positive-title {
+            margin: 0 0 8px;
+            color: #14532d;
+            font-size: 22px;
+            font-weight: 1000;
+            line-height: 1.35;
+        }
+
+        .false-positive-meta {
+            color: #334155;
+            font-size: 17px;
+            font-weight: 850;
+            line-height: 1.65;
+            word-break: break-word;
+        }
+
+        .false-positive-note {
+            margin-top: 8px;
+            color: #166534;
+            font-size: 17px;
+            font-weight: 850;
+            line-height: 1.6;
+        }
+
+        .false-positive-actions {
+            display: grid;
+            gap: 10px;
+            min-width: 160px;
+        }
+
+        .false-positive-actions button,
+        .btn-mark-false-positive {
+            min-height: 48px;
+            padding: 11px 16px;
+            border-radius: 999px;
+            font-size: 17px;
+            font-weight: 1000;
+            cursor: pointer;
+        }
+
+        .btn-restore-domain {
+            background: #ffffff;
+            color: #166534;
+            border: 2px solid #86efac;
+        }
+
+        .btn-mark-false-positive {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 10px;
+            background: #f0fdf4;
+            color: #166534;
+            border: 2px solid #86efac;
+        }
+
+        .btn-mark-report-normal {
+            background: #f0fdf4;
+            color: #166534;
+            border: 2px solid #86efac;
+        }
+
+        .false-positive-empty {
+            padding: 26px;
+            border: 2px dashed #bbf7d0;
+            border-radius: 22px;
+            color: #166534;
+            background: #f0fdf4;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 900;
+        }
+
+        @media (max-width: 900px) {
+            .false-positive-card {
+                grid-template-columns: 1fr;
+            }
+
+            .false-positive-actions {
+                grid-template-columns: 1fr;
+            }
+        }
+
+    
+        /* === 合併版：回報與修正中心 === */
+        .family-review-center {
+            max-width: 1180px;
+            margin: 0 auto 28px;
+        }
+
+        .review-center-header {
+            border-radius: 28px 28px 0 0;
+            margin-bottom: 0;
+        }
+
+        .review-center-header > span {
+            white-space: nowrap;
+        }
+
+        .review-center-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .review-center-actions button,
+        #btn-clear-user-reports,
+        #btn-clear-false-positive-reviews {
+            min-height: 46px;
+            padding: 11px 17px;
+            border-radius: 999px;
+            font-size: 18px;
+            font-weight: 1000;
+            box-shadow: none;
+            cursor: pointer;
+        }
+
+        #btn-clear-user-reports {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 2px solid #fed7aa;
+        }
+
+        #btn-clear-user-reports:hover {
+            background: #ffedd5;
+            color: #7c2d12;
+        }
+
+        #btn-clear-false-positive-reviews {
+            background: #ecfdf5;
+            color: #166534;
+            border: 2px solid #bbf7d0;
+        }
+
+        #btn-clear-false-positive-reviews:hover {
+            background: #dcfce7;
+            color: #14532d;
+        }
+
+        .review-center-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 18px;
+            padding: 18px;
+            border: 2px solid var(--line-soft);
+            border-top: 0;
+            border-radius: 0 0 28px 28px;
+            background: #ffffff;
+            box-shadow: var(--shadow-card);
+        }
+
+        .review-panel {
+            min-width: 0;
+            border-radius: 24px;
+            border: 2px solid #dbeafe;
+            background: #f8fbff;
+            overflow: hidden;
+        }
+
+        .review-panel-warning {
+            border-color: #fed7aa;
+            background: #fffaf2;
+        }
+
+        .review-panel-safe {
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+
+        .review-panel-title {
+            padding: 18px 20px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, .26);
+        }
+
+        .review-panel-title span {
+            display: block;
+            color: #0f172a;
+            font-size: 22px;
+            font-weight: 1000;
+            line-height: 1.35;
+        }
+
+        .review-panel-title small {
+            display: block;
+            margin-top: 5px;
+            color: #475569;
+            font-size: 15px;
+            font-weight: 850;
+            line-height: 1.5;
+        }
+
+        .family-review-center .user-report-list,
+        .family-review-center .false-positive-list {
+            display: grid;
+            gap: 14px;
+            padding: 14px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .family-review-center .user-report-card,
+        .family-review-center .false-positive-card {
+            grid-template-columns: 1fr;
+            border-radius: 20px;
+            padding: 16px;
+            box-shadow: none;
+        }
+
+        .family-review-center .user-report-actions,
+        .family-review-center .false-positive-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .family-review-center .user-report-actions button,
+        .family-review-center .false-positive-actions button {
+            flex: 1 1 132px;
+        }
+
+        .family-review-center .user-report-empty,
+        .family-review-center .false-positive-empty {
+            padding: 22px;
+            border-radius: 20px;
+            font-size: 18px;
+        }
+
+        @media (max-width: 980px) {
+            .review-center-body {
+                grid-template-columns: 1fr;
+            }
+
+            .review-center-header {
+                align-items: flex-start;
+            }
+
+            .review-center-actions {
+                width: 100%;
+            }
+
+            .review-center-actions button {
+                flex: 1 1 180px;
+            }
+        }
+
+
+    
+        /* === 確認高風險 / 誤報回歸閉環 === */
+        .user-report-card.confirmed-risk {
+            background: #fff1f2 !important;
+            border-color: #fca5a5 !important;
+        }
+
+        .user-report-card.confirmed-risk .user-report-title {
+            color: #991b1b !important;
+        }
+
+        .btn-confirm-risk,
+        .btn-restore-pending {
+            min-height: 48px;
+            padding: 11px 16px;
+            border-radius: 999px;
+            font-size: 17px;
+            font-weight: 1000;
+            cursor: pointer;
+        }
+
+        .btn-confirm-risk {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #fca5a5;
+        }
+
+        .btn-confirm-risk:hover {
+            background: #fecaca;
+        }
+
+        .btn-restore-pending {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 2px solid #fed7aa;
+        }
+
+        .btn-restore-pending:hover {
+            background: #ffedd5;
+        }
+
+        .confirmed-risk-badge {
+            display: inline-flex;
+            align-items: center;
+            margin-top: 8px;
+            padding: 7px 11px;
+            border-radius: 999px;
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+            font-size: 15px;
+            font-weight: 1000;
+        }
+
     </style>
 </head>
 
-<body data-ai-shield-skip-scan="true">
+<body>
     <header class="header">
-        <div class="header-brand"><img class="dashboard-warning-icon" src="warning-new.png" alt="新版警示標誌"><h1>AI 防詐盾牌｜家庭戰情室</h1></div>
+        <div class="header-brand"><img class="dashboard-warning-icon" src="../assets/images/warning-new.png" alt="新版警示標誌"><h1>AI 防詐盾牌｜家庭防詐戰情室</h1></div>
         <div id="clock">--:--:--</div>
     </header>
 
-    <section class="control-panel" aria-label="守護者連線控制">
-        <label for="family-id-input">📡 守護者連線：</label>
-
-        <input
-            type="text"
-            id="family-id-input"
-            placeholder="輸入 6 碼"
-            maxlength="6"
-            autocomplete="off"
-            aria-label="家庭邀請碼"
-        >
-
-        <button id="btn-start" class="btn-start" type="button">▶️ 啟動即時監控</button>
-        <button id="btn-stop" class="btn-stop" type="button">⏹️ 斷開連線</button>
-        <button id="btn-manual" class="btn-manual" type="button">🔄 更新數據</button>
-
-        <div class="control-spacer" aria-hidden="true"></div>
-
-        <div id="connection-status" class="status-badge" aria-live="polite">
-            🔴 尚未連線 / 閒置中
+    <section class="family-dashboard" aria-label="家庭防詐戰情室首頁">
+        <div class="family-head">
+            <div>
+                <div class="family-chip">AI Family Shield</div>
+                <h2>家庭防詐戰情室</h2>
+                <p>讓家人一起看見風險、確認狀況、留下證據。</p>
+            </div>
+            <div class="family-shield" aria-hidden="true">
+                <span>🛡️</span>
+            </div>
         </div>
-    </section>
+
+        <section class="status-board family-status-main" aria-live="polite" aria-label="家庭目前狀態">
+            <h2><span id="summary-state-icon">⚪</span> 家庭目前狀態：<span id="summary-state-text">尚未連線</span></h2>
+            <p>
+                <span id="summary-state-note">請先確認家庭代碼，或按「更新畫面」同步最新狀態。</span>
+                <strong id="summary-blocked-count" hidden>0</strong>
+            </p>
+        </section>
+
+        <div class="family-main-actions" aria-label="主要操作">
+            <button id="btn-manual" class="btn-manual" type="button">更新畫面</button>
+            <button id="btn-classroom" class="btn-classroom" type="button">防詐教室</button>
+            <button id="btn-care-message" class="btn-care-main" type="button">傳給家人看</button>
+        </div>
 
     <section id="emergency-banner" role="alert" aria-live="assertive">
-        <img class="emergency-warning-icon" src="warning-new.png" alt="警示">[緊急警報] 您的家人剛剛瀏覽了高風險網頁，系統已強制攔截！
+        <img class="emergency-warning-icon" src="../assets/images/warning-new.png" alt="警示">[緊急警報] 您的家人剛剛瀏覽了高風險網頁，系統已強制攔截！
         <div
             id="emergency-detail"
             style="font-size: 20px; font-weight: 700; margin-top: 12px; color: rgba(255,255,255,1);"
         ></div>
     </section>
 
-    <section class="stats-boxes" aria-label="防護統計">
-        <div class="stat-box">
-            <div class="stat-title">總掃描次數</div>
-            <div class="stat-value" id="stat-total" data-target="0">0</div>
-        </div>
-
-        <div class="stat-box">
-            <div class="stat-title">安全放行</div>
-            <div class="stat-value val-safe" id="stat-safe" data-target="0">0</div>
-        </div>
-
-        <div class="stat-box">
-            <div class="stat-title">危險攔截</div>
-            <div class="stat-value val-danger" id="stat-danger" data-target="0">0</div>
-        </div>
-    </section>
-
-    <section class="dashboard-grid" aria-label="戰情圖表">
-        <div class="chart-container">
-            <div class="chart-title">🛡️ 防護狀態比例</div>
-            <canvas id="ratioChart" aria-label="防護狀態比例圖"></canvas>
-        </div>
-
-        <div class="chart-container">
-            <div class="chart-title">
-                <span>📈 近期風險趨勢（危險指數）</span>
+    
+        <section class="stats-boxes family-summary" aria-label="家庭防護摘要">
+            <div class="stat-box">
+                <div class="stat-title">今日檢查</div>
+                <div class="stat-value" id="stat-total" data-target="0">0</div>
+                <div class="stat-caption">已幫家人檢查的網頁與訊息</div>
             </div>
-            <canvas id="trendChart" aria-label="近期風險趨勢圖"></canvas>
-        </div>
+
+            <div class="stat-box">
+                <div class="stat-title">安全放行</div>
+                <div class="stat-value" id="stat-safe" data-target="0">0</div>
+                <div class="stat-caption">目前看起來沒有明顯危險</div>
+            </div>
+
+            <div class="stat-box">
+                <div class="stat-title">可疑紀錄待確認</div>
+                <div class="stat-value danger" id="stat-danger" data-target="0">0</div>
+                <div class="stat-caption">不用再開危險頁，直接看紀錄</div>
+            </div>
+        </section>
+
+        <details class="family-settings">
+            <summary>家庭設定與展示工具</summary>
+
+            <section class="control-panel" aria-label="家庭設定">
+                <label for="family-id-input">家庭代碼</label>
+
+                <input
+                    type="text"
+                    id="family-id-input"
+                    placeholder="輸入 6 碼"
+                    maxlength="6"
+                    autocomplete="off"
+                    aria-label="家庭邀請碼"
+                >
+
+                <button id="btn-start" class="btn-start" type="button">開始守護</button>
+                <button id="btn-stop" class="btn-stop" type="button">停止守護</button>
+                <button id="btn-demo-data" class="btn-demo" type="button">載入 Demo 資料</button>
+
+                <div class="line-push-test-card" aria-label="展示時 LINE 推播測試設定">
+                    <div>
+                        <strong>展示時通知 LINE</strong>
+                        <span id="line-push-test-status">已關閉：Demo 測試只進戰情室，不傳 LINE</span>
+                    </div>
+                    <label class="line-push-switch" title="開啟後，Demo / 本機檔案測試也會真的傳 LINE">
+                        <input id="line-push-test-toggle" type="checkbox" aria-label="展示時通知 LINE">
+                        <span class="line-push-slider" aria-hidden="true"></span>
+                    </label>
+                </div>
+
+                <div id="connection-status" class="status-badge" aria-live="polite">
+                    🔴 尚未連線 / 閒置中
+                </div>
+            </section>
+
+            <section id="demo-data-banner" class="demo-data-banner" aria-live="polite">
+                🎬 <strong>決賽展示資料模式：</strong>目前顯示固定 Demo 掃描紀錄，用來避免後端無資料或現場網路不穩時 Dashboard 空白。
+            </section>
+        </details>
     </section>
 
-    <section aria-label="詳細掃描紀錄">
+    <section class="family-records" aria-label="最近需要注意的紀錄">
         <div class="chart-title log-header">
-            <span>📜 詳細掃描紀錄（即時更新）</span>
+            <span>🧾 最近需要注意的紀錄</span>
 
             <button id="btn-clear-logs" type="button">
-                🧹 清除本機紀錄
+                清除本機紀錄
             </button>
         </div>
 
@@ -693,11 +2523,11 @@
             <table>
                 <thead>
                     <tr>
-                        <th>時間</th>
-                        <th>目標網址</th>
-                        <th>風險指數</th>
-                        <th>AI 心理分析與特徵</th>
-                        <th>系統狀態</th>
+                        <th scope="col">時間</th>
+                        <th scope="col">可疑網頁</th>
+                        <th scope="col">危險程度</th>
+                        <th scope="col">系統發現原因</th>
+                        <th scope="col">處理狀態</th>
                     </tr>
                 </thead>
 
@@ -712,6 +2542,69 @@
         </div>
     </section>
 
-    <script src="dashboard.js"></script>
+    <section class="family-review-center" aria-label="家人回報與誤報修正中心">
+        <div class="chart-title log-header review-center-header">
+            <span>🚩 回報與修正中心</span>
+
+            <div class="review-center-actions">
+                <button id="btn-clear-user-reports" type="button">
+                    清除本機回報
+                </button>
+                <button id="btn-clear-false-positive-reviews" type="button">
+                    清除修正紀錄
+                </button>
+            </div>
+        </div>
+
+        <div class="review-center-body">
+            <section class="review-panel review-panel-warning" aria-label="家人回報可疑網站">
+                <div class="review-panel-title">
+                    <span>家人回報可疑網站</span>
+                    <small>下次進入會主動提醒並提高風險權重</small>
+                </div>
+
+                <div id="user-report-list" class="user-report-list">
+                    <div class="user-report-empty">
+                        目前尚無家人回報的可疑網站。
+                    </div>
+                </div>
+            </section>
+
+            <section class="review-panel review-panel-safe" aria-label="誤報修正與安全名單">
+                <div class="review-panel-title">
+                    <span>誤報修正與安全名單</span>
+                    <small>確認正常後會降低誤報，可隨時恢復判斷</small>
+                </div>
+
+                <div id="false-positive-list" class="false-positive-list">
+                    <div class="false-positive-empty">
+                        目前尚無誤報修正紀錄。
+                    </div>
+                </div>
+            </section>
+        </div>
+    </section>
+<section class="detail-data-heading" aria-label="詳細數據說明">
+        <div class="chart-title log-header">
+            <span>📊 家人查看的詳細數據</span>
+        </div>
+        <p>以下圖表保留給家人或評審查看，日常判斷請優先看上方狀態與最近紀錄。</p>
+    </section>
+
+    <section class="dashboard-grid detail-data-grid" aria-label="家人查看的詳細數據">
+        <div class="chart-container">
+            <div class="chart-title">家人查看的防護狀態</div>
+            <canvas id="ratioChart" aria-label="AI 防護狀態圖"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">
+                <span>近期風險變化</span>
+            </div>
+            <canvas id="trendChart" aria-label="近期風險趨勢圖"></canvas>
+        </div>
+    </section>
+
+    <script src="../scripts/dashboard.js"></script>
 </body>
 </html>

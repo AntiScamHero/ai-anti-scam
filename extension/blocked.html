@@ -1,815 +1,257 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 防詐盾牌｜已攔截危險網頁</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 防詐盾牌｜已攔截危險網頁</title>
+  <style>
+    :root{
+      --navy:#082a5f;--blue:#1177ff;--cyan:#64d9ff;--red:#e52828;--green:#16b765;--green2:#0a9650;
+      --card:rgba(248,253,255,.92);--line:rgba(99,205,255,.55);--ink:#082a5f;--muted:#57708f;
+    }
+    *{box-sizing:border-box} html,body{margin:0;min-height:100vh}
+    body{
+      font-family:"Microsoft JhengHei","Segoe UI",system-ui,sans-serif;color:var(--ink);overflow-x:hidden;
+      background:
+        radial-gradient(circle at 18% 76%, rgba(30,155,255,.34), transparent 30%),
+        radial-gradient(circle at 76% 18%, rgba(120,210,255,.26), transparent 30%),
+        linear-gradient(135deg,#dff3ff 0%,#f7fcff 45%,#d6efff 100%);
+    }
+    body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.52;background-image:
+      linear-gradient(120deg,transparent 0 16%,rgba(21,139,255,.16) 16.2% 16.5%,transparent 16.8% 100%),
+      linear-gradient(30deg,transparent 0 67%,rgba(21,139,255,.18) 67.2% 67.5%,transparent 67.8% 100%),
+      radial-gradient(circle at 30% 24%,rgba(255,255,255,.9) 0 2px,transparent 3px),
+      radial-gradient(circle at 70% 70%,rgba(255,255,255,.8) 0 2px,transparent 3px);
+      background-size:420px 260px,520px 320px,180px 140px,220px 180px;
+    }
+    .page-shell{position:relative;z-index:1;width:min(1500px,100%);min-height:100vh;margin:0 auto;padding:34px 44px 26px;display:grid;grid-template-rows:auto 1fr auto;gap:22px}
+    .brand-row{display:flex;align-items:center;gap:18px;height:98px}.brand-shield{width:78px;height:92px;display:grid;place-items:center;color:#fff;font-size:40px;font-weight:1000;background:linear-gradient(145deg,#0b57b7,#0e84ff);clip-path:polygon(50% 0,92% 17%,82% 78%,50% 100%,18% 78%,8% 17%);filter:drop-shadow(0 10px 18px rgba(0,71,160,.25))}.brand-text b{display:block;font-size:48px;letter-spacing:1px;line-height:1}.brand-text span{display:block;margin-top:8px;font-size:22px;font-weight:900;letter-spacing:5px;color:#12427f}
+    .main-layout{display:grid;grid-template-columns:38% 62%;gap:30px;align-items:center;min-height:660px}
+    .left-col{min-height:650px;display:flex;align-items:center;justify-content:center;position:relative}.left-col::after{content:"";position:absolute;width:min(480px,88%);height:96px;bottom:44px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,163,255,.35),rgba(0,163,255,.06) 60%,transparent 72%);box-shadow:0 0 30px rgba(30,180,255,.28)}
+    .robot-img{position:relative;z-index:2;width:min(520px,95%);max-height:680px;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 28px 32px rgba(1,66,140,.26));animation:none!important;transform:none!important}.speech-bubble,.scenario-wrapper{display:none!important}
+    .right-col{position:relative;border-radius:42px;padding:48px 60px 34px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(236,249,255,.9));border:3px solid rgba(122,215,255,.65);box-shadow:0 28px 65px rgba(5,80,150,.22),inset 0 0 30px rgba(255,255,255,.8)}
+    .danger-tag,.warning-subtitle,.ai-source-pill{display:none!important}.hero-title{display:flex;align-items:center;justify-content:center;gap:22px;margin-bottom:30px;font-size:clamp(44px,4.6vw,68px);font-weight:1000;line-height:1.1;color:#082a5f;white-space:nowrap}.hero-title .danger-word{color:var(--red);text-shadow:0 4px 0 rgba(160,0,0,.08)}.warn-icon{width:86px;height:76px;flex:0 0 auto;background:linear-gradient(180deg,#ff3d3d,#df1717);clip-path:polygon(50% 0,100% 100%,0 100%);position:relative;filter:drop-shadow(0 10px 14px rgba(220,0,0,.18))}.warn-icon::before{content:"!";position:absolute;left:0;right:0;top:12px;text-align:center;color:white;font-size:56px;font-weight:1000}.risk-score-display{margin:0 auto 28px;width:88%;min-height:126px;border-radius:28px;display:flex;align-items:center;justify-content:center;gap:36px;background:linear-gradient(180deg,#fff0f4,#ffe5eb);border:2px solid rgba(236,80,100,.18);font-size:clamp(34px,3.2vw,52px);font-weight:1000;color:#082a5f}.risk-score-display span{font-size:clamp(76px,7.2vw,122px);line-height:.8;color:#df1717;font-weight:1000;letter-spacing:-3px}.risk-score-display::after{content:"%";font-size:clamp(42px,4vw,70px);color:#df1717;font-weight:1000;margin-left:-26px}.divider{height:2px;background:linear-gradient(90deg,transparent,rgba(16,90,160,.25),transparent);margin:8px 0 28px}.dont-title{display:flex;align-items:center;gap:14px;font-size:clamp(28px,2.8vw,42px);font-weight:1000;margin-bottom:28px}.no-symbol{width:48px;height:48px;border:6px solid var(--red);border-radius:50%;position:relative;display:inline-block}.no-symbol::after{content:"";position:absolute;width:44px;height:6px;background:var(--red);left:-4px;top:15px;transform:rotate(45deg);border-radius:999px}.warning-icons{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin:0 20px 30px}.warning-item{text-align:center;position:relative}.warning-item:not(:last-child)::after{content:"";position:absolute;right:-14px;top:18%;height:65%;width:2px;background:rgba(8,42,95,.14)}.icon-circle{width:132px;height:132px;margin:0 auto 12px;border:8px solid var(--red);border-radius:50%;display:grid;place-items:center;position:relative;background:rgba(255,255,255,.55)}.icon-circle::after{content:"";position:absolute;width:116px;height:8px;background:var(--red);border-radius:999px;transform:rotate(45deg)}.css-id{width:62px;height:46px;border:6px solid #0b356f;border-radius:8px;position:relative}.css-id::before{content:"";position:absolute;left:10px;top:8px;width:14px;height:14px;border-radius:50%;background:#0b356f}.css-id::after{content:"";position:absolute;left:32px;top:11px;width:18px;height:5px;background:#0b356f;box-shadow:0 13px 0 #0b356f}.css-card{width:68px;height:46px;border-radius:8px;background:#0b356f;position:relative}.css-card::before{content:"";position:absolute;left:0;right:0;top:10px;height:8px;background:#f0b740}.css-card::after{content:"";position:absolute;left:11px;bottom:9px;width:25px;height:5px;background:#fff;border-radius:2px}.css-qr{width:62px;height:62px;border:6px solid #0b356f;background:repeating-linear-gradient(90deg,#0b356f 0 6px,transparent 6px 12px),repeating-linear-gradient(0deg,transparent 0 6px,#0b356f 6px 12px);opacity:.96}.warning-item b{font-size:clamp(20px,1.8vw,28px);font-weight:1000;color:#082a5f;white-space:nowrap}.action-panel{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;margin:0!important}.action-title{display:none}.btn-safe{width:88%;height:104px;margin:0 auto 20px;border:0;border-radius:999px;background:linear-gradient(180deg,#2fd485,#079952);color:white;font-size:clamp(42px,4vw,58px);font-weight:1000;display:flex;align-items:center;justify-content:center;gap:26px;box-shadow:0 18px 30px rgba(1,143,79,.28),inset 0 3px 0 rgba(255,255,255,.35);cursor:pointer}.btn-safe::before{content:"";width:62px;height:62px;background:#fff;border-radius:18px;mask:linear-gradient(#000 0 0);position:relative}.btn-safe .safe-icon{display:none}.btn-safe::after{content:"›";font-size:74px;line-height:1;font-weight:600;margin-left:auto;margin-right:34px}.detail-toggle-btn{display:block;margin:0 auto;border:0;background:transparent;color:#082a5f;font-size:clamp(22px,2vw,32px);font-weight:1000;cursor:pointer}.detail-toggle-btn::after{content:"⌄";margin-left:12px;font-size:1.2em}.progressive-detail{display:none;margin-top:28px;max-height:48vh;overflow:auto;padding-right:8px}.progressive-detail.open{display:block}.intercept-detail-card,.community-status-card,.ai-consultant-box,.incident-report-card{background:rgba(255,255,255,.88);border:1px solid rgba(30,120,210,.18);border-radius:22px;padding:18px;margin:14px 0;box-shadow:0 12px 25px rgba(8,42,95,.08)}.intercept-detail-title,.community-status-title,.ai-consultant-title,.incident-report-title{font-size:22px;font-weight:1000;color:#082a5f}.intercept-grid,.community-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.intercept-item,.community-status-item{background:#fff;border-radius:14px;padding:12px;border:1px solid rgba(8,42,95,.1)}.intercept-item.full{grid-column:1/-1}.intercept-label,.community-status-label{font-size:13px;color:#617695;font-weight:900}.intercept-value,.community-status-value{font-size:15px;font-weight:900;word-break:break-word}.detail-tags{display:flex;flex-wrap:wrap;gap:8px}.detail-tag{background:#ffe9e9;color:#b91c1c;border-radius:999px;padding:6px 10px;font-weight:900;font-size:13px}.sync-note,.community-status-note,.incident-report-text{font-size:14px;line-height:1.6;color:#526b83;font-weight:850}.community-refresh-btn,.incident-report-btn{border:0;border-radius:999px;padding:12px 18px;background:#e8f3ff;color:#082a5f;font-weight:1000;cursor:pointer}.ai-consultant-list{margin:12px 0;padding-left:22px}.ai-consultant-list li{margin:8px 0;font-weight:850}.ai-consultant-toggle{border:0;border-radius:999px;padding:12px 18px;background:#fff1c7;color:#7a5100;font-weight:1000;cursor:pointer}.ai-consultant-detail,.official-citations{display:none;margin-top:12px}.advanced-actions-toggle{position:fixed;right:44px;bottom:24px;z-index:20;border:1px solid rgba(255,255,255,.75);border-radius:999px;padding:20px 34px;background:rgba(235,247,255,.86);backdrop-filter:blur(10px);color:#082a5f;font-size:28px;font-weight:1000;box-shadow:0 12px 30px rgba(8,42,95,.18);cursor:pointer}.advanced-actions-toggle::before{content:"⚙ ";}.false-positive-actions{display:block;background:rgba(255,251,234,.98);border:2px dashed rgba(255,159,28,.48);border-radius:22px;padding:16px;margin-top:18px;text-align:center}.false-positive-actions.collapsed{display:none}.false-positive-title,.btn-text{font-size:16px;font-weight:900}.btn-text{display:block;width:100%;border:0;background:transparent;text-decoration:underline;color:#526b83;margin-top:10px;cursor:pointer}.pin-input{flex:1;padding:14px;border-radius:14px;border:2px solid rgba(8,42,95,.16);font-size:22px;text-align:center;letter-spacing:8px}.bottom-tip{display:flex;align-items:center;justify-content:flex-start;gap:18px;width:min(920px,70%);min-height:78px;border-radius:999px;background:rgba(239,249,255,.86);border:1px solid rgba(255,255,255,.85);box-shadow:0 12px 30px rgba(8,42,95,.14);padding:16px 34px;color:#082a5f;font-size:clamp(22px,2vw,31px);font-weight:1000}.bottom-tip .tip-icon{font-size:36px}.bottom-tip .red{color:#e52828}.url-display{display:none}#family-broadcast{display:none;margin-bottom:10px;padding:14px;border-radius:18px;background:#fff8d9;border:2px solid #ffd84d;text-align:center}#reason-box,#dna-box,#tags-container,#advice,#original-url{display:none}
+    @media(max-width:980px){.page-shell{padding:22px;display:block}.brand-row{height:auto;margin-bottom:14px}.brand-text b{font-size:34px}.brand-text span{font-size:16px}.main-layout{grid-template-columns:1fr;gap:14px}.left-col{min-height:auto}.robot-img{width:min(330px,74vw)}.right-col{padding:28px 18px;border-radius:28px}.hero-title{font-size:34px;white-space:normal;gap:12px}.warn-icon{width:58px;height:52px}.warn-icon::before{font-size:38px;top:8px}.risk-score-display{width:100%;gap:14px;font-size:28px}.risk-score-display span{font-size:72px}.warning-icons{gap:10px;margin-inline:0}.icon-circle{width:92px;height:92px}.icon-circle::after{width:82px}.warning-item b{font-size:16px}.btn-safe{width:100%;height:82px;font-size:34px}.advanced-actions-toggle{position:static;width:100%;margin-top:12px;font-size:20px}.bottom-tip{width:100%;font-size:18px;margin-top:14px}.intercept-grid,.community-status-grid{grid-template-columns:1fr}}
 
-    <style>
-        :root {
-            --bg-a: #f0fbff;
-            --bg-b: #fff8e7;
-            --bg-c: #f5fff2;
-            --card: rgba(255,255,255,.94);
-            --ink: #0d2b4f;
-            --sub: #526b83;
-            --blue: #2388ff;
-            --green: #22c55e;
-            --green-dark: #15803d;
-            --red: #ef4444;
-            --red-dark: #b91c1c;
-            --yellow: #ffd84d;
-            --orange: #ff9f1c;
-            --line: rgba(35,136,255,.18);
-            --soft-blue: rgba(35,136,255,.10);
-            --soft-green: rgba(34,197,94,.12);
-            --soft-red: rgba(239,68,68,.10);
-            --shadow: rgba(20,75,130,.18);
-        }
-
-        * { box-sizing: border-box; }
-        html, body { margin: 0; min-height: 100vh; }
-        body {
-            color: var(--ink);
-            font-family: "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
-            background:
-                radial-gradient(circle at 12% 12%, rgba(35,136,255,.18), transparent 30%),
-                radial-gradient(circle at 88% 18%, rgba(34,197,94,.18), transparent 28%),
-                radial-gradient(circle at 10% 86%, rgba(255,216,77,.30), transparent 30%),
-                linear-gradient(135deg, var(--bg-a), var(--bg-b) 48%, var(--bg-c));
-            padding: clamp(16px, 3vw, 34px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .page-shell { width: min(1180px, 100%); }
-        .main-layout {
-            display: grid;
-            grid-template-columns: minmax(330px, .92fr) minmax(420px, 1.08fr);
-            gap: clamp(22px, 4vw, 48px);
-            align-items: stretch;
-        }
-
-        .left-col, .right-col {
-            min-width: 0;
-            background: var(--card);
-            border: 1px solid var(--line);
-            border-radius: 34px;
-            box-shadow: 0 26px 70px var(--shadow);
-        }
-
-        .left-col {
-            padding: clamp(22px, 3vw, 36px);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 18px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .left-col::after {
-            content: "";
-            position: absolute;
-            width: 280px;
-            height: 280px;
-            border-radius: 50%;
-            background: rgba(255,216,77,.30);
-            right: -90px;
-            bottom: -110px;
-            pointer-events: none;
-        }
-
-        .right-col {
-            padding: clamp(22px, 3vw, 34px);
-        }
-
-        .speech-bubble {
-            width: min(390px, 100%);
-            background: #ffffff;
-            border: 3px solid rgba(35,136,255,.35);
-            border-radius: 28px;
-            padding: 18px 22px;
-            font-size: clamp(22px, 2.3vw, 30px);
-            font-weight: 1000;
-            color: var(--ink);
-            line-height: 1.45;
-            box-shadow: 0 18px 38px rgba(35,136,255,.16);
-            cursor: pointer;
-            user-select: none;
-            position: relative;
-            z-index: 1;
-        }
-        .speech-bubble span { font-size: 34px !important; }
-        .speech-bubble:hover, .speech-bubble:focus-visible { outline: none; transform: translateY(-2px); }
-
-        .robot-img {
-            width: min(390px, 82vw);
-            max-width: 100%;
-            margin-top: 22px;
-            filter: drop-shadow(0 28px 34px rgba(35,136,255,.24));
-            animation: robotFloat 4.4s ease-in-out infinite;
-            transform-origin: center bottom;
-            cursor: pointer;
-            user-select: none;
-            position: relative;
-            z-index: 1;
-        }
-        @keyframes robotFloat {
-            0%, 100% { transform: translateY(0) rotate(-1deg); }
-            50% { transform: translateY(-12px) rotate(1deg); }
-        }
-
-        .danger-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 15px;
-            border-radius: 999px;
-            background: var(--soft-red);
-            color: var(--red-dark);
-            border: 1px solid rgba(239,68,68,.22);
-            font-size: 20px;
-            font-weight: 1000;
-            margin-bottom: 12px;
-        }
-        .danger-tag::before { content: ""; width: 30px; height: 30px; background: url("warning-new.png") center / contain no-repeat; display: inline-block; flex: 0 0 30px; }
-
-        .risk-score-display {
-            font-size: clamp(30px, 3vw, 42px);
-            font-weight: 1000;
-            line-height: 1.15;
-            margin: 4px 0 10px;
-            color: var(--ink);
-        }
-        .risk-score-display span {
-            font-size: clamp(54px, 7vw, 86px);
-            color: var(--red);
-            letter-spacing: -2px;
-        }
-        .warning-subtitle {
-            font-size: clamp(20px, 2.2vw, 28px);
-            line-height: 1.45;
-            color: var(--red-dark);
-            font-weight: 1000;
-            margin: 0 0 18px;
-        }
-
-        .ai-source-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 9px 13px;
-            border-radius: 999px;
-            background: var(--soft-blue);
-            border: 1px solid rgba(35,136,255,.22);
-            color: #1767c8;
-            font-size: 16px;
-            font-weight: 1000;
-            margin-bottom: 14px;
-        }
-
-        .ai-consultant-box {
-            background: linear-gradient(135deg, rgba(35,136,255,.12), rgba(34,197,94,.12));
-            border: 2px solid rgba(35,136,255,.22);
-            border-radius: 28px;
-            padding: clamp(18px, 2.5vw, 24px);
-            margin: 14px 0 18px;
-            color: var(--ink);
-            box-shadow: 0 16px 34px rgba(20,75,130,.10);
-        }
-        .ai-consultant-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
-        .ai-consultant-avatar {
-            width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center;
-            background: #ffffff; color: var(--blue); font-size: 30px; flex: 0 0 auto;
-            border: 2px solid rgba(35,136,255,.20);
-            box-shadow: 0 10px 22px rgba(35,136,255,.14);
-        }
-        .ai-consultant-title { font-size: clamp(24px, 2.4vw, 32px); font-weight: 1000; line-height: 1.2; color: var(--ink); }
-        .ai-consultant-summary { font-size: clamp(20px, 2vw, 25px); line-height: 1.55; color: #244762; font-weight: 950; margin-top: 4px; }
-        .ai-diagnostic-badge {
-            display: inline-flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 9px 13px;
-            border-radius: 999px; background: #fff7d6; border: 1px solid rgba(255,159,28,.35);
-            color: #8a5200; font-size: 17px; font-weight: 1000;
-        }
-        .ai-consultant-list { margin: 13px 0 0; padding: 0; list-style: none; display: grid; gap: 11px; }
-        .ai-consultant-list li {
-            background: #ffffff; border: 1px solid rgba(35,136,255,.18); border-radius: 18px;
-            padding: 14px 15px; font-size: clamp(18px, 1.8vw, 22px); line-height: 1.5; font-weight: 900;
-            box-shadow: 0 8px 20px rgba(20,75,130,.07);
-        }
-        .ai-consultant-list li::before { content: "🔴 "; }
-        .ai-consultant-toggle {
-            margin-top: 16px; width: 100%; border: 0; border-radius: 999px; padding: 15px 18px;
-            background: linear-gradient(135deg, var(--yellow), #ffb703); color: #1f2937;
-            font-size: clamp(19px, 2vw, 23px); font-weight: 1000; cursor: pointer;
-            box-shadow: 0 12px 24px rgba(255,183,3,.20);
-        }
-        .ai-consultant-detail {
-            display: none; margin-top: 14px; background: rgba(255,255,255,.82); border: 1px solid rgba(35,136,255,.18);
-            border-radius: 18px; padding: 16px; color: var(--ink); font-size: 18px; line-height: 1.7; font-weight: 850;
-        }
-        .ai-consultant-detail-title { color: #1767c8; font-weight: 1000; margin: 12px 0 6px; font-size: 19px; }
-        .ai-consultant-detail-section { margin-top: 8px; }
-
-        .official-citations {
-            display:none; margin-top:14px; background:rgba(34,197,94,.10); border:1px solid rgba(34,197,94,.28);
-            border-radius:18px; padding:14px 16px; color:#134e2b; font-size:17px; line-height:1.6; font-weight:850;
-        }
-        .official-citations-title { color: var(--green-dark); font-weight:1000; margin-bottom:8px; }
-        .official-citations-list { margin:0; padding-left:20px; display:grid; gap:6px; }
+    /* === 品牌盾牌改為 SVG 手繪版：不用圖片，接近正式 logo 盾牌 === */
+    .brand-shield{
+      width:78px !important;
+      height:92px !important;
+      display:block !important;
+      background:none !important;
+      clip-path:none !important;
+      filter:none !important;
+      flex:0 0 auto !important;
+    }
+    .brand-shield-svg{
+      width:100%;
+      height:100%;
+      display:block;
+      overflow:visible;
+    }
 
 
-
-        .intercept-detail-card {
-            background: rgba(255,255,255,.90);
-            border: 2px solid rgba(239,68,68,.16);
-            border-radius: 26px;
-            padding: 18px;
-            margin: 14px 0 18px;
-            box-shadow: 0 14px 30px rgba(20,75,130,.09);
-        }
-        .intercept-detail-title {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            color: var(--ink);
-            font-size: clamp(21px, 2.1vw, 27px);
-            font-weight: 1000;
-            margin-bottom: 12px;
-        }
-        .intercept-detail-title small {
-            color: var(--red-dark);
-            font-size: 14px;
-            white-space: nowrap;
-            background: var(--soft-red);
-            border: 1px solid rgba(239,68,68,.18);
-            border-radius: 999px;
-            padding: 6px 10px;
-        }
-        .intercept-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-        }
-        .intercept-item {
-            background: #ffffff;
-            border: 1px solid rgba(35,136,255,.15);
-            border-radius: 18px;
-            padding: 13px 14px;
-            min-width: 0;
-        }
-        .intercept-item.full { grid-column: 1 / -1; }
-        .intercept-label {
-            color: var(--sub);
-            font-size: 14px;
-            font-weight: 1000;
-            margin-bottom: 6px;
-        }
-        .intercept-value {
-            color: var(--ink);
-            font-size: 16px;
-            font-weight: 900;
-            line-height: 1.55;
-            word-break: break-word;
-            white-space: pre-wrap;
-        }
-        .intercept-value.danger { color: var(--red-dark); }
-        .intercept-value.safe { color: var(--green-dark); }
-        .detail-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 7px;
-            margin-top: 4px;
-        }
-        .detail-tag {
-            display: inline-flex;
-            align-items: center;
-            border-radius: 999px;
-            padding: 7px 10px;
-            background: var(--soft-red);
-            color: var(--red-dark);
-            border: 1px solid rgba(239,68,68,.17);
-            font-size: 14px;
-            font-weight: 1000;
-            line-height: 1.25;
-        }
-        .sync-note {
-            margin-top: 12px;
-            padding: 12px 14px;
-            background: rgba(34,197,94,.10);
-            color: #134e2b;
-            border: 1px solid rgba(34,197,94,.25);
-            border-radius: 16px;
-            font-size: 15px;
-            line-height: 1.55;
-            font-weight: 900;
-        }
-
-        .community-status-card {
-            background: rgba(255,255,255,.90);
-            border: 2px solid rgba(138,43,226,.16);
-            border-radius: 26px;
-            padding: 18px;
-            margin: 14px 0 18px;
-            box-shadow: 0 14px 30px rgba(20,75,130,.09);
-        }
-        .community-status-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-        .community-status-title {
-            color: var(--ink);
-            font-size: clamp(21px, 2.1vw, 27px);
-            font-weight: 1000;
-        }
-        .community-status-pill {
-            color: #5d3a7a;
-            background: rgba(138,43,226,.10);
-            border: 1px solid rgba(138,43,226,.18);
-            border-radius: 999px;
-            padding: 7px 11px;
-            font-size: 14px;
-            font-weight: 1000;
-            white-space: nowrap;
-        }
-        .community-status-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
-        }
-        .community-status-item {
-            background: #ffffff;
-            border: 1px solid rgba(35,136,255,.15);
-            border-radius: 18px;
-            padding: 13px 14px;
-            min-width: 0;
-        }
-        .community-status-label {
-            color: var(--sub);
-            font-size: 14px;
-            font-weight: 1000;
-            margin-bottom: 6px;
-        }
-        .community-status-value {
-            color: var(--ink);
-            font-size: 16px;
-            font-weight: 1000;
-            line-height: 1.55;
-            word-break: break-word;
-        }
-        .community-status-value.warn { color: #8a5200; }
-        .community-status-value.danger { color: var(--red-dark); }
-        .community-status-note {
-            margin-top: 12px;
-            padding: 12px 14px;
-            background: rgba(138,43,226,.08);
-            color: #4b286d;
-            border: 1px solid rgba(138,43,226,.18);
-            border-radius: 16px;
-            font-size: 15px;
-            line-height: 1.55;
-            font-weight: 900;
-        }
-        .community-refresh-btn {
-            margin-top: 12px;
-            border: 0;
-            background: rgba(138,43,226,.12);
-            color: #4b286d;
-            border-radius: 999px;
-            padding: 10px 14px;
-            font-weight: 1000;
-            cursor: pointer;
-        }
-
-        .action-panel {
-            border: 2px solid rgba(255,216,77,.90);
-            border-radius: 28px;
-            background: rgba(255,255,255,.88);
-            padding: 20px;
-            margin-top: 16px;
-            box-shadow: 0 16px 34px rgba(20,75,130,.10);
-        }
-        .action-title {
-            font-size: clamp(22px, 2.3vw, 30px);
-            text-align: center;
-            font-weight: 1000;
-            color: var(--ink);
-            margin-bottom: 16px;
-        }
-        .btn-safe, .btn-165 {
-            width: 100%; min-height: 64px; border-radius: 999px; border: 0; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; text-decoration: none;
-            font-size: clamp(22px, 2.2vw, 28px); font-weight: 1000;
-            transition: transform .16s ease, filter .16s ease;
-            margin: 12px 0;
-        }
-        .btn-safe { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: white; box-shadow: 0 15px 28px rgba(34,197,94,.24); }
-        .btn-165 { background: #fff; color: var(--red-dark); border: 2px solid var(--red); box-shadow: 0 12px 24px rgba(239,68,68,.10); }
-        .btn-safe:hover, .btn-165:hover, .btn-safe:focus-visible, .btn-165:focus-visible { transform: translateY(-2px); filter: brightness(1.03); outline: none; }
-
-        .false-positive-actions {
-            width: 100%; margin-top: 16px; padding: 16px; border: 2px dashed rgba(255,159,28,.42);
-            border-radius: 22px; background: #fffbea; text-align: center;
-        }
-        .false-positive-title { color: #8a5200; font-size: 18px; line-height: 1.5; margin-bottom: 8px; font-weight: 1000; }
-        .btn-text {
-            background: none; border: none; color: var(--sub); font-size: 17px; text-decoration: underline;
-            cursor: pointer; width: 100%; margin-top: 12px; line-height: 1.45; font-weight: 900;
-        }
-        #continue-once-btn { color: #8a5200; font-size: 18px; }
-        #report-false-btn { color: var(--green-dark); font-size: 18px; }
-        #bypass-btn { color: #7c8796; }
-
-        .scenario-wrapper {
-            position: relative;
-            z-index: 1;
-            width: min(430px, 100%);
-            margin-top: 8px;
-            border: 1px solid rgba(35,136,255,.18);
-            border-radius: 24px;
-            background: rgba(255,255,255,.82);
-            overflow: hidden;
-        }
-        .scenario-toggle {
-            width: 100%; border: 0; background: transparent; cursor: pointer; padding: 17px 18px;
-            display: flex; align-items: center; justify-content: space-between; gap: 14px;
-            color: var(--ink); font-size: clamp(20px, 2vw, 25px); font-weight: 1000; text-align: left;
-        }
-        .scenario-toggle small { color: #1767c8; font-size: 15px; white-space: nowrap; }
-        .scenario-panel { display: none; padding: 0 16px 18px; }
-        .scenario-panel.open { display: block; }
-        .chat-header {
-            font-size: 18px; color: #1767c8; font-weight: 1000; margin-bottom: 12px; text-align: left;
-            border-bottom: 1px solid rgba(35,136,255,.16); padding-bottom: 10px; display: flex;
-            justify-content: space-between; align-items: center; gap: 12px;
-        }
-        .chat-status { font-size: 14px; color: var(--green-dark); white-space: nowrap; }
-        .chat-container { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; scroll-behavior: smooth; }
-        .msg-row { display: flex; gap: 10px; align-items: flex-start; }
-        .msg-row.right { flex-direction: row-reverse; }
-        .msg-avatar {
-            width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            font-size: 26px; flex-shrink: 0; border: 2px solid rgba(35,136,255,.18); background: #fff;
-        }
-        .avatar-scammer { border-color: rgba(239,68,68,.35); }
-        .avatar-victim { border-color: rgba(34,197,94,.35); }
-        img.img-avatar { width: 60px !important; height: 60px !important; object-fit: cover; object-position: center 10%; background: #ffffff; padding: 0; border-width: 2px !important; }
-        .msg-content { display: flex; flex-direction: column; max-width: 75%; }
-        .msg-row.right .msg-content { align-items: flex-end; }
-        .msg-name { font-size: 14px; color: var(--sub); margin-bottom: 5px; padding: 0 5px; font-weight: 900; }
-        .msg-bubble { padding: 13px 16px; border-radius: 18px; font-size: 17px; line-height: 1.5; font-weight: 900; word-break: break-word; white-space: pre-wrap; }
-        .bubble-scammer { background: #ffe8e8; color: #8f1d1d; border-top-left-radius: 4px; border: 1px solid rgba(239,68,68,.18); }
-        .bubble-victim { background: #e8f4ff; color: #154d8b; border-top-right-radius: 4px; border: 1px solid rgba(35,136,255,.18); }
-        .bubble-system { background: #fff8d9; border: 1px solid rgba(255,159,28,.28); color: #7c4a00; border-top-left-radius: 4px; }
-
-        .url-display { margin-top: 18px; color: var(--sub); font-size: 13px; word-break: break-all; text-align: center; line-height: 1.6; }
-        #reason-box, #dna-box, #tags-container, #advice, #original-url { display: none; }
-
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-        .modal-content { background: #fff; color: var(--ink); padding: 34px; border-radius: 28px; text-align: center; border: 2px solid var(--yellow); max-width: 420px; width: 100%; box-shadow: 0 28px 70px rgba(0,0,0,.25); }
-        .modal-number { font-size: 58px; font-weight: 1000; color: var(--red); margin: 18px 0; background: #fff4f4; padding: 12px; border-radius: 16px; }
-        .pin-input { flex: 1; padding: 14px; border-radius: 15px; border: 2px solid rgba(35,136,255,.18); background: #fff; color: var(--ink); font-size: 24px; text-align: center; letter-spacing: 10px; outline: none; width: 100%; }
-        .pin-input:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(35,136,255,.10); }
-
-        #family-broadcast { display:none; margin-bottom:18px; padding:15px; background:#fff8d9; border:2px solid var(--yellow); border-radius:18px; width:100%; text-align:center; }
+    /* === 安全離開按鈕：科技感版本，倒數獨立顯示 === */
+    #manual-leave-btn{
+      width:88% !important;
+      min-height:96px !important;
+      height:96px !important;
+      padding:0 92px !important;
+      margin:0 auto 8px !important;
+      border-radius:999px !important;
+      background:linear-gradient(180deg,#2fd485 0%,#08a85b 58%,#07894c 100%) !important;
+      color:#fff !important;
+      font-size:clamp(38px,3.2vw,54px) !important;
+      font-weight:1000 !important;
+      line-height:1 !important;
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      gap:0 !important;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      position:relative !important;
+      box-shadow:0 20px 36px rgba(1,143,79,.30), inset 0 3px 0 rgba(255,255,255,.32) !important;
+    }
+    #manual-leave-btn::before{
+      display:none !important;
+      content:none !important;
+    }
+    #manual-leave-btn::after{
+      content:"›" !important;
+      position:absolute !important;
+      right:34px !important;
+      top:50% !important;
+      transform:translateY(-50%) !important;
+      margin:0 !important;
+      font-size:72px !important;
+      line-height:1 !important;
+      font-weight:700 !important;
+      color:#fff !important;
+      opacity:.95 !important;
+    }
+    #manual-leave-btn .btn-main{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:16px;
+      pointer-events:none;
+    }
+    .auto-leave-countdown{
+      width:88%;
+      margin:10px auto 20px;
+      text-align:center;
+      font-size:clamp(18px,1.6vw,24px);
+      font-weight:900;
+      color:#315f8e;
+      line-height:1.4;
+      letter-spacing:.5px;
+    }
+    @media(max-width:980px){
+      #manual-leave-btn{
+        width:100% !important;
+        min-height:78px !important;
+        height:78px !important;
+        padding:0 64px !important;
+        font-size:clamp(28px,7vw,36px) !important;
+      }
+      #manual-leave-btn::after{
+        right:24px !important;
+        font-size:52px !important;
+      }
+      #manual-leave-btn .btn-main{
+        gap:10px;
+      }
+      .auto-leave-countdown{
+        width:100%;
+        margin:8px auto 16px;
+        font-size:17px;
+      }
+    }
 
 
+    /* === 安全離開按鈕：乾淨版，不顯示倒數 === */
+    #manual-leave-btn{
+      width:88% !important;
+      min-height:96px !important;
+      height:96px !important;
+      padding:0 92px !important;
+      margin:0 auto 20px !important;
+      border-radius:999px !important;
+      background:linear-gradient(180deg,#2fd485 0%,#08a85b 58%,#07894c 100%) !important;
+      color:#fff !important;
+      font-size:clamp(38px,3.2vw,54px) !important;
+      font-weight:1000 !important;
+      line-height:1 !important;
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      position:relative !important;
+      box-shadow:0 20px 36px rgba(1,143,79,.30), inset 0 3px 0 rgba(255,255,255,.32) !important;
+    }
+    #manual-leave-btn::before{
+      display:none !important;
+      content:none !important;
+    }
+    #manual-leave-btn::after{
+      content:"›" !important;
+      position:absolute !important;
+      right:34px !important;
+      top:50% !important;
+      transform:translateY(-50%) !important;
+      margin:0 !important;
+      font-size:72px !important;
+      line-height:1 !important;
+      font-weight:700 !important;
+      color:#fff !important;
+      opacity:.95 !important;
+    }
+    #manual-leave-btn .btn-main{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:16px;
+      pointer-events:none;
+    }
+    .auto-leave-countdown{
+      display:none !important;
+    }
+    @media(max-width:980px){
+      #manual-leave-btn{
+        width:100% !important;
+        min-height:78px !important;
+        height:78px !important;
+        padding:0 64px !important;
+        font-size:clamp(28px,7vw,36px) !important;
+      }
+      #manual-leave-btn::after{
+        right:24px !important;
+        font-size:52px !important;
+      }
+      #manual-leave-btn .btn-main{
+        gap:10px;
+      }
+    }
 
-        /* ==============================
-           老人友善：第一眼只看重點，詳細資料漸進揭露
-           ============================== */
-        .right-col {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .danger-tag { order: 1; }
-        .risk-score-display { order: 2; }
-        .warning-subtitle { order: 3; }
-        .ai-source-pill { order: 4; }
-
-        .elder-summary-card {
-            order: 5;
-            background: rgba(239,68,68,.08);
-            border: 2px solid rgba(239,68,68,.18);
-            border-radius: 24px;
-            padding: 18px 20px;
-            margin: 8px 0 14px;
-            box-shadow: 0 12px 26px rgba(239,68,68,.08);
-        }
-        .elder-summary-title {
-            font-size: clamp(24px, 2.5vw, 34px);
-            font-weight: 1000;
-            color: var(--red-dark);
-            margin-bottom: 10px;
-        }
-        .elder-summary-list {
-            margin: 0;
-            padding-left: 0;
-            list-style: none;
-            display: grid;
-            gap: 10px;
-        }
-        .elder-summary-list li {
-            font-size: clamp(20px, 2vw, 26px);
-            font-weight: 1000;
-            line-height: 1.45;
-            color: var(--ink);
-        }
-        .elder-summary-list li::before {
-            content: "✓ ";
-            color: var(--red);
-            font-weight: 1000;
-        }
-
-        .action-panel {
-            order: 6;
-            margin-top: 10px;
-            margin-bottom: 16px;
-        }
-
-        .detail-toggle-btn {
-            order: 7;
-            width: 100%;
-            min-height: 56px;
-            border: 0;
-            border-radius: 999px;
-            background: rgba(35,136,255,.12);
-            color: #1767c8;
-            font-size: clamp(18px, 1.8vw, 22px);
-            font-weight: 1000;
-            cursor: pointer;
-            margin: 6px 0 14px;
-        }
-        .detail-toggle-btn:hover,
-        .detail-toggle-btn:focus-visible {
-            outline: none;
-            background: rgba(35,136,255,.18);
-            transform: translateY(-1px);
-        }
-
-        .progressive-detail {
-            order: 8;
-            display: none;
-        }
-        .progressive-detail.open {
-            display: block;
-        }
-
-        .intercept-detail-card,
-        .community-status-card,
-        .ai-consultant-box {
-            margin-top: 12px;
-        }
-
-        .advanced-actions-toggle {
-            width: 100%;
-            border: 0;
-            background: transparent;
-            color: var(--sub);
-            font-size: 17px;
-            font-weight: 900;
-            text-decoration: underline;
-            cursor: pointer;
-            margin-top: 10px;
-            line-height: 1.5;
-        }
-        .advanced-actions-toggle:hover,
-        .advanced-actions-toggle:focus-visible {
-            color: var(--ink);
-            outline: none;
-        }
-        .false-positive-actions.collapsed {
-            display: none;
-        }
-
-        @media (max-width: 920px) {
-            body { align-items: flex-start; }
-            .main-layout { grid-template-columns: 1fr; }
-            .intercept-grid { grid-template-columns: 1fr; }
-            .community-status-grid { grid-template-columns: 1fr; }
-            .community-status-head { align-items: flex-start; flex-direction: column; }
-            .left-col { min-height: auto; }
-            .robot-img { width: min(320px, 80vw); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
-            .robot-img { animation: none; }
-        }
-    
-
-        /* 新版人物與警示標誌 */
-        #main-mascot {
-            object-fit: contain;
-            object-position: center bottom;
-        }
-    </style>
+  </style>
 </head>
 <body>
-    <div class="page-shell">
-        <div id="family-broadcast" role="alert" aria-live="assertive">
-            <h3 style="color: var(--red); margin: 0 0 5px 0;">👨‍👩‍👧 來自家人的緊急通知！</h3>
-            <p id="broadcast-message" style="font-size: 1.1em; color: var(--ink); margin: 0;">「馬上停止動作！我現在打給你！」</p>
+  <div class="page-shell">
+    <div id="family-broadcast" role="alert" aria-live="assertive"><h3 style="color:#e52828;margin:0 0 5px">👨‍👩‍👧 來自家人的緊急通知！</h3><p id="broadcast-message" style="font-size:1.1em;margin:0">「馬上停止動作！我現在打給你！」</p></div>
+    <header class="brand-row" aria-label="AI 防詐盾牌品牌"><div class="brand-shield" aria-hidden="true">
+  <svg class="brand-shield-svg" viewBox="0 0 120 140" role="img" aria-label="AI 防詐盾牌">
+    <defs>
+      <linearGradient id="shieldOuter" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#0b4fb3"/>
+        <stop offset="52%" stop-color="#0f7dff"/>
+        <stop offset="100%" stop-color="#063b91"/>
+      </linearGradient>
+      <linearGradient id="shieldInner" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#1b8cff"/>
+        <stop offset="100%" stop-color="#064aa7"/>
+      </linearGradient>
+      <filter id="shieldShadow" x="-25%" y="-25%" width="150%" height="150%">
+        <feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#003b88" flood-opacity=".28"/>
+      </filter>
+    </defs>
+    <path filter="url(#shieldShadow)" d="M60 6 L108 25 V66 C108 98 89 122 60 136 C31 122 12 98 12 66 V25 Z" fill="url(#shieldOuter)"/>
+    <path d="M60 15 L98 30 V66 C98 91 84 111 60 124 C36 111 22 91 22 66 V30 Z" fill="url(#shieldInner)" stroke="rgba(255,255,255,.86)" stroke-width="4"/>
+    <path d="M60 24 L88 35 V65 C88 85 78 100 60 111 C42 100 32 85 32 65 V35 Z" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.22)" stroke-width="2"/>
+    <text x="60" y="77" text-anchor="middle" font-family="Microsoft JhengHei, Arial, sans-serif" font-size="42" font-weight="900" fill="#ffffff">AI</text>
+  </svg>
+</div><div class="brand-text"><b>AI防詐盾牌</b><span>聰明防詐・守護未來</span></div></header>
+    <main class="main-layout" role="main">
+      <section class="left-col" aria-label="AI 防詐守護機器人">
+        <div class="speech-bubble" id="voice-bubble" role="button" tabindex="0" title="點擊畫面任何地方即可聽取語音" aria-label="點擊重聽語音提醒">危險！這是詐騙網站，<br>系統將自動為您安全離開。<span>🔊</span></div>
+        <img src="../assets/images/mascot-boy-new.png" id="main-mascot" alt="AI 防詐守護機器人" class="robot-img" draggable="false">
+        <section class="scenario-wrapper" aria-label="AI 詐騙手法還原"><button class="scenario-toggle" id="scenario-toggle" type="button"><span>查看 AI 還原的詐騙手法</span><small id="chat-status">尚未展開</small></button><div class="scenario-panel" id="scenario-panel"><div class="chat-header"><span>AI 會依照這次攔截原因，自動匹配相近話術</span></div><div class="chat-container" id="chat-history" aria-live="polite"></div></div></section>
+      </section>
+      <section class="right-col" aria-label="攔截資訊與安全處置">
+        <div class="danger-tag">已攔截危險網頁</div><div class="warning-subtitle">這個頁面可能正在誘導你輸入資料或匯款。</div><div class="ai-source-pill" id="ai-source-pill">判定來源：AI 防詐引擎</div>
+        <div class="hero-title"><span class="warn-icon" aria-hidden="true"></span><span class="danger-word">危險！</span><span>疑似詐騙網站</span></div>
+        <div class="risk-score-display" aria-live="polite">危險指數 <span id="score">--</span></div>
+        <div class="divider"></div>
+        <section class="elder-summary-card" aria-label="請不要做這些事"><div class="dont-title"><span class="no-symbol" aria-hidden="true"></span><span>請不要做這些事</span></div><div class="warning-icons"><div class="warning-item"><div class="icon-circle"><span class="css-id"></span></div><b>不要輸入資料</b></div><div class="warning-item"><div class="icon-circle"><span class="css-card"></span></div><b>不要匯款付款</b></div><div class="warning-item"><div class="icon-circle"><span class="css-qr"></span></div><b>不要掃 QR Code</b></div></div></section>
+        <section class="action-panel" id="cooldown-box" aria-label="安全處置"><div class="action-title">現在最安全的做法</div><button class="btn-safe" id="manual-leave-btn" type="button"><span class="btn-main">🛡️ 安全離開</span></button>
+          <button class="btn-safe" id="close-btn" type="button" style="display:none">關閉分頁</button></section>
+        <button class="detail-toggle-btn" id="detail-toggle-btn" type="button" aria-expanded="false">查看詳細原因</button>
+        <div class="progressive-detail" id="progressive-detail" aria-hidden="true">
+          <section class="intercept-detail-card" aria-label="攔截事件詳情"><div class="intercept-detail-title"><span>這次攔截了什麼？</span> <small id="detail-risk-level">高風險</small></div><div class="intercept-grid"><div class="intercept-item full"><div class="intercept-label">攔截網址</div><div class="intercept-value danger" id="detail-url">載入中...</div></div><div class="intercept-item"><div class="intercept-label">網域</div><div class="intercept-value" id="detail-domain">--</div></div><div class="intercept-item"><div class="intercept-label">判定來源</div><div class="intercept-value" id="detail-source">AI 防詐引擎</div></div><div class="intercept-item full"><div class="intercept-label">攔截原因</div><div class="intercept-value" id="detail-reason">系統正在整理原因...</div></div><div class="intercept-item full"><div class="intercept-label">命中詐騙特徵</div><div class="detail-tags" id="detail-scam-dna"></div></div><div class="intercept-item"><div class="intercept-label">證據狀態</div><div class="intercept-value" id="detail-evidence-status">已保存攔截摘要</div></div><div class="intercept-item"><div class="intercept-label">家庭同步</div><div class="intercept-value safe" id="detail-sync-status">確認中...</div></div><div class="intercept-item full"><div class="intercept-label">發生時間</div><div class="intercept-value" id="detail-timestamp">--</div></div></div><div class="sync-note" id="detail-sync-note">系統會盡可能將此筆攔截摘要同步到家庭戰情室。</div></section>
+          <section class="community-status-card" aria-label="社群防詐資料庫狀態"><div class="community-status-head"><div class="community-status-title">社群防詐資料庫狀態</div><div class="community-status-pill" id="community-status-pill">查詢中</div></div><div class="community-status-grid"><div class="community-status-item"><div class="community-status-label">社群回報網域</div><div class="community-status-value" id="community-status-domain">--</div></div><div class="community-status-item"><div class="community-status-label">累積回報</div><div class="community-status-value" id="community-status-count">--</div></div><div class="community-status-item"><div class="community-status-label">審核狀態</div><div class="community-status-value" id="community-status-review">--</div></div><div class="community-status-item"><div class="community-status-label">系統動作</div><div class="community-status-value" id="community-status-action">--</div></div></div><div class="community-status-note" id="community-status-note">系統正在查詢此網域是否已存在於社群防詐回報池。</div><button class="community-refresh-btn" id="community-status-refresh-btn" type="button">重新查詢社群狀態</button></section>
+          <div id="reason-box" aria-hidden="true"></div><div id="dna-box" aria-hidden="true"></div><div id="tags-container" aria-hidden="true"></div><div id="advice" aria-hidden="true"></div>
+          <section class="ai-consultant-box" id="ai-consultant-box" aria-label="AI 安全顧問解釋"><div class="ai-diagnostic-badge">🧠 AI 自動診斷報告</div><div class="ai-consultant-head"><div class="ai-consultant-avatar" aria-hidden="true">🤖</div><div><div class="ai-consultant-title">AI 安全顧問</div><div class="ai-consultant-summary" id="ai-consultant-summary">我正在整理這個網頁的危險原因。</div></div></div><ul class="ai-consultant-list" id="ai-consultant-list"></ul><button class="ai-consultant-toggle" id="ai-consultant-toggle" type="button">AI，告訴我更多細節</button><div class="ai-consultant-detail" id="ai-consultant-detail"></div><div class="official-citations" id="official-citations"><div class="official-citations-title">📚 官方佐證資料</div><ul class="official-citations-list" id="official-citations-list"></ul></div></section>
+          <section class="incident-report-card" aria-label="165 報案資訊整理"><div class="incident-report-title">需要報案或詢問 165？</div><p class="incident-report-text">系統可以把時間、網址、風險原因與命中特徵整理成草稿，方便複製給家人、165 或警方。</p><button class="incident-report-btn" id="incident-report-btn" type="button">產生 165 報案資訊草稿</button></section>
+          <button class="advanced-actions-toggle" id="advanced-actions-toggle" type="button" aria-expanded="false">進階處理</button><div class="false-positive-actions collapsed" id="advanced-actions-panel"><div class="false-positive-title">如果你確定這是可信網站，請選擇放行方式</div><button class="btn-text" id="continue-once-btn" type="button">這次仍要前往（暫時放行 30 分鐘）</button><button class="btn-text" id="report-false-btn" type="button">家人確認可信，輸入密碼加入白名單</button><button class="btn-text" id="bypass-btn" type="button">強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button></div><div id="password-area" style="display:none;margin-top:15px;padding-top:15px;border-top:1px dashed rgba(35,136,255,.25);width:100%"><div style="color:#8a5200;font-size:18px;margin-bottom:10px;font-weight:1000">🔒 請輸入家人設定的防護密碼，確認後會將此網域加入永久白名單：</div><div style="display:flex;gap:10px"><input type="password" id="guardian-pin" class="pin-input" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="****" aria-label="家人防護密碼"><button id="verify-pin-btn" class="btn-safe" type="button" style="width:auto;height:auto;margin:0;padding:10px 24px;font-size:18px;background:linear-gradient(135deg,#ef4444,#b91c1c)">解鎖</button></div><div id="pin-error" role="alert" style="color:#ef4444;font-size:16px;margin-top:8px;display:none;font-weight:900">❌ 密碼錯誤！請打電話給設定此防護網的家人確認密碼。</div><button id="cancel-pin-btn" class="btn-text" type="button" style="margin-top:8px">← 返回</button></div>
         </div>
-
-        <main class="main-layout" role="main">
-            <section class="left-col" aria-label="AI 防詐英雄與情境還原">
-               <div class="speech-bubble" id="voice-bubble" role="button" tabindex="0" title="點擊畫面任何地方即可聽取語音" aria-label="點擊重聽語音提醒">
-    危險！這是詐騙網站，<br>系統將自動為您安全離開。<span>🔊</span>
-</div>
-                <img src="mascot-boy-new.png" id="main-mascot" alt="新版 AI 防詐守護公仔" class="robot-img" draggable="false">
-
-                <section class="scenario-wrapper" aria-label="AI 詐騙手法還原">
-                    <button class="scenario-toggle" id="scenario-toggle" type="button">
-                        <span>查看 AI 還原的詐騙手法</span>
-                        <small id="chat-status">尚未展開</small>
-                    </button>
-                    <div class="scenario-panel" id="scenario-panel">
-                        <div class="chat-header">
-                            <span>AI 會依照這次攔截原因，自動匹配相近話術</span>
-                        </div>
-                        <div class="chat-container" id="chat-history" aria-live="polite" aria-label="詐騙情境對話內容"></div>
-                    </div>
-                </section>
-
-            </section>
-
-            <section class="right-col" aria-label="攔截資訊與處置動作">
-                <div class="danger-tag">已攔截危險網頁</div>
-                <div class="risk-score-display" aria-live="polite">危險指數：<span id="score">--</span> 分</div>
-                <div class="warning-subtitle">這個頁面可能正在誘導你輸入資料或匯款。</div>
-                <div class="ai-source-pill" id="ai-source-pill">判定來源：AI 防詐引擎</div>
-
-                <section class="elder-summary-card" aria-label="重要安全提醒">
-                    <div class="elder-summary-title">現在請先停下來</div>
-                    <ul class="elder-summary-list">
-                        <li>不要輸入身分證、信用卡、驗證碼</li>
-                        <li>不要匯款、不要付款、不要掃 QR Code</li>
-                        <li>先安全離開，再請家人或 165 協助確認</li>
-                    </ul>
-                </section>
-
-                <button class="detail-toggle-btn" id="detail-toggle-btn" type="button" aria-expanded="false">
-                    查看詳細原因
-                </button>
-
-                <div class="progressive-detail" id="progressive-detail" aria-hidden="true">
-
-                <section class="intercept-detail-card" aria-label="攔截事件詳情">
-                    <div class="intercept-detail-title">
-                        <span>這次攔截了什麼？</span>
-                        <small id="detail-risk-level">高風險</small>
-                    </div>
-                    <div class="intercept-grid">
-                        <div class="intercept-item full">
-                            <div class="intercept-label">攔截網址</div>
-                            <div class="intercept-value danger" id="detail-url">載入中...</div>
-                        </div>
-                        <div class="intercept-item">
-                            <div class="intercept-label">網域</div>
-                            <div class="intercept-value" id="detail-domain">--</div>
-                        </div>
-                        <div class="intercept-item">
-                            <div class="intercept-label">判定來源</div>
-                            <div class="intercept-value" id="detail-source">AI 防詐引擎</div>
-                        </div>
-                        <div class="intercept-item full">
-                            <div class="intercept-label">攔截原因</div>
-                            <div class="intercept-value" id="detail-reason">系統正在整理原因...</div>
-                        </div>
-                        <div class="intercept-item full">
-                            <div class="intercept-label">命中詐騙特徵</div>
-                            <div class="detail-tags" id="detail-scam-dna"></div>
-                        </div>
-                        <div class="intercept-item">
-                            <div class="intercept-label">證據狀態</div>
-                            <div class="intercept-value" id="detail-evidence-status">已保存攔截摘要</div>
-                        </div>
-                        <div class="intercept-item">
-                            <div class="intercept-label">家庭同步</div>
-                            <div class="intercept-value safe" id="detail-sync-status">確認中...</div>
-                        </div>
-                        <div class="intercept-item full">
-                            <div class="intercept-label">發生時間</div>
-                            <div class="intercept-value" id="detail-timestamp">--</div>
-                        </div>
-                    </div>
-                    <div class="sync-note" id="detail-sync-note">系統會盡可能將此筆攔截摘要同步到家庭戰情室；若即時推播未連線，戰情室仍可用資料更新模式查看紀錄。</div>
-                </section>
-
-
-
-                <section class="community-status-card" aria-label="社群防詐資料庫狀態">
-                    <div class="community-status-head">
-                        <div class="community-status-title">社群防詐資料庫狀態</div>
-                        <div class="community-status-pill" id="community-status-pill">查詢中</div>
-                    </div>
-                    <div class="community-status-grid">
-                        <div class="community-status-item">
-                            <div class="community-status-label">社群回報網域</div>
-                            <div class="community-status-value" id="community-status-domain">--</div>
-                        </div>
-                        <div class="community-status-item">
-                            <div class="community-status-label">累積回報</div>
-                            <div class="community-status-value" id="community-status-count">--</div>
-                        </div>
-                        <div class="community-status-item">
-                            <div class="community-status-label">審核狀態</div>
-                            <div class="community-status-value" id="community-status-review">--</div>
-                        </div>
-                        <div class="community-status-item">
-                            <div class="community-status-label">系統動作</div>
-                            <div class="community-status-value" id="community-status-action">--</div>
-                        </div>
-                    </div>
-                    <div class="community-status-note" id="community-status-note">系統正在查詢此網域是否已存在於社群防詐回報池。</div>
-                    <button class="community-refresh-btn" id="community-status-refresh-btn" type="button">重新查詢社群狀態</button>
-                </section>
-
-                <div id="reason-box" aria-hidden="true"></div>
-                <div id="dna-box" aria-hidden="true"></div>
-                <div id="tags-container" aria-hidden="true"></div>
-                <div id="advice" aria-hidden="true"></div>
-
-                <section class="ai-consultant-box" id="ai-consultant-box" aria-label="AI 安全顧問解釋">
-                    <div class="ai-diagnostic-badge">🧠 AI 自動診斷報告</div>
-                    <div class="ai-consultant-head">
-                        <div class="ai-consultant-avatar" aria-hidden="true">🤖</div>
-                        <div>
-                            <div class="ai-consultant-title">AI 安全顧問</div>
-                            <div class="ai-consultant-summary" id="ai-consultant-summary">我正在整理這個網頁的危險原因。</div>
-                        </div>
-                    </div>
-                    <ul class="ai-consultant-list" id="ai-consultant-list"></ul>
-                    <button class="ai-consultant-toggle" id="ai-consultant-toggle" type="button">AI，告訴我更多細節</button>
-                    <div class="ai-consultant-detail" id="ai-consultant-detail"></div>
-                    <div class="official-citations" id="official-citations" aria-label="官方佐證來源">
-                        <div class="official-citations-title">📚 官方佐證資料</div>
-                        <ul class="official-citations-list" id="official-citations-list"></ul>
-                    </div>
-                </section>
-
-                </div>
-
-                <section class="action-panel" id="cooldown-box" aria-label="安全處置">
-                    <div class="action-title">現在請先做安全處理</div>
-                    <button class="btn-safe" id="manual-leave-btn" type="button">聽從建議，安全離開此網頁</button>
-                    <a href="tel:165" class="btn-165" id="call-btn">📞 有疑慮？撥打 165</a>
-                    <button class="btn-safe" id="close-btn" type="button" style="display: none;">關閉分頁</button>
-
-                    <button class="advanced-actions-toggle" id="advanced-actions-toggle" type="button" aria-expanded="false">
-                        我確定要進階處理 / 誤判放行
-                    </button>
-
-                    <div class="false-positive-actions collapsed" id="advanced-actions-panel">
-                        <div class="false-positive-title">如果你確定這是可信網站，請選擇放行方式</div>
-                        <button class="btn-text" id="continue-once-btn" type="button">這次仍要前往（暫時放行 30 分鐘）</button>
-                        <button class="btn-text" id="report-false-btn" type="button">家人確認可信，輸入密碼加入白名單</button>
-                        <button class="btn-text" id="bypass-btn" type="button">強制冷靜期... 請先深呼吸 (剩餘 30 秒)</button>
-                    </div>
-
-                    <div id="password-area" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed rgba(35,136,255,.25); width: 100%;">
-                        <div style="color: #8a5200; font-size: 18px; margin-bottom: 10px; font-weight:1000;">🔒 請輸入家人設定的防護密碼，確認後會將此網域加入永久白名單：</div>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="password" id="guardian-pin" class="pin-input" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="****" aria-label="家人防護密碼">
-                            <button id="verify-pin-btn" class="btn-safe" type="button" style="width: auto; margin: 0; padding: 10px 24px; font-size: 18px; background: linear-gradient(135deg, var(--red), var(--red-dark));">解鎖</button>
-                        </div>
-                        <div id="pin-error" role="alert" style="color: var(--red); font-size: 16px; margin-top: 8px; display: none; font-weight:900;">❌ 密碼錯誤！請打電話給設定此防護網的家人確認密碼。</div>
-                        <button id="cancel-pin-btn" class="btn-text" type="button" style="margin-top: 8px;">← 返回</button>
-                    </div>
-                </section>
-
-            </section>
-        </main>
-
-        <div class="url-display" aria-label="被攔截網址">
-            <span id="target-url">載入中...</span>
-            <span id="original-url"></span>
-        </div>
-    </div>
-
-    <div id="desktop-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="desktop-modal-title">
-        <div class="modal-content">
-            <h2 id="desktop-modal-title" style="margin-top:0;">📱 請使用手機撥打</h2>
-            <div class="modal-number" id="modal-phone-number">165</div>
-            <button class="btn-safe" id="close-modal-btn" type="button" style="width: auto; padding-inline:28px;">我知道了</button>
-        </div>
-    </div>
-
-    <audio id="hero-audio-zh" src="zh.wav" preload="auto"></audio>
-    <audio id="hero-audio-tw" src="tw.wav" preload="auto"></audio>
-
-    <script src="config.js"></script>
-    <script src="socket.io.min.js"></script>
-    <script src="scenarios.js"></script>
-    <script src="voice.js"></script>
-    <script src="blocked.js"></script>
+      </section>
+    </main>
+    <div class="url-display" aria-label="被攔截網址"><span id="target-url">載入中...</span><span id="original-url"></span></div>
+  </div>
+  <audio id="hero-audio-zh" src="../assets/audio/zh.wav" preload="auto"></audio><audio id="hero-audio-tw" src="../assets/audio/tw.wav" preload="auto"></audio>
+  <script src="../core/config.js"></script><script src="../scripts/scenarios.js"></script><script src="../scripts/voice.js"></script><script src="../scripts/blocked_socket_fallback.js"></script>
+  <script src="../scripts/blocked_auto_leave.js"></script>
+  <script src="../scripts/blocked.js"></script>
 </body>
 </html>
