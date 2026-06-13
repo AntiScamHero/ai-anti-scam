@@ -173,6 +173,7 @@ PUBLIC_PATHS = {
     "/api/auth/install",
     "/api/debug/line_guard",
     "/api/line_guard_status",
+    "/api/debug/line_config",
 }
 
 
@@ -196,6 +197,335 @@ ALLOW_DEMO_LINE_PUSH = env_bool("ALLOW_DEMO_LINE_PUSH", False)
 
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET or "demo_channel_secret")
+
+
+# ==========================================
+# LINE 家庭綁定設定（Mobile App / oaMessage MVP）
+# ==========================================
+LINE_BOT_BASIC_ID = (
+    os.getenv("LINE_BOT_BASIC_ID")
+    or os.getenv("LINE_OA_BASIC_ID")
+    or os.getenv("LINE_BOT_ID")
+    or ""
+).strip()
+LINE_BIND_REQUIRE_TOKEN = env_bool("LINE_BIND_REQUIRE_TOKEN", True)
+LINE_INVITE_TOKEN_TTL_SECONDS = int(os.getenv("LINE_INVITE_TOKEN_TTL_SECONDS", "86400"))
+LINE_BIND_MAX_TARGETS_PER_FAMILY = int(os.getenv("LINE_BIND_MAX_TARGETS_PER_FAMILY", "10"))
+
+
+def normalize_line_family_id(value):
+    code = str(value or "").strip().upper().replace("-", "")
+    code = re.sub(r"[^A-Z0-9]", "", code)[:6]
+    return code if re.fullmatch(r"[A-Z0-9]{6}", code) else ""
+
+
+def normalize_line_invite_token(value):
+    token = str(value or "").strip().upper()
+    token = re.sub(r"[^A-Z0-9]", "", token)[:16]
+    return token if re.fullmatch(r"[A-Z0-9]{6,16}", token) else ""
+
+
+def generate_line_invite_token(length=8):
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(random.choice(alphabet) for _ in range(length))
+
+
+def line_binding_key(target_type, target_id):
+    raw = f"{target_type}:{target_id}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def get_line_source_target(event):
+    source = getattr(event, "source", None)
+    source_type = str(getattr(source, "type", "user") or "user").lower()
+    user_id = str(getattr(source, "user_id", "") or "")
+    group_id = str(getattr(source, "group_id", "") or "")
+    room_id = str(getattr(source, "room_id", "") or "")
+
+    if source_type == "group" and group_id:
+        return {
+            "lineTargetType": "group",
+            "lineTargetId": group_id,
+            "sourceUserId": user_id,
+        }
+
+    if source_type == "room" and room_id:
+        return {
+            "lineTargetType": "room",
+            "lineTargetId": room_id,
+            "sourceUserId": user_id,
+        }
+
+    return {
+        "lineTargetType": "user",
+        "lineTargetId": user_id,
+        "sourceUserId": user_id,
+    }
+
+
+def get_line_display_name(target_type, target_id, source_user_id=""):
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        return "LINE 通知對象"
+
+    try:
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+
+            if target_type == "user" and target_id:
+                profile = line_bot_api.get_profile(target_id)
+                return getattr(profile, "display_name", None) or "LINE 好友"
+
+            if target_type == "group" and target_id:
+                try:
+                    summary = line_bot_api.get_group_summary(target_id)
+                    return getattr(summary, "group_name", None) or "家庭 LINE 群組"
+                except Exception:
+                    return "家庭 LINE 群組"
+
+            if target_type == "room":
+                return "LINE 多人聊天室"
+
+    except Exception as exc:
+        print(f"⚠️ 取得 LINE 顯示名稱失敗：{exc}", flush=True)
+
+    return "LINE 通知對象"
+
+
+def get_line_bindings_ref(family_id):
+    return db.reference(f"family_line_bindings/{family_id}")
+
+
+def get_line_invite_ref(family_id, invite_token):
+    return db.reference(f"family_line_invites/{family_id}/{invite_token}")
+
+
+def get_active_line_bindings_for_family(family_id):
+    if not firebase_initialized:
+        return []
+
+    fid = normalize_line_family_id(family_id)
+    if not fid:
+        return []
+
+    try:
+        data = get_line_bindings_ref(fid).get() or {}
+        if not isinstance(data, dict):
+            return []
+
+        result = []
+        for key, item in data.items():
+            if not isinstance(item, dict):
+                continue
+            if item.get("status", "active") != "active":
+                continue
+            target_id = item.get("lineTargetId") or item.get("line_target_id")
+            target_type = item.get("lineTargetType") or item.get("line_target_type") or "user"
+            if not target_id:
+                continue
+            normalized = dict(item)
+            normalized["id"] = item.get("id") or key
+            normalized["lineTargetId"] = target_id
+            normalized["lineTargetType"] = target_type
+            normalized["displayName"] = item.get("displayName") or item.get("display_name") or "LINE 通知對象"
+            result.append(normalized)
+        return result
+
+    except Exception as exc:
+        print(f"⚠️ 讀取 LINE 綁定失敗：{exc}", flush=True)
+        return []
+
+
+def can_issue_line_invite(family_id, identity=None):
+    fid = normalize_line_family_id(family_id)
+    if not fid:
+        return False, (jsonify({"status": "fail", "message": "缺少有效家庭代碼"}), 400)
+
+    if not REQUIRE_ACCESS_TOKEN:
+        return True, None
+
+    identity = identity or get_request_identity({})
+    token_payload = identity.get("tokenPayload") or {}
+    if not token_payload:
+        return False, (jsonify({"status": "fail", "message": "缺少或無效的 accessToken"}), 401)
+
+    token_family_id = normalize_line_family_id(token_payload.get("familyID"))
+    if token_family_id != fid:
+        return False, (jsonify({"status": "fail", "message": "accessToken familyID 不符"}), 403)
+
+    return True, None
+
+
+def build_line_oa_message_url(invite_text):
+    bot_id = LINE_BOT_BASIC_ID.strip()
+    if not bot_id:
+        return ""
+
+    # LINE 官方帳號 Basic ID 通常包含 @；若 Render 環境變數忘記填 @，這裡自動補上。
+    if not bot_id.startswith("@"):
+        bot_id = "@" + bot_id
+
+    encoded = urllib.parse.quote(str(invite_text or ""), safe="")
+    return f"https://line.me/R/oaMessage/{bot_id}/?{encoded}"
+
+
+def parse_line_bind_command(text):
+    raw = str(text or "").strip()
+    raw = re.sub(r"\s+", " ", raw)
+
+    patterns = [
+        r"^(?:綁定家人|綁定家庭|綁定防護網)\s+([A-Z0-9]{6})(?:\s+([A-Z0-9]{6,16}))?$",
+        r"^(?:BIND|BIND FAMILY|BIND_FAMILY)\s+([A-Z0-9]{6})(?:\s+([A-Z0-9]{6,16}))?$",
+    ]
+
+    upper = raw.upper()
+    for pattern in patterns:
+        match = re.fullmatch(pattern, upper, flags=re.IGNORECASE)
+        if match:
+            return {
+                "familyID": normalize_line_family_id(match.group(1)),
+                "inviteToken": normalize_line_invite_token(match.group(2) or ""),
+            }
+
+    return None
+
+
+def validate_line_invite_token(family_id, invite_token):
+    fid = normalize_line_family_id(family_id)
+    token = normalize_line_invite_token(invite_token)
+
+    if not LINE_BIND_REQUIRE_TOKEN:
+        return True, "legacy_no_token_required"
+
+    if not fid or not token:
+        return False, "missing_invite_token"
+
+    if not firebase_initialized:
+        return False, "firebase_unavailable"
+
+    try:
+        ref = get_line_invite_ref(fid, token)
+        invite = ref.get() or {}
+        if not isinstance(invite, dict):
+            return False, "invite_not_found"
+
+        if invite.get("status") not in {"active", None}:
+            return False, "invite_inactive"
+
+        expires_at = safe_int(invite.get("expiresAt") or invite.get("expires_at"), 0)
+        if expires_at and expires_at < now_epoch():
+            ref.update({"status": "expired", "updatedAt": get_tw_time()})
+            return False, "invite_expired"
+
+        max_uses = safe_int(invite.get("maxUses") or invite.get("max_uses"), 5)
+        used_count = safe_int(invite.get("usedCount") or invite.get("used_count"), 0)
+        if max_uses and used_count >= max_uses:
+            return False, "invite_used_up"
+
+        return True, "ok"
+
+    except Exception as exc:
+        print(f"⚠️ 驗證 LINE 邀請碼失敗：{exc}", flush=True)
+        return False, "invite_check_failed"
+
+
+def mark_line_invite_used(family_id, invite_token, target_id):
+    if not firebase_initialized or not invite_token:
+        return
+
+    fid = normalize_line_family_id(family_id)
+    token = normalize_line_invite_token(invite_token)
+    if not fid or not token:
+        return
+
+    try:
+        ref = get_line_invite_ref(fid, token)
+        invite = ref.get() or {}
+        used_count = safe_int(invite.get("usedCount") or invite.get("used_count"), 0) + 1
+        ref.update({
+            "usedCount": used_count,
+            "lastUsedAt": get_tw_time(),
+            "lastTargetIdHash": hashlib.sha256(str(target_id or "").encode("utf-8")).hexdigest()[:16],
+            "updatedAt": get_tw_time(),
+        })
+    except Exception as exc:
+        print(f"⚠️ 更新 LINE 邀請碼使用次數失敗：{exc}", flush=True)
+
+
+def bind_line_target_to_family(family_id, event, invite_token="", role="guardian"):
+    if not firebase_initialized:
+        return False, "Firebase 未連線", None
+
+    fid = normalize_line_family_id(family_id)
+    if not fid:
+        return False, "家庭代碼格式不正確", None
+
+    active_bindings = get_active_line_bindings_for_family(fid)
+    if len(active_bindings) >= LINE_BIND_MAX_TARGETS_PER_FAMILY:
+        return False, f"此家庭已達 LINE 通知對象上限（{LINE_BIND_MAX_TARGETS_PER_FAMILY} 個）", None
+
+    source_info = get_line_source_target(event)
+    target_type = source_info["lineTargetType"]
+    target_id = source_info["lineTargetId"]
+    source_user_id = source_info.get("sourceUserId") or ""
+
+    if not target_id:
+        return False, "無法取得 LINE 通知對象 ID", None
+
+    binding_id = line_binding_key(target_type, target_id)
+    display_name = get_line_display_name(target_type, target_id, source_user_id)
+    now_text = get_tw_time()
+
+    payload = {
+        "id": binding_id,
+        "familyID": fid,
+        "family_id": fid,
+        "lineTargetType": target_type,
+        "line_target_type": target_type,
+        "lineTargetId": target_id,
+        "line_target_id": target_id,
+        "displayName": display_name,
+        "display_name": display_name,
+        "role": "family_group" if target_type in {"group", "room"} else role,
+        "status": "active",
+        "sourceUserId": source_user_id,
+        "inviteToken": normalize_line_invite_token(invite_token),
+        "createdAt": now_text,
+        "updatedAt": now_text,
+    }
+
+    try:
+        get_line_bindings_ref(fid).child(binding_id).set(payload)
+        # 舊版相容：保留 line_bindings/{target_id}，避免既有工具查不到。
+        db.reference(f"line_bindings/{binding_id}").set(payload)
+        mark_line_invite_used(fid, invite_token, target_id)
+        return True, "ok", payload
+
+    except Exception as exc:
+        print(f"⚠️ 寫入 LINE 綁定失敗：{exc}", flush=True)
+        return False, "綁定失敗，請稍後再試", None
+
+
+def push_text_to_line_target(target_id, text):
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        return False, "LINE_CHANNEL_ACCESS_TOKEN 未設定"
+
+    if LINE_PUSH_DRY_RUN:
+        print(f"🧪 [LINE Dry Run] 不真的推播 to={target_id}: {safe_truncate(text, 80)}", flush=True)
+        return True, "dry_run"
+
+    try:
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.push_message(
+                PushMessageRequest(
+                    to=target_id,
+                    messages=[TextMessage(text=text)],
+                )
+            )
+        return True, "sent"
+    except Exception as exc:
+        print(f"❌ LINE 推播失敗 target={target_id}: {exc}", flush=True)
+        return False, str(exc)
 
 
 # ==========================================
@@ -1365,21 +1695,6 @@ def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=Non
         scam_dna = ["未知套路"]
 
     try:
-        family_node = db.reference(f"families/{family_id}").get()
-        guardian_uid = family_node.get("guardianUID") if family_node else None
-
-        target_line_id = LINE_USER_ID
-
-        if guardian_uid:
-            user_node = db.reference(f"users/{guardian_uid}").get()
-
-            if user_node and user_node.get("line_id"):
-                target_line_id = user_node.get("line_id")
-
-        if not target_line_id:
-            print("⚠️ [推播失敗] 找不到 LINE_ID", flush=True)
-            return
-
         dna_tags = "、".join(scam_dna)
         care_message = get_dynamic_advice(scam_dna)
 
@@ -1397,16 +1712,42 @@ def send_dynamic_line_alert(family_id, url, reason, risk_score=100, scam_dna=Non
             f"🔗 風險網域：{safe_url_for_line(url)}"
         )
 
-        with ApiClient(configuration) as api_client:
-            line_bot_api = MessagingApi(api_client)
-            line_bot_api.push_message(
-                PushMessageRequest(
-                    to=target_line_id,
-                    messages=[TextMessage(text=msg)],
-                )
-            )
+        targets = get_active_line_bindings_for_family(family_id)
 
-        print("✅ [LINE推播成功] 已發送緊急通知至綁定帳號！", flush=True)
+        # 舊版相容 fallback：如果尚未建立 family_line_bindings，才退回舊 guardian line_id / LINE_USER_ID。
+        if not targets:
+            family_node = db.reference(f"families/{family_id}").get()
+            guardian_uid = family_node.get("guardianUID") if isinstance(family_node, dict) else None
+            target_line_id = LINE_USER_ID
+
+            if guardian_uid:
+                user_node = db.reference(f"users/{guardian_uid}").get()
+                if user_node and user_node.get("line_id"):
+                    target_line_id = user_node.get("line_id")
+
+            if target_line_id:
+                targets = [{
+                    "id": "legacy_target",
+                    "lineTargetId": target_line_id,
+                    "displayName": "舊版 LINE 通知對象",
+                }]
+
+        if not targets:
+            print("⚠️ [推播失敗] 找不到任何 LINE 通知對象", flush=True)
+            return
+
+        sent = 0
+        for target in targets:
+            target_id = target.get("lineTargetId") or target.get("line_target_id")
+            if not target_id:
+                continue
+            ok_push, detail = push_text_to_line_target(target_id, msg)
+            if ok_push:
+                sent += 1
+            else:
+                print(f"⚠️ [LINE推播失敗] {target.get('displayName')} detail={detail}", flush=True)
+
+        print(f"✅ [LINE推播完成] 已發送 {sent}/{len(targets)} 個通知對象", flush=True)
 
     except Exception as e:
         print(f"❌ [LINE推播異常] 動態推播發生錯誤: {e}", flush=True)
@@ -1929,6 +2270,25 @@ def line_guard_status():
         **decision,
         "shouldBlockParcelPayExample": is_demo_or_test_url_for_line("https://parcel-pay.example.com"),
         "expectedForDemo": "hardBlock=true 或 linePushDryRun=true 時，不應真的推 LINE。",
+    }), 200
+
+
+@api_bp.route("/api/debug/line_config", methods=["GET"])
+def debug_line_config():
+    """LINE 設定診斷端點：只回傳是否已設定，不外洩 token / secret 內容。"""
+    return jsonify({
+        "status": "success",
+        "env": APP_ENV,
+        "firebaseReady": firebase_initialized,
+        "requireAccessToken": REQUIRE_ACCESS_TOKEN,
+        "hasTokenSecret": bool(raw_token_secret),
+        "hasLineBotBasicId": bool(LINE_BOT_BASIC_ID),
+        "lineBotBasicIdPreview": (LINE_BOT_BASIC_ID[:3] + "***") if LINE_BOT_BASIC_ID else "",
+        "hasLineChannelAccessToken": bool(LINE_CHANNEL_ACCESS_TOKEN),
+        "hasLineChannelSecret": bool(LINE_CHANNEL_SECRET),
+        "linePushEnabled": LINE_PUSH_ENABLED,
+        "linePushDryRun": LINE_PUSH_DRY_RUN,
+        "lineBindRequireToken": LINE_BIND_REQUIRE_TOKEN,
     }), 200
 
 
@@ -3708,6 +4068,209 @@ def simulate_scam():
     return Response(generate(), mimetype="text/event-stream")
 
 
+
+# ==========================================
+# LINE 家庭通知綁定 API（Mobile App 前端使用）
+# ==========================================
+@api_bp.route("/api/line/invite", methods=["POST"])
+@limiter.limit("60 per minute")
+def create_line_family_invite():
+    data = get_json_body()
+    identity = get_request_identity(data)
+    family_id = normalize_line_family_id(
+        data.get("familyID") or data.get("family_id") or identity.get("familyID")
+    )
+
+    ok, error_response = can_issue_line_invite(family_id, identity)
+    if not ok:
+        return error_response
+
+    if not firebase_initialized:
+        return public_error("Firebase 未連線，暫時無法建立 LINE 邀請。", 503)
+
+    if not LINE_BOT_BASIC_ID:
+        return public_error("LINE_BOT_BASIC_ID 未設定，無法產生 LINE 官方帳號邀請連結。", 500)
+
+    invite_token = generate_line_invite_token(8)
+    invite_text = f"綁定家人 {family_id} {invite_token}"
+    invite_url = build_line_oa_message_url(invite_text)
+    now_text = get_tw_time()
+    expires_at = now_epoch() + LINE_INVITE_TOKEN_TTL_SECONDS
+
+    try:
+        get_line_invite_ref(family_id, invite_token).set({
+            "familyID": family_id,
+            "family_id": family_id,
+            "inviteToken": invite_token,
+            "invite_token": invite_token,
+            "inviteText": invite_text,
+            "lineInviteUrl": invite_url,
+            "status": "active",
+            "createdByUserID": identity.get("userID", "anonymous"),
+            "createdByInstallID": identity.get("installID", ""),
+            "createdAt": now_text,
+            "updatedAt": now_text,
+            "expiresAt": expires_at,
+            "expires_at": expires_at,
+            "maxUses": safe_int(data.get("maxUses"), 5) or 5,
+            "usedCount": 0,
+        })
+    except Exception as exc:
+        print(f"⚠️ 建立 LINE 邀請失敗：{exc}", flush=True)
+        return public_error("建立 LINE 邀請失敗，請稍後再試。", 500)
+
+    return jsonify({
+        "status": "success",
+        "familyID": family_id,
+        "inviteToken": invite_token,
+        "inviteText": invite_text,
+        "lineInviteText": invite_text,
+        "lineInviteUrl": invite_url,
+        "lineBotBasicId": LINE_BOT_BASIC_ID,
+        "expiresAt": expires_at,
+        "message": "已建立 LINE 家庭通知邀請。",
+    })
+
+
+@api_bp.route("/api/line/bind-status", methods=["POST"])
+@limiter.limit("120 per minute")
+def get_line_bind_status():
+    data = get_json_body()
+    identity = get_request_identity(data)
+    family_id = normalize_line_family_id(
+        data.get("familyID") or data.get("family_id") or identity.get("familyID")
+    )
+
+    ok, error_response = can_issue_line_invite(family_id, identity)
+    if not ok:
+        return error_response
+
+    bindings = get_active_line_bindings_for_family(family_id)
+    public_bindings = []
+    for item in bindings:
+        public_bindings.append({
+            "id": item.get("id"),
+            "familyID": family_id,
+            "lineTargetType": item.get("lineTargetType", "user"),
+            "displayName": item.get("displayName", "LINE 通知對象"),
+            "role": item.get("role", "guardian"),
+            "status": item.get("status", "active"),
+            "updatedAt": item.get("updatedAt") or item.get("updated_at"),
+            "lastTestAt": item.get("lastTestAt") or item.get("last_test_at"),
+        })
+
+    return jsonify({
+        "status": "success",
+        "familyID": family_id,
+        "enabled": bool(public_bindings),
+        "count": len(public_bindings),
+        "bindings": public_bindings,
+    })
+
+
+@api_bp.route("/api/line/test-push", methods=["POST"])
+@limiter.limit("30 per minute")
+def test_line_family_push():
+    data = get_json_body()
+    identity = get_request_identity(data)
+    family_id = normalize_line_family_id(
+        data.get("familyID") or data.get("family_id") or identity.get("familyID")
+    )
+
+    ok, error_response = can_issue_line_invite(family_id, identity)
+    if not ok:
+        return error_response
+
+    bindings = get_active_line_bindings_for_family(family_id)
+    if not bindings:
+        return jsonify({
+            "status": "fail",
+            "message": "尚未綁定任何 LINE 通知對象。",
+            "familyID": family_id,
+            "sent": 0,
+        }), 404
+
+    msg = (
+        "🛡️【AI 防詐盾牌測試通知】\n"
+        "LINE 家庭通知已成功連線。\n"
+        "之後若家人遇到高風險詐騙，我會在這裡提醒您。"
+    )
+
+    sent = 0
+    results = []
+    for item in bindings:
+        target_id = item.get("lineTargetId")
+        ok_push, detail = push_text_to_line_target(target_id, msg)
+        if ok_push:
+            sent += 1
+            try:
+                get_line_bindings_ref(family_id).child(item.get("id")).update({
+                    "lastTestAt": get_tw_time(),
+                    "updatedAt": get_tw_time(),
+                })
+            except Exception:
+                pass
+        results.append({
+            "id": item.get("id"),
+            "displayName": item.get("displayName"),
+            "ok": ok_push,
+            "detail": detail,
+        })
+
+    return jsonify({
+        "status": "success" if sent else "fail",
+        "familyID": family_id,
+        "sent": sent,
+        "dryRun": LINE_PUSH_DRY_RUN,
+        "results": results,
+        "message": "測試通知已送出。" if sent else "測試通知送出失敗。",
+    })
+
+
+@api_bp.route("/api/line/unbind", methods=["POST"])
+@limiter.limit("60 per minute")
+def unbind_line_family_target():
+    data = get_json_body()
+    identity = get_request_identity(data)
+    family_id = normalize_line_family_id(
+        data.get("familyID") or data.get("family_id") or identity.get("familyID")
+    )
+    binding_id = str(data.get("bindingID") or data.get("bindingId") or data.get("binding_id") or data.get("id") or data.get("line_target_id") or "").strip()
+
+    ok, error_response = can_issue_line_invite(family_id, identity)
+    if not ok:
+        return error_response
+
+    if not binding_id or not re.fullmatch(r"[a-fA-F0-9]{16,64}", binding_id):
+        return public_error("缺少有效的 LINE 綁定 ID。", 400)
+
+    if not firebase_initialized:
+        return public_error("Firebase 未連線，暫時無法解除綁定。", 503)
+
+    try:
+        ref = get_line_bindings_ref(family_id).child(binding_id)
+        item = ref.get()
+        if not item:
+            return public_error("找不到此 LINE 綁定。", 404)
+
+        ref.update({
+            "status": "disabled",
+            "disabledAt": get_tw_time(),
+            "updatedAt": get_tw_time(),
+            "disabledByUserID": identity.get("userID", "anonymous"),
+        })
+        return jsonify({
+            "status": "success",
+            "message": "已解除 LINE 通知對象。",
+            "familyID": family_id,
+            "id": binding_id,
+        })
+
+    except Exception as exc:
+        print(f"⚠️ 解除 LINE 綁定失敗：{exc}", flush=True)
+        return public_error("解除綁定失敗，請稍後再試。", 500)
+
+
 # ==========================================
 # LINE Webhook
 # ==========================================
@@ -3731,32 +4294,52 @@ def line_callback():
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_line_message(event):
-    text = event.message.text.strip()
+    text = str(event.message.text or "").strip()
 
     if not LINE_CHANNEL_ACCESS_TOKEN:
         return
 
     reply_text = (
         "🛡️ AI 防詐盾牌已收到訊息。\n"
-        "若要綁定家庭防護，請在瀏覽器擴充功能輸入家庭邀請碼。\n"
+        "若要加入家庭防護網，請從 App 點「邀請家人加入防護網」，再依照 LINE 訊息送出綁定文字。\n"
         "若遇到疑似詐騙，請先停止操作並撥打 165。"
     )
 
     try:
-        if text.lower().startswith("bind ") or text.startswith("綁定"):
-            parts = text.split()
+        command = parse_line_bind_command(text)
+        if command:
+            family_id = command.get("familyID")
+            invite_token = command.get("inviteToken")
+            token_ok, token_reason = validate_line_invite_token(family_id, invite_token)
 
-            if len(parts) >= 2:
-                family_id = parts[-1].strip().upper()
-
-                if firebase_initialized and re.fullmatch(r"[A-Z0-9]{6}", family_id):
-                    db.reference(f"line_bindings/{event.source.user_id}").set({
-                        "familyID": family_id,
-                        "line_id": event.source.user_id,
-                        "updated_at": get_tw_time(),
-                    })
-
-                    reply_text = f"✅ 已收到綁定請求：{family_id}\n請回到瀏覽器擴充功能確認家庭防護狀態。"
+            if not token_ok:
+                reason_text = {
+                    "missing_invite_token": "缺少邀請碼，請從 App 重新產生 LINE 邀請。",
+                    "firebase_unavailable": "系統暫時無法連線，請稍後再試。",
+                    "invite_not_found": "找不到這組邀請，請從 App 重新邀請。",
+                    "invite_inactive": "這組邀請已停用，請重新邀請。",
+                    "invite_expired": "這組邀請已過期，請從 App 重新邀請。",
+                    "invite_used_up": "這組邀請已達使用上限，請從 App 重新邀請。",
+                    "invite_check_failed": "邀請驗證失敗，請稍後再試。",
+                }.get(token_reason, "邀請碼無效，請從 App 重新邀請。")
+                reply_text = f"⚠️ 無法完成綁定：{reason_text}"
+            else:
+                bind_ok, bind_message, binding = bind_line_target_to_family(
+                    family_id=family_id,
+                    event=event,
+                    invite_token=invite_token,
+                )
+                if bind_ok:
+                    display_name = binding.get("displayName", "LINE 通知對象") if binding else "LINE 通知對象"
+                    target_type = binding.get("lineTargetType", "user") if binding else "user"
+                    target_label = "家庭群組" if target_type in {"group", "room"} else "家人"
+                    reply_text = (
+                        f"✅ 已成功加入家庭防護網：{family_id}\n"
+                        f"通知對象：{display_name}（{target_label}）\n\n"
+                        "之後若家人遇到高風險詐騙，我會在這裡提醒您。"
+                    )
+                else:
+                    reply_text = f"⚠️ 無法完成綁定：{bind_message}"
 
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
