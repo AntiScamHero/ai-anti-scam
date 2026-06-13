@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+
+<html lang="zh-Hant">
+<head>
+<meta content="true" name="ai-shield-skip-scan"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI防詐盾牌</title>
+<link href="manifest.webmanifest" rel="manifest"/><link href="style.css?v=20260613-002" rel="stylesheet"/>
+
+
+
+
+
+
+
+</head>
+<body data-ai-shield-skip-scan="true" data-current-screen="home">
+<main aria-label="AI防詐盾牌" class="phone">
+<audio id="bilingualWarningAudio" preload="auto" src="assets/audio/ai_shield_bilingual_warning.wav"></audio>
+<div class="app-shell">
+<div class="screen-area">
+<section aria-hidden="false" class="screen active" id="screen-home">
+<div class="home-final home-final-v2">
+<header aria-label="首頁" class="home-final-topbar">
+<div class="home-final-brand">
+<img alt="AI防詐盾牌標誌" class="home-final-logo-img" src="ai-shield-logo.png"/>
+<div>
+<strong>AI防詐盾牌</strong>
+<span>守護您與家人的數位安全</span>
+</div>
+</div>
+</header>
+<section aria-label="系統防護狀態" class="home-final-status-card">
+<div aria-hidden="true" class="home-final-status-shield">✓</div>
+<div class="home-final-status-copy">
+<span>系統防護狀態</span>
+<strong>一切正常</strong>
+<p>AI 即時守護中 <i aria-hidden="true"></i></p>
+</div>
+</section>
+<section aria-label="立即檢查" class="home-final-hero">
+<div class="home-final-hero-copy">
+<h1>遇到可疑訊息？</h1>
+<h2>交給<span>小守護</span>來檢查！</h2>
+<ul aria-label="檢查項目" class="home-final-checks">
+<li>AI 智能分析</li>
+<li>即時風險評估</li>
+<li>保護您與家人</li>
+</ul>
+<button aria-label="立即檢查" class="home-final-primary" data-action="go-scan" type="button">
+<span aria-hidden="true">🔍</span>
+        立即檢查
+      </button>
+</div>
+<img alt="小守護男生角色" class="home-final-mascot" src="xiaoshouhu-male-hero.png"/>
+</section>
+<section aria-label="家庭守護狀態" class="home-family-status-card">
+<div aria-hidden="true" class="home-family-status-icon">👥</div>
+<div class="home-family-status-copy">
+<span>家庭守護</span>
+<strong id="homeFamilyStatusTitle">尚未確認</strong>
+<p id="homeFamilyStatusDesc">連線後，家人可以幫忙確認可疑訊息。</p>
+</div>
+<button class="home-family-status-btn" data-action="go-family" type="button">查看家人 ›</button>
+</section>
+<section aria-label="今日檢查狀態" class="home-final-trust">
+<div class="home-today-stat home-today-scan">
+<div aria-hidden="true" class="home-today-icon">💬</div>
+<div class="home-today-copy">
+<span>今日檢查</span>
+<p><strong id="homeScanCount">0</strong><em>則訊息</em></p>
+</div>
+</div>
+<div class="home-today-stat home-today-risk">
+<div aria-hidden="true" class="home-today-icon">⚠️</div>
+<div class="home-today-copy">
+<span>高風險提醒</span>
+<p><strong id="homeHighCount">0</strong><em>則</em></p>
+</div>
+</div>
+<div class="home-today-stat home-today-sync">
+<div aria-hidden="true" class="home-today-icon">🔄</div>
+<div class="home-today-copy">
+<span id="homeSyncStatus">資料同步中</span>
+<em>剛剛更新</em>
+</div>
+</div>
+</section>
+<!-- 保留給 app.js 使用；首頁不顯示，避免與新版首頁重複 -->
+<section aria-label="家庭連線資料" class="home-final-family-hidden">
+<div hidden="" id="familyBoundPanel">
+<span>家庭代碼</span>
+<strong id="familyCodeText">尚未綁定</strong>
+<button id="showJoinFamilyBtn" type="button">換人連線</button>
+</div>
+<div hidden="" id="familyJoinPanel">
+<input autocomplete="one-time-code" id="familyCodeInput" inputmode="text" maxlength="6" placeholder="輸入 6 位數字"/>
+<button id="joinFamilyBtn" type="button">確認連線</button>
+<button id="createFamilyBtn" type="button">建立代碼</button>
+</div>
+<p id="familyJoinStatusText">可以建立新的家庭代碼，也可以輸入家人給的 6 碼代碼。</p>
+<div aria-live="polite" id="familySetupStatus"></div>
+</section>
+<section class="smart-clipboard-card home-final-clipboard" hidden="" id="smartClipboardCard">
+<div class="smart-clipboard-icon">📋</div>
+<div class="smart-clipboard-copy">
+<strong>偵測到可疑內容</strong>
+<span id="smartClipboardPreview">可立即檢查剪貼簿內容</span>
+</div>
+<button id="smartClipboardCheckBtn" type="button">檢查</button>
+<button aria-label="關閉" id="smartClipboardDismissBtn" type="button">×</button>
+</section>
+</div>
+</section><section aria-hidden="true" class="screen" hidden="" id="screen-scan">
+<div class="scan-page-shell">
+<div class="top-card scan-hero-card">
+<div class="badge">🛡️ AI 防詐盾牌</div>
+<h1>訊息安全檢查</h1>
+<p class="lead">把可疑訊息、網址或帳號貼上來，小安心會幫你檢查。</p>
+<div class="mode-banner" id="appModeBanner">
+<span class="mode-dot"></span>
+<div>
+<strong id="appModeTitle">可檢查：訊息、網址、帳號、電話號碼</strong>
+<span id="appModeDesc">網路不穩也會提醒。</span>
+</div>
+</div>
+</div>
+<div class="card scan-flow-card">
+<div class="scan-step-head">
+<div class="scan-step-num">📋</div>
+<div>
+<h2>貼在這裡</h2>
+<p>請把可疑訊息、網址或帳號貼在下方。</p>
+</div>
+</div>
+<div class="scan-primary-input">
+<label for="message">可疑內容</label>
+<div class="input-area">
+<textarea id="message" placeholder="例如：可疑簡訊內容、LINE 訊息、網址或電話號碼…"></textarea>
+<input id="targetUrl" type="hidden" value=""/>
+</div>
+</div>
+</div>
+<div class="scan-helper-actions"><button class="btn btn-soft scan-helper-btn" id="voiceInputBtn" type="button"><span aria-hidden="true">🎙️</span><strong>用說的檢查</strong></button><button class="btn btn-soft scan-clear-btn" id="clearInputBtn" type="button">🗑️ 清除內容</button><button class="btn btn-primary scan-helper-btn" id="pasteClipboardBtn" type="button"><span aria-hidden="true">📋</span><strong>一鍵貼上</strong></button></div>
+<button aria-hidden="true" class="btn btn-danger" id="stopVoiceInputBtn" type="button">⏹️ 停止錄音</button>
+<div aria-live="polite" class="notice" id="voiceInputStatus"></div>
+<div class="scan-action-card">
+<button class="btn btn-primary" id="scanBtn" type="button">🛡️ 開始檢查</button>
+<div class="scan-safe-note"><span>✓</span><span>不要點連結、不要輸入驗證碼、不要匯款。</span></div>
+<div class="scan-loading" id="scanLoading"><span class="spinner"></span><span>正在檢查...</span></div>
+</div>
+</div>
+</section><section aria-hidden="true" class="screen" hidden="" id="screen-result">
+<div aria-live="polite" class="result-hero high" id="resultHero">
+<img alt="警示圖示" class="warn-img" id="resultIcon" src="assets/icon-192.png"/>
+<div class="risk-level high" id="riskLevel">🚫 很危險</div>
+<div class="source-pill" id="analysisSource">小守護提醒</div>
+<div class="score high" id="riskScore">92<span> 分</span></div>
+<p class="lead" id="resultSummary">不要點，不要輸入資料。</p>
+</div>
+<div class="card elder-result-action-card">
+<button class="btn btn-danger" id="notifyFamilyBtn" type="button">👨‍👩‍👧 請家人幫我看</button>
+</div>
+<details class="card elder-result-details">
+<summary>給家人看的詳細原因</summary>
+<div class="data-row">
+<div class="data-label">模式</div>
+<div class="data-value" id="modeText">防護中</div>
+</div>
+<div class="data-row">
+<div class="data-label">原因</div>
+<div class="data-value" id="reasonText">檢查完成後會顯示原因。</div>
+</div>
+<div class="data-row">
+<div class="data-label">建議</div>
+<div class="data-value" id="adviceText">檢查完成後會顯示建議。</div>
+</div>
+<div class="data-row">
+<div class="data-label">家人提醒</div>
+<div class="data-value" id="familyMessage">家人提醒會顯示在這裡。</div>
+</div>
+<div class="data-row">
+<div class="data-label">官方查證</div>
+<div class="data-value">
+<div class="official-165-actions">
+<a class="official-165-link" href="https://165.npa.gov.tw/#/" id="resultOfficial165Link" rel="noopener noreferrer" target="_blank">🔗 開啟 165 官方防騙網</a>
+<div class="official-165-note">會開啟到另一個頁面；防詐盾牌會留在原本畫面。</div>
+</div>
+</div>
+</div>
+<div class="data-row">
+<div class="data-label">可疑地方</div>
+<div class="data-value"><div class="tag-list" id="tagList"></div></div>
+</div>
+</details>
+<details class="card elder-result-details">
+<summary>參考詐騙案例</summary>
+<div class="data-row">
+<div class="data-label">案例</div>
+<div class="data-value" id="caseText">檢查完成後會顯示相似案例。</div>
+</div>
+<div class="data-row">
+<div class="data-label">相似度</div>
+<div class="data-value" id="caseSimilarity">--</div>
+</div>
+</details>
+</section><section aria-hidden="true" class="screen" hidden="" id="screen-family">
+<div aria-label="家庭防詐戰情室" class="app-family-dashboard">
+<div class="family-elder-hero">
+<div>
+<div class="family-elder-chip">👪 家庭防詐戰情室</div>
+<h1>家庭戰情室</h1>
+<p id="familyElderStatusText">最新家庭提醒與紀錄。</p>
+</div>
+</div>
+<div class="family-safe-banner" id="familySafeBanner">
+<span id="familySafeIcon">🟢</span>
+<div>
+<strong id="familySafeTitle">目前看起來安全</strong>
+<p id="familySafeDesc">還沒有看到新的高風險提醒。</p>
+</div>
+</div>
+<div class="family-quick-actions">
+<button id="familyCopy165Btn" type="button">📋 複製 165 通報內容</button>
+<a class="official-165-link" href="https://165.npa.gov.tw/#/" id="familyOpen165Btn" rel="noopener noreferrer" target="_blank">🔗 開啟 165 官方防騙網</a>
+<button id="familyClearAllBtn" type="button">🗑️ 清除紀錄</button>
+</div>
+<div aria-label="LINE 家庭通知設定" class="family-line-card" id="familyLineNotifyCard">
+<div class="family-line-head">
+<div aria-hidden="true" class="family-line-icon">LINE</div>
+<div>
+<h2>LINE 家庭通知</h2>
+<p id="lineNotifyStatusText">尚未確認 LINE 綁定狀態。</p>
+</div>
+</div>
+<div class="family-line-bound-list" id="lineNotifyBoundList">
+<div class="family-line-empty">還沒有綁定 LINE 通知對象。</div>
+</div>
+<div class="family-line-actions">
+<button id="lineInviteFamilyBtn" type="button">💬 邀請家人加入防護網</button>
+<button id="lineCopyInviteBtn" type="button">📋 複製 LINE 邀請文字</button>
+<button id="lineTestPushBtn" type="button">🔔 發送 LINE 通知</button>
+<button id="lineRefreshBindStatusBtn" type="button">🔄 重新整理 LINE 狀態</button>
+</div>
+<div class="family-line-note" id="lineNotifyHelpText">家人完成綁定後，當系統偵測到高風險內容時，會自動通知指定的 LINE 對象。</div>
+</div>
+<div class="family-list-card">
+<div class="section-title">
+<h2>最近家庭提醒</h2>
+<small id="familyDashboardSyncStatus">尚未同步</small>
+</div>
+<div class="family-elder-list" id="familyDashboardList">
+<div class="family-empty-state">目前沒有提醒。</div>
+</div>
+</div>
+<div class="family-detail-panel" hidden="" id="familyRecordDetail">
+<div class="family-detail-card">
+<button class="family-detail-close" id="familyDetailCloseBtn" type="button">×</button>
+<div id="familyDetailContent"></div>
+</div>
+</div>
+</div>
+</section><section aria-hidden="true" class="screen" hidden="" id="screen-education">
+<div aria-label="防詐教室" class="education-shell education-simple-shell">
+<div class="education-hero education-simple-hero">
+<div class="education-chip">📚 防詐教室</div>
+<h1>防詐教室</h1>
+<p>看短影片，記三件事。</p>
+</div>
+<div class="education-card education-simple-card">
+<div class="section-title"><h2>防詐影片</h2><small>目前 2 支</small></div>
+<div class="elder-lesson-list" id="appEducationLessonList">
+<details class="elder-lesson-card" open="">
+<summary><span>🎁</span><strong>假補助詐騙</strong><small>不要急著填個資</small></summary>
+<video controls="" playsinline="" preload="metadata">
+<source src="assets/videos/lesson1-fake-claim.mp4" type="video/mp4"/>
+            影片暫時無法播放。
+          </video>
+<ul>
+<li>看到「立即領取」先不要急。</li>
+<li>補助消息要回官方網站或打 165 查證。</li>
+<li>不要輸入身分證、銀行資料、信用卡或驗證碼。</li>
+</ul>
+</details>
+<details class="elder-lesson-card">
+<summary><span>🔗</span><strong>假通知／假連結詐騙</strong><small>不要點陌生連結</small></summary>
+<video controls="" playsinline="" preload="metadata">
+<source src="assets/videos/lesson2-fake-link.mp4" type="video/mp4"/>
+            影片暫時無法播放。
+          </video>
+<ul>
+<li>收到帳號停用、包裹異常、銀行通知，先不要點連結。</li>
+<li>不要在陌生網頁登入帳號密碼。</li>
+<li>自己打開官方 App、官方網站，或打 165 查證。</li>
+</ul>
+</details>
+</div>
+</div>
+<div class="education-card education-quiz">
+<div class="section-title"><h2>防詐小測驗</h2><small>選一個答案</small></div>
+<p class="lead">收到包裹補繳運費簡訊，下一步怎麼做？</p>
+<button data-education-answer="wrong" type="button">點連結趕快付款，才不會退貨</button>
+<button data-education-answer="right" type="button">先去官方 App 或打 165 查證</button>
+<div class="feedback" id="educationQuizFeedback">請選一個答案。</div>
+</div>
+</div>
+</section></div><nav aria-label="防詐盾牌導覽列" class="bottom-nav">
+<button class="nav-btn active" data-screen="home" type="button"><span>🏠</span>首頁</button>
+<button class="nav-btn" data-screen="scan" type="button"><span>🔍</span>檢查</button>
+<button class="nav-btn" data-screen="family" type="button"><span>👪</span>家人</button>
+<button class="nav-btn" data-screen="education" type="button"><span>📚</span>教室</button>
+</nav>
+<!-- 記錄頁已移除：所有紀錄統一集中在家庭戰情室 -->
+</div>
+</main>
+
+<script src="config.js"></script>
+<script src="appRiskEngine.js"></script>
+<!-- 正式版：高風險同步統一由 app.js 處理，避免 appEvidenceSync 重複送出。 -->
+<script src="app.js?v=20260613-002"></script>
+<!-- OCR 掃圖片功能暫停使用：原始碼保留於 appOcrScanner.js，正式版不載入。 -->
+<!-- <script src="appOcrScanner.js"></script> -->
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>小守護｜離線保護中</title>
+  <style>
+    :root {
+      --blue:#2563eb;
+      --green:#16a34a;
+      --text:#0f172a;
+      --sub:#475569;
+      --card:#ffffff;
+      --bg:#f4f8fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 10%, rgba(37,99,235,.14), transparent 32%),
+        radial-gradient(circle at 88% 18%, rgba(16,185,129,.12), transparent 30%),
+        linear-gradient(135deg, #f4f8fb, #ffffff);
+    }
+    main {
+      width: min(560px, 100%);
+      padding: 34px 28px;
+      border-radius: 32px;
+      background: var(--card);
+      border: 2px solid #dbeafe;
+      box-shadow: 0 20px 48px rgba(30,58,138,.12);
+      text-align: center;
+    }
+    .mascot {
+      width: 92px;
+      height: 92px;
+      margin: 0 auto 18px;
+      display: grid;
+      place-items: center;
+      border-radius: 30px;
+      background: linear-gradient(135deg, #eff6ff, #ecfdf5);
+      border: 2px solid #bfdbfe;
+      font-size: 52px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 8vw, 44px);
+      line-height: 1.15;
+      font-weight: 1000;
+    }
+    p {
+      margin: 0 auto 18px;
+      color: var(--sub);
+      font-size: 21px;
+      line-height: 1.75;
+      font-weight: 850;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 14px 18px;
+      border-radius: 999px;
+      color: #166534;
+      background: #dcfce7;
+      border: 2px solid #86efac;
+      font-size: 19px;
+      font-weight: 1000;
+    }
+    .dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 8px rgba(22,163,74,.14);
+    }
+    .hint {
+      margin-top: 22px;
+      padding: 16px 18px;
+      border-radius: 22px;
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      color: #334155;
+      font-size: 17px;
+      line-height: 1.65;
+      font-weight: 850;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <main role="main" aria-live="polite">
+    <div class="mascot" aria-hidden="true">🛡️</div>
+    <h1>目前沒有網路</h1>
+    <p id="offline-message">請放心，小守護的基本防詐提醒仍會持續運作。</p>
+    <div class="status" id="offline-status"><span class="dot" aria-hidden="true"></span>離線保護中</div>
+    <div class="hint">
+      網路恢復後，系統會自動把離線期間留下的攔截摘要補傳到家庭戰情室。看到可疑連結時，還是先不要點、不要輸入驗證碼、不要匯款。
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const message = document.getElementById("offline-message");
+      const status = document.getElementById("offline-status");
+      function showOnlineRecovery() {
+        if (message) message.textContent = "網路已恢復，小守護正在為您重新連線...";
+        if (status) status.innerHTML = '<span class="dot" aria-hidden="true"></span>網路已恢復';
+        setTimeout(() => { window.location.reload(); }, 1500);
+      }
+      window.addEventListener("online", showOnlineRecovery);
+      if (navigator.onLine) {
+        setTimeout(showOnlineRecovery, 800);
+      }
+    })();
+  </script>
+</body>
+</html>

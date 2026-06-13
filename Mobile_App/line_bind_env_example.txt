@@ -1,0 +1,19 @@
+# LINE 家庭通知綁定需要確認/新增的 Render 環境變數
+# 不要把真正的 token 貼到公開地方；這份只是範例。
+
+LINE_CHANNEL_ACCESS_TOKEN=你的_LINE_Channel_Access_Token
+LINE_CHANNEL_SECRET=你的_LINE_Channel_Secret
+LINE_BOT_BASIC_ID=@你的LINE官方帳號BasicID
+
+# 要真的發 LINE，正式測試時需改成 true / false
+LINE_PUSH_ENABLED=true
+LINE_PUSH_DRY_RUN=false
+
+# LINE 綁定安全設定
+LINE_BIND_REQUIRE_TOKEN=true
+LINE_INVITE_TOKEN_TTL_SECONDS=86400
+LINE_BIND_MAX_TARGETS_PER_FAMILY=10
+
+# 原本系統已有的安全設定，照你 Render 原設定保留
+AI_SHIELD_TOKEN_SECRET=請保留原本的token_secret
+REQUIRE_ACCESS_TOKEN=true

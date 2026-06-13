@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI 防詐盾牌｜已擋下危險內容</title>
+  <link rel="stylesheet" href="style.css?v=20260613-blocked-simple-v1">
+</head>
+<body class="ai-blocked-page">
+  <main class="blocked-app" role="main" aria-label="AI 防詐盾牌攔截頁">
+    <header class="blocked-topbar" aria-label="AI 防詐盾牌品牌">
+      <div class="blocked-brand">
+        <img class="blocked-logo" src="ai-shield-logo.png" alt="AI防詐盾牌標誌" draggable="false">
+        <div class="blocked-brand-copy">
+          <strong>AI防詐盾牌</strong>
+          <span>小安心守護中</span>
+        </div>
+      </div>
+      <img class="blocked-mascot" src="mascot-girl-new.png" alt="小安心" draggable="false">
+    </header>
+
+    <section class="blocked-danger-card" aria-live="polite" aria-label="危險提醒">
+      <div class="blocked-danger-icon" aria-hidden="true">!</div>
+      <div class="blocked-danger-copy">
+        <div class="blocked-danger-title">很危險！</div>
+        <div class="blocked-danger-subtitle">已幫你擋下</div>
+        <div class="blocked-risk-pill">高風險 <span id="score">--</span> 分</div>
+      </div>
+    </section>
+
+    <section class="blocked-stop-card" aria-label="請先不要做這些事">
+      <h1>先不要做這些事</h1>
+      <div class="blocked-stop-grid">
+        <div class="blocked-stop-item">
+          <div class="blocked-stop-icon" aria-hidden="true">📝</div>
+          <strong>不填資料</strong>
+        </div>
+        <div class="blocked-stop-item">
+          <div class="blocked-stop-icon" aria-hidden="true">💳</div>
+          <strong>不付款</strong>
+        </div>
+        <div class="blocked-stop-item">
+          <div class="blocked-stop-icon" aria-hidden="true">▦</div>
+          <strong>不掃碼</strong>
+        </div>
+      </div>
+    </section>
+
+    <div class="blocked-status-text" id="app-simple-status">已擋下本次高風險操作</div>
+
+    <section class="blocked-action-card" aria-label="下一步">
+      <button class="blocked-family-status" id="family-help-btn" type="button" disabled>
+        <span class="btn-main">✅ 已通知家人</span>
+      </button>
+
+      <button class="blocked-home-btn" id="manual-leave-btn" type="button">
+        <span class="btn-main">🏠 我知道了，回首頁</span>
+      </button>
+
+      <div class="blocked-safe-note" id="auto-return-text">
+        已停在安全頁，請不要回到剛剛的危險網頁。
+      </div>
+    </section>
+
+    <button class="blocked-detail-toggle" id="detail-toggle-btn" type="button" aria-expanded="false">
+      給家人看的原因
+    </button>
+
+    <section class="blocked-detail-panel progressive-detail" id="progressive-detail" aria-hidden="true" aria-label="攔截詳細原因">
+      <div class="blocked-detail-row">
+        <span>可疑網址</span>
+        <strong id="detail-url">載入中...</strong>
+      </div>
+      <div class="blocked-detail-row">
+        <span>網域</span>
+        <strong id="detail-domain">--</strong>
+      </div>
+      <div class="blocked-detail-row">
+        <span>風險等級</span>
+        <strong class="danger" id="detail-risk-level">高風險</strong>
+      </div>
+      <div class="blocked-detail-row">
+        <span>家人通知</span>
+        <strong id="detail-sync-status">確認中...</strong>
+      </div>
+      <div class="blocked-detail-row full">
+        <span>原因</span>
+        <p id="detail-reason">系統正在整理原因...</p>
+      </div>
+      <div class="blocked-detail-row full">
+        <span>高風險特徵</span>
+        <div class="detail-tags" id="detail-scam-dna"></div>
+      </div>
+      <p class="blocked-detail-note" id="detail-sync-note">家人可以查看這次提醒，協助你確認是否安全。</p>
+    </section>
+
+    <footer class="blocked-footer">
+      有疑問，請聯絡家人或撥打 165 反詐騙專線
+    </footer>
+
+    <div class="url-display" aria-hidden="true">
+      <span id="target-url"></span>
+      <span id="original-url"></span>
+    </div>
+  </main>
+
+  <audio id="hero-audio" src="assets/audio/ai_shield_bilingual_warning.wav" preload="auto"></audio>
+  <script src="config.js"></script>
+  <script src="blocked.js?v=20260613-blocked-simple-v1"></script>
+</body>
+</html>

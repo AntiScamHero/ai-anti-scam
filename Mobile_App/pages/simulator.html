@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>防詐教室｜小守護</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Microsoft JhengHei",system-ui,sans-serif;background:linear-gradient(180deg,#eef6ff,#fff);color:#0f172a;padding:14px}
+    .wrap{max-width:880px;margin:auto;padding-bottom:22px}
+    .hero,.card{background:#fff;border:2px solid #dbeafe;border-radius:26px;box-shadow:0 14px 32px rgba(37,99,235,.10);padding:20px;margin-bottom:16px}
+    .badge{display:inline-flex;padding:8px 13px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:1000;margin-bottom:12px}
+    h1{margin:0;font-size:32px;line-height:1.18}
+    h2{margin:0 0 10px;font-size:24px;line-height:1.3}
+    p{font-size:18px;line-height:1.7;color:#334155;font-weight:850;margin:8px 0}
+    .lesson-list{display:grid;gap:14px}
+    details{border:2px solid #dbeafe;border-radius:24px;background:#f8fbff;overflow:hidden}
+    details[open]{background:#fff;border-color:#93c5fd}
+    summary{list-style:none;display:grid;grid-template-columns:54px 1fr auto;gap:12px;align-items:center;padding:18px;cursor:pointer}
+    summary::-webkit-details-marker{display:none}
+    .icon{width:54px;height:54px;border-radius:18px;background:#eef6ff;display:grid;place-items:center;font-size:29px}
+    .title{display:block;font-size:22px;font-weight:1000;line-height:1.25}
+    .sub{display:block;margin-top:4px;color:#64748b;font-size:15px;font-weight:850;line-height:1.45}
+    .arrow{font-size:28px;color:#2563eb;font-weight:1000}
+    details[open] .arrow{transform:rotate(45deg)}
+    video{display:block;width:calc(100% - 32px);max-height:360px;margin:0 16px 14px;border-radius:20px;background:#0f172a}
+    ul{margin:0 16px 16px;padding:14px 18px 14px 38px;border-radius:18px;background:#f8fbff;border:1.5px solid #dbeafe}
+    li{font-size:17px;line-height:1.7;font-weight:900;color:#334155;margin:6px 0}
+    .quiz button{width:100%;text-align:left;border:2px solid #bfdbfe;background:#fff;color:#0f4fb7;border-radius:18px;padding:15px;margin-top:10px;font-size:18px;line-height:1.45;font-weight:1000;cursor:pointer}
+    .quiz button.correct{background:#dcfce7;border-color:#86efac;color:#166534}
+    .quiz button.wrong{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+    .feedback{margin-top:12px;padding:14px;border-radius:18px;background:#eef6ff;color:#1457bd;font-size:17px;line-height:1.6;font-weight:900}
+    @media(max-width:520px){
+      body{padding:12px}
+      h1{font-size:30px}
+      .hero,.card{padding:18px;border-radius:22px}
+      summary{grid-template-columns:48px 1fr auto;padding:15px}
+      .icon{width:48px;height:48px;font-size:26px}
+      .title{font-size:20px}
+      video{max-height:260px}
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div class="badge">🛡️ 小守護防詐教室</div>
+      <h1>防詐教室</h1>
+      <p>這裡放常見詐騙影片。點開影片，看完記住三個重點就好。</p>
+    </section>
+
+    <section class="card">
+      <h2>防詐影片</h2>
+      <div class="lesson-list">
+        <details open>
+          <summary>
+            <span class="icon">🎁</span>
+            <span><span class="title">假補助詐騙</span><span class="sub">不要急著填個資</span></span>
+            <span class="arrow">＋</span>
+          </summary>
+          <video controls preload="metadata" playsinline>
+            <source src="../assets/videos/lesson1-fake-claim.mp4" type="video/mp4">
+            影片暫時無法播放。
+          </video>
+          <ul>
+            <li>看到「立即領取」先不要急。</li>
+            <li>補助消息要回官方網站或打 165 查證。</li>
+            <li>不要輸入身分證、銀行資料、信用卡或驗證碼。</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>
+            <span class="icon">🔗</span>
+            <span><span class="title">假通知／假連結詐騙</span><span class="sub">不要點陌生連結</span></span>
+            <span class="arrow">＋</span>
+          </summary>
+          <video controls preload="metadata" playsinline>
+           <source src="../assets/videos/lesson2-fake-link.mp4" type="video/mp4">
+            影片暫時無法播放。
+          </video>
+          <ul>
+            <li>收到帳號停用、包裹異常、銀行通知，先不要點連結。</li>
+            <li>不要在陌生網頁登入帳號密碼。</li>
+            <li>自己打開官方 App、官方網站，或打 165 查證。</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <section class="card quiz">
+      <h2>防詐小測驗</h2>
+      <p>收到包裹補繳運費簡訊，下一步怎麼做？</p>
+      <button type="button" data-answer="wrong">點連結趕快付款，才不會退貨</button>
+      <button type="button" data-answer="right">先去官方 App 或打 165 查證</button>
+      <div class="feedback" id="feedback">請選一個答案。</div>
+    </section>
+  </main>
+
+  <script>
+    document.querySelectorAll('[data-answer]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-answer]').forEach(b => b.classList.remove('correct','wrong'));
+        const ok = btn.dataset.answer === 'right';
+        btn.classList.add(ok ? 'correct' : 'wrong');
+        document.getElementById('feedback').textContent = ok
+          ? '答對了！先查證，不要急著點連結或付款。'
+          : '這題要小心：簡訊連結可能是假網站，請先回官方 App 或打 165 查證。';
+      });
+    });
+
+    document.querySelectorAll('details').forEach(item => {
+      item.addEventListener('toggle', () => {
+        if (!item.open) {
+          const video = item.querySelector('video');
+          try { video.pause(); } catch(e) {}
+        }
+      });
+    });
+  </script>
+</body>
+</html>
