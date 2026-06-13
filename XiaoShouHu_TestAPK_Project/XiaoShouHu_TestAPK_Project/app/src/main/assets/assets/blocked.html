@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 防詐盾牌｜已阻擋高風險操作</title>
+  <style>
+    :root{
+      --navy:#082a5f;--blue:#1177ff;--cyan:#64d9ff;--red:#e52828;--green:#16b765;--card:rgba(255,255,255,.94);--muted:#57708f;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100vh}
+    body{
+      font-family:"Microsoft JhengHei","Segoe UI",system-ui,sans-serif;color:var(--navy);overflow-x:hidden;
+      background:
+        radial-gradient(circle at 18% 76%, rgba(30,155,255,.34), transparent 30%),
+        radial-gradient(circle at 76% 18%, rgba(120,210,255,.26), transparent 30%),
+        linear-gradient(135deg,#dff3ff 0%,#f7fcff 45%,#d6efff 100%);
+    }
+    body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.52;background-image:
+      linear-gradient(120deg,transparent 0 16%,rgba(21,139,255,.16) 16.2% 16.5%,transparent 16.8% 100%),
+      linear-gradient(30deg,transparent 0 67%,rgba(21,139,255,.18) 67.2% 67.5%,transparent 67.8% 100%),
+      radial-gradient(circle at 30% 24%,rgba(255,255,255,.9) 0 2px,transparent 3px),
+      radial-gradient(circle at 70% 70%,rgba(255,255,255,.8) 0 2px,transparent 3px);
+      background-size:420px 260px,520px 320px,180px 140px,220px 180px;
+    }
+    .page-shell{position:relative;z-index:1;width:min(1500px,100%);min-height:100vh;margin:0 auto;padding:34px 44px 26px;display:grid;grid-template-rows:auto 1fr;gap:22px}
+    .brand-row{display:flex;align-items:center;gap:18px;min-height:98px}
+    .brand-shield{width:78px;height:92px;flex:0 0 auto}.brand-shield-svg{width:100%;height:100%;display:block;overflow:visible}
+    .brand-text b{display:block;font-size:48px;letter-spacing:1px;line-height:1}.brand-text span{display:block;margin-top:8px;font-size:22px;font-weight:900;letter-spacing:5px;color:#12427f}
+    .main-layout{display:grid;grid-template-columns:38% 62%;gap:30px;align-items:center;min-height:660px}
+    .left-col{min-height:650px;display:flex;align-items:center;justify-content:center;position:relative}.left-col::after{content:"";position:absolute;width:min(480px,88%);height:96px;bottom:44px;border-radius:50%;background:radial-gradient(ellipse,rgba(0,163,255,.35),rgba(0,163,255,.06) 60%,transparent 72%);box-shadow:0 0 30px rgba(30,180,255,.28)}
+    .robot-img{position:relative;z-index:2;width:min(520px,95%);max-height:680px;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 28px 32px rgba(1,66,140,.26))}
+    .right-col{position:relative;border-radius:42px;padding:48px 60px 34px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(236,249,255,.9));border:3px solid rgba(122,215,255,.65);box-shadow:0 28px 65px rgba(5,80,150,.22),inset 0 0 30px rgba(255,255,255,.8)}
+    .hero-title{display:flex;align-items:center;justify-content:center;gap:22px;margin-bottom:18px;font-size:clamp(54px,5vw,76px);font-weight:1000;line-height:1.1;color:#082a5f;white-space:nowrap}.hero-title .danger-word{color:var(--red);text-shadow:0 4px 0 rgba(160,0,0,.08)}
+    .warn-icon{width:86px;height:76px;flex:0 0 auto;background:linear-gradient(180deg,#ff3d3d,#df1717);clip-path:polygon(50% 0,100% 100%,0 100%);position:relative;filter:drop-shadow(0 10px 14px rgba(220,0,0,.18))}.warn-icon::before{content:"!";position:absolute;left:0;right:0;top:12px;text-align:center;color:white;font-size:56px;font-weight:1000}
+    .risk-score-display{margin:0 auto 22px;width:88%;min-height:106px;border-radius:28px;display:flex;align-items:center;justify-content:center;gap:36px;background:linear-gradient(180deg,#fff0f4,#ffe5eb);border:2px solid rgba(236,80,100,.18);font-size:clamp(34px,3.2vw,52px);font-weight:1000;color:#082a5f}.risk-score-display span{font-size:clamp(76px,7.2vw,122px);line-height:.8;color:#df1717;font-weight:1000;letter-spacing:-3px}.risk-score-display::after{content:"%";font-size:clamp(42px,4vw,70px);color:#df1717;font-weight:1000;margin-left:-26px}
+    .divider{height:2px;background:linear-gradient(90deg,transparent,rgba(16,90,160,.25),transparent);margin:8px 0 24px}
+    .dont-title{display:flex;align-items:center;justify-content:center;gap:14px;font-size:clamp(28px,2.8vw,42px);font-weight:1000;margin-bottom:20px}.no-symbol{width:48px;height:48px;border:6px solid var(--red);border-radius:50%;position:relative;display:inline-block}.no-symbol::after{content:"";position:absolute;width:44px;height:6px;background:var(--red);left:-4px;top:15px;transform:rotate(45deg);border-radius:999px}
+    .warning-icons{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin:0 20px 24px}.warning-item{text-align:center;position:relative}.warning-item:not(:last-child)::after{content:"";position:absolute;right:-14px;top:18%;height:65%;width:2px;background:rgba(8,42,95,.14)}.icon-circle{width:132px;height:132px;margin:0 auto 12px;border:8px solid var(--red);border-radius:50%;display:grid;place-items:center;position:relative;background:rgba(255,255,255,.55)}.icon-circle::after{content:"";position:absolute;width:116px;height:8px;background:var(--red);border-radius:999px;transform:rotate(45deg)}.warning-item b{font-size:clamp(20px,1.8vw,28px);font-weight:1000;color:#082a5f;white-space:nowrap}
+    .css-id{width:62px;height:46px;border:6px solid #0b356f;border-radius:8px;position:relative}.css-id::before{content:"";position:absolute;left:10px;top:8px;width:14px;height:14px;border-radius:50%;background:#0b356f}.css-id::after{content:"";position:absolute;left:32px;top:11px;width:18px;height:5px;background:#0b356f;box-shadow:0 13px 0 #0b356f}.css-card{width:68px;height:46px;border-radius:8px;background:#0b356f;position:relative}.css-card::before{content:"";position:absolute;left:0;right:0;top:10px;height:8px;background:#f0b740}.css-card::after{content:"";position:absolute;left:11px;bottom:9px;width:25px;height:5px;background:#fff;border-radius:2px}.css-qr{width:62px;height:62px;border:6px solid #0b356f;background:repeating-linear-gradient(90deg,#0b356f 0 6px,transparent 6px 12px),repeating-linear-gradient(0deg,transparent 0 6px,#0b356f 6px 12px);opacity:.96}
+    .app-simple-status{width:88%;margin:0 auto 18px;padding:16px 20px;border-radius:26px;background:linear-gradient(180deg,#eef8ff,#ffffff);border:2px solid rgba(99,205,255,.55);box-shadow:0 12px 24px rgba(8,42,95,.08);text-align:center;font-size:clamp(20px,1.9vw,28px);line-height:1.5;font-weight:1000}
+    .btn-safe{width:88%;height:96px;margin:0 auto 12px;border:0;border-radius:999px;background:linear-gradient(180deg,#2fd485 0%,#08a85b 58%,#07894c 100%);color:white;font-size:clamp(38px,3.2vw,54px);font-weight:1000;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 20px 36px rgba(1,143,79,.30),inset 0 3px 0 rgba(255,255,255,.32);cursor:pointer}.btn-safe::after{content:"›";position:absolute;right:34px;top:50%;transform:translateY(-50%);font-size:72px;line-height:1;font-weight:700;color:#fff;opacity:.95}.btn-main{display:flex;align-items:center;justify-content:center;gap:16px;pointer-events:none}
+    .auto-return-text{width:88%;margin:0 auto 18px;padding:12px 18px;border-radius:999px;background:#e6f8ee;border:2px solid #bdebd0;color:#0a7f42;text-align:center;font-size:clamp(18px,1.6vw,24px);line-height:1.4;font-weight:1000}.btn-family-help{width:88%;min-height:82px;margin:0 auto 12px;border:0;border-radius:999px;background:linear-gradient(180deg,#2f8cff 0%,#0f63c9 100%);color:#fff;font-size:clamp(28px,2.5vw,40px);font-weight:1000;display:flex;align-items:center;justify-content:center;box-shadow:0 18px 30px rgba(15,99,201,.26),inset 0 3px 0 rgba(255,255,255,.28)}
+    .detail-toggle-btn{display:block;margin:8px auto 0;border:0;background:transparent;color:#082a5f;font-size:clamp(22px,2vw,32px);font-weight:1000;cursor:pointer}.detail-toggle-btn::after{content:"⌄";margin-left:12px;font-size:1.2em}.progressive-detail{display:none;margin-top:22px;max-height:36vh;overflow:auto;padding-right:8px}.progressive-detail.open{display:block}.intercept-detail-card{background:rgba(255,255,255,.88);border:1px solid rgba(30,120,210,.18);border-radius:22px;padding:18px;box-shadow:0 12px 25px rgba(8,42,95,.08)}.intercept-detail-title{font-size:22px;font-weight:1000;color:#082a5f}.intercept-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}.intercept-item{background:#fff;border-radius:14px;padding:12px;border:1px solid rgba(8,42,95,.1)}.intercept-item.full{grid-column:1/-1}.intercept-label{font-size:13px;color:#617695;font-weight:900}.intercept-value{font-size:15px;font-weight:900;word-break:break-word}.detail-tags{display:flex;flex-wrap:wrap;gap:8px}.detail-tag{background:#ffe9e9;color:#b91c1c;border-radius:999px;padding:6px 10px;font-weight:900;font-size:13px}.sync-note{font-size:14px;line-height:1.6;color:#526b83;font-weight:850;margin-top:10px}
+    .url-display,#target-url,#original-url{display:none}
+    @media(max-width:980px){.page-shell{padding:22px;display:block}.brand-row{height:auto;margin-bottom:14px}.brand-text b{font-size:34px}.brand-text span{font-size:16px}.main-layout{grid-template-columns:1fr;gap:14px}.left-col{min-height:auto}.robot-img{width:min(330px,74vw)}.right-col{padding:28px 18px;border-radius:28px}.hero-title{font-size:42px;white-space:normal;gap:12px}.warn-icon{width:58px;height:52px}.warn-icon::before{font-size:38px;top:8px}.risk-score-display{width:100%;gap:14px;font-size:28px;min-height:86px}.risk-score-display span{font-size:72px}.warning-icons{gap:10px;margin-inline:0}.icon-circle{width:92px;height:92px}.icon-circle::after{width:82px}.warning-item b{font-size:16px}.app-simple-status,.auto-return-text,.btn-safe,.btn-family-help{width:100%}.btn-safe{height:78px;padding:0 64px;font-size:clamp(28px,7vw,36px)}.btn-safe::after{right:24px;font-size:52px}.btn-family-help{min-height:72px;font-size:clamp(24px,6vw,32px)}.intercept-grid{grid-template-columns:1fr}}
+  </style>
+
+  <style id="elder-friendly-blocked-overrides">
+    /* === 長者友善攔截頁重整：避免手機超出版 === */
+    html, body { width: 100%; max-width: 100%; overflow-x: hidden !important; }
+    body { font-size: 18px; line-height: 1.6; }
+    .page-shell {
+      width: min(1100px, 100%);
+      padding: clamp(14px, 4vw, 28px);
+      gap: 16px;
+    }
+    .brand-row {
+      gap: 12px;
+      min-height: auto;
+      align-items: center;
+    }
+    .brand-shield { width: 54px; height: 64px; }
+    .brand-text b { font-size: clamp(28px, 8vw, 40px); }
+    .brand-text span { font-size: clamp(14px, 3.8vw, 18px); letter-spacing: 1px; }
+    .main-layout {
+      grid-template-columns: minmax(0, 1fr) !important;
+      gap: 16px;
+      min-height: auto;
+      align-items: stretch;
+    }
+    .left-col {
+      min-height: auto;
+      order: 2;
+      padding-top: 6px;
+    }
+    .left-col::after {
+      width: min(240px, 70%);
+      height: 42px;
+      bottom: 8px;
+    }
+    .robot-img {
+      width: min(220px, 58vw);
+      max-height: 260px;
+    }
+    .right-col {
+      order: 1;
+      border-radius: 26px;
+      padding: clamp(18px, 5vw, 30px);
+      min-width: 0;
+    }
+    .hero-title {
+      white-space: normal;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: clamp(28px, 10vw, 44px);
+      text-align: center;
+    }
+    .warn-icon {
+      width: 52px;
+      height: 46px;
+      flex: 0 0 auto;
+    }
+    .warn-icon::before {
+      font-size: 34px;
+      top: 7px;
+    }
+    .risk-score-display {
+      width: 100%;
+      min-height: 84px;
+      gap: 10px;
+      border-radius: 22px;
+      padding: 14px 12px;
+      font-size: clamp(24px, 6vw, 32px);
+    }
+    .risk-score-display span {
+      font-size: clamp(58px, 16vw, 84px);
+      letter-spacing: -1px;
+    }
+    .risk-score-display::after {
+      font-size: clamp(28px, 7vw, 42px);
+      margin-left: -10px;
+    }
+    .dont-title {
+      font-size: clamp(22px, 6vw, 30px);
+      margin-bottom: 14px;
+    }
+    .no-symbol {
+      width: 38px;
+      height: 38px;
+      border-width: 5px;
+    }
+    .no-symbol::after {
+      width: 34px;
+      top: 11px;
+      left: -3px;
+      height: 5px;
+    }
+    .warning-icons {
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin: 0 0 18px;
+    }
+    .warning-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+      padding: 8px 0;
+    }
+    .warning-item:not(:last-child)::after { display: none; }
+    .icon-circle {
+      width: 72px;
+      height: 72px;
+      margin: 0;
+      border-width: 6px;
+      flex: 0 0 auto;
+    }
+    .icon-circle::after {
+      width: 62px;
+      height: 6px;
+    }
+    .warning-item b {
+      font-size: clamp(20px, 5.4vw, 24px);
+      white-space: normal;
+      line-height: 1.3;
+    }
+    .css-id { width: 40px; height: 30px; border-width: 4px; }
+    .css-id::before { left: 6px; top: 5px; width: 10px; height: 10px; }
+    .css-id::after { left: 22px; top: 7px; width: 10px; height: 4px; box-shadow: 0 9px 0 #0b356f; }
+    .css-card { width: 42px; height: 30px; }
+    .css-card::before { top: 6px; height: 6px; }
+    .css-card::after { left: 7px; bottom: 6px; width: 15px; height: 4px; }
+    .css-qr { width: 40px; height: 40px; border-width: 4px; }
+    .app-simple-status,
+    .auto-return-text,
+    .btn-safe,
+    .btn-family-help {
+      width: 100%;
+    }
+    .app-simple-status {
+      margin-bottom: 14px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      font-size: clamp(17px, 4.4vw, 20px);
+      line-height: 1.55;
+    }
+    .btn-safe,
+    .btn-family-help {
+      min-height: 64px;
+      height: auto;
+      padding: 14px 20px;
+      border-radius: 22px;
+      font-size: clamp(22px, 6vw, 28px);
+      line-height: 1.25;
+      text-align: center;
+    }
+    .btn-safe::after {
+      display: none;
+    }
+    .btn-main {
+      gap: 8px;
+      flex-wrap: wrap;
+      line-height: 1.25;
+    }
+    .auto-return-text {
+      margin-top: 10px;
+      margin-bottom: 10px;
+      border-radius: 16px;
+      padding: 10px 14px;
+      font-size: clamp(15px, 4vw, 18px);
+    }
+    .detail-toggle-btn {
+      font-size: clamp(18px, 5vw, 22px);
+      line-height: 1.4;
+      margin-top: 10px;
+    }
+    .progressive-detail {
+      max-height: none;
+      overflow: visible;
+      padding-right: 0;
+    }
+    .intercept-detail-card {
+      padding: 14px;
+      border-radius: 18px;
+    }
+    .intercept-detail-title {
+      font-size: 19px;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .intercept-grid {
+      grid-template-columns: 1fr !important;
+      gap: 10px;
+    }
+    .intercept-item, .intercept-item.full {
+      grid-column: auto;
+      min-width: 0;
+    }
+    .intercept-value {
+      font-size: 15px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .detail-tags {
+      gap: 6px;
+    }
+    .detail-tag {
+      font-size: 13px;
+      line-height: 1.35;
+      padding: 6px 10px;
+    }
+    .sync-note {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    @media (max-width: 420px) {
+      .page-shell { padding: 12px 12px calc(18px + env(safe-area-inset-bottom)); }
+      .brand-row { margin-bottom: 4px; }
+      .brand-shield { width: 48px; height: 58px; }
+      .brand-text b { font-size: 24px; }
+      .brand-text span { font-size: 13px; }
+      .right-col { border-radius: 22px; padding: 16px 14px; }
+      .robot-img { width: min(180px, 54vw); max-height: 210px; }
+      .hero-title { font-size: 26px; }
+      .risk-score-display { min-height: 76px; font-size: 22px; }
+      .risk-score-display span { font-size: 52px; }
+      .warning-item b { font-size: 18px; }
+      .btn-safe, .btn-family-help { font-size: 20px; min-height: 60px; }
+    }
+  </style>
+
+</head>
+<body>
+  <div class="page-shell">
+    <header class="brand-row" aria-label="AI 防詐盾牌品牌">
+      <div class="brand-shield" aria-hidden="true">
+        <svg class="brand-shield-svg" viewBox="0 0 120 140" role="img" aria-label="AI 防詐盾牌">
+          <defs>
+            <linearGradient id="shieldOuter" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0b4fb3"/><stop offset="52%" stop-color="#0f7dff"/><stop offset="100%" stop-color="#063b91"/></linearGradient>
+            <linearGradient id="shieldInner" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1b8cff"/><stop offset="100%" stop-color="#064aa7"/></linearGradient>
+            <filter id="shieldShadow" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="8" stdDeviation="5" flood-color="#003b88" flood-opacity=".28"/></filter>
+          </defs>
+          <path filter="url(#shieldShadow)" d="M60 6 L108 25 V66 C108 98 89 122 60 136 C31 122 12 98 12 66 V25 Z" fill="url(#shieldOuter)"/>
+          <path d="M60 15 L98 30 V66 C98 91 84 111 60 124 C36 111 22 91 22 66 V30 Z" fill="url(#shieldInner)" stroke="rgba(255,255,255,.86)" stroke-width="4"/>
+          <text x="60" y="77" text-anchor="middle" font-family="Microsoft JhengHei, Arial, sans-serif" font-size="42" font-weight="900" fill="#ffffff">AI</text>
+        </svg>
+      </div>
+      <div class="brand-text"><b>AI防詐盾牌</b><span>聰明防詐・守護未來</span></div>
+    </header>
+
+    <main class="main-layout" role="main">
+      <section class="left-col" aria-label="AI 防詐守護機器人">
+        <img src="assets/images/mascot-boy-new.png" id="main-mascot" alt="AI 防詐守護機器人" class="robot-img" draggable="false">
+      </section>
+
+      <section class="right-col" aria-label="攔截資訊與安全處置">
+        <div class="hero-title"><span class="warn-icon" aria-hidden="true"></span><span class="danger-word">很危險</span></div>
+        <div class="risk-score-display" aria-live="polite">風險 <span id="score">--</span></div>
+        <div class="divider"></div>
+
+        <section class="elder-summary-card" aria-label="請不要做這些事">
+          <div class="dont-title"><span class="no-symbol" aria-hidden="true"></span><span>先不要做</span></div>
+          <div class="warning-icons">
+            <div class="warning-item"><div class="icon-circle"><span class="css-id"></span></div><b>不要填資料</b></div>
+            <div class="warning-item"><div class="icon-circle"><span class="css-card"></span></div><b>不要付款</b></div>
+            <div class="warning-item"><div class="icon-circle"><span class="css-qr"></span></div><b>不要掃碼</b></div>
+          </div>
+        </section>
+
+        <div class="app-simple-status" id="app-simple-status">🚫 已阻擋本次高風險操作<br>✅ 已自動通知家人並同步家庭戰情室</div>
+
+        <section class="action-panel" id="cooldown-box" aria-label="安全處置">
+          <button class="btn-safe" id="manual-leave-btn" type="button"><span class="btn-main">🏠 立即返回首頁</span></button>
+          <div class="auto-return-text" id="auto-return-text">5 秒後自動返回 App 首頁</div>
+          <button class="btn-family-help" id="family-help-btn" type="button" disabled><span class="btn-main">✅ LINE 已自動通知家人</span></button>
+        </section>
+
+        <button class="detail-toggle-btn" id="detail-toggle-btn" type="button" aria-expanded="false">給家人看的詳細原因</button>
+        <div class="progressive-detail" id="progressive-detail" aria-hidden="true">
+          <section class="intercept-detail-card" aria-label="攔截事件詳情">
+            <div class="intercept-detail-title"><span>這次攔截了什麼？</span> <small id="detail-risk-level">高風險</small></div>
+            <div class="intercept-grid">
+              <div class="intercept-item full"><div class="intercept-label">可疑網址</div><div class="intercept-value danger" id="detail-url">載入中...</div></div>
+              <div class="intercept-item"><div class="intercept-label">網域</div><div class="intercept-value" id="detail-domain">--</div></div>
+              <div class="intercept-item"><div class="intercept-label">家庭同步</div><div class="intercept-value safe" id="detail-sync-status">確認中...</div></div>
+              <div class="intercept-item full"><div class="intercept-label">攔截原因</div><div class="intercept-value" id="detail-reason">系統正在整理原因...</div></div>
+              <div class="intercept-item full"><div class="intercept-label">命中詐騙特徵</div><div class="detail-tags" id="detail-scam-dna"></div></div>
+            </div>
+            <div class="sync-note" id="detail-sync-note">此筆高風險會同步家庭戰情室；本頁只顯示攔截提醒，不重複新增紀錄。</div>
+          </section>
+        </div>
+      </section>
+    </main>
+    <div class="url-display" aria-label="被攔截網址"><span id="target-url"></span><span id="original-url"></span></div>
+  </div>
+
+  <audio id="hero-audio" src="assets/audio/ai_shield_bilingual_warning.wav" preload="auto"></audio>
+  <script src="config.js"></script>
+  <script src="blocked.js?v=20260611-external-only-once"></script>
+</body>
+</html>

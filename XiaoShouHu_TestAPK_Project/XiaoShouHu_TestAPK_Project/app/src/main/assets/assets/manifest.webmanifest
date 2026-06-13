@@ -1,0 +1,9 @@
+{
+  "name": "AI防詐盾牌",
+  "short_name": "防詐盾牌",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f6faff",
+  "theme_color": "#2563eb",
+  "lang": "zh-Hant"
+}
